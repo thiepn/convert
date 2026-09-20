@@ -5,6 +5,7 @@ import type {
   EngineConvertResult
 } from "../../core/engines/Engine";
 import type { WorkerResponse } from "../../core/workers/WorkerProtocol";
+import { assertMemoryBackedSource } from "../../core/performance/Budget";
 
 const SUPPORTED = new Set([
   "jpeg>png", "jpeg>webp",
@@ -54,10 +55,15 @@ export class BrowserImageEngine implements ConversionEngine {
   }
 
   async estimate(source: Blob): Promise<ConversionEstimate> {
+    const memoryBytes=source.size*2+64*1024*1024;
     return {
-      temporaryBytes: source.size * 2 + 64 * 1024 * 1024,
-      outputBytes: null,
-      notes: ["Phase 0 browser proof engine is memory-backed; production image streaming arrives in Phase 1."]
+      temporaryBytes:memoryBytes,
+      memoryBytes,
+      workspaceBytes:Math.max(32*1024*1024,source.size*1.5),
+      outputBytes:null,
+      sourceAccess:"buffered",
+      outputAccess:"buffered",
+      notes:["Browser canvas fallback is memory-backed and used only when the production image engine is unavailable."]
     };
   }
 
@@ -65,6 +71,7 @@ export class BrowserImageEngine implements ConversionEngine {
     if (!this.isAvailable() || !this.canConvert(request.sourceFormatId, request.targetFormatId)) {
       return Promise.reject(new Error("Browser image proof engine cannot perform this route on the current runtime."));
     }
+    assertMemoryBackedSource(request.source.size,"browser canvas image conversion",2,256*1024*1024);
 
     const worker = new Worker(new URL("../../workers/engine.worker.ts", import.meta.url), { type: "module" });
     this.workers.add(worker);
