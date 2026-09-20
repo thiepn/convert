@@ -1,6 +1,6 @@
 {
   "name": "thiepn-convert",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -13,6 +13,8 @@
   "dependencies": {
     "@bjorn3/browser_wasi_shim": "0.4.2",
     "@duckdb/duckdb-wasm": "1.32.0",
+    "@ffmpeg/core": "0.12.10",
+    "@ffmpeg/ffmpeg": "0.12.15",
     "@keeratita/heic-converter": "0.4.1",
     "@matbee/libreoffice-converter": "2.7.2",
     "@mediabunny/aac-encoder": "1.58.0",
@@ -24,8 +26,10 @@
     "@tesseract.js-data/kor": "1.0.0",
     "@tesseract.js-data/tur": "1.0.0",
     "@zip.js/zip.js": "2.16.0",
+    "ag-psd": "31.0.2",
     "comlink": "4.4.1",
     "fflate": "0.8.3",
+    "fonteditor-core": "2.6.3",
     "jszip": "3.10.1",
     "libarchive.js": "2.0.2",
     "mediabunny": "1.58.0",
