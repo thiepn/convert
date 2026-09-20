@@ -31,7 +31,7 @@ function directoryHas(rel,predicate,label){
 }
 
 const pkg=JSON.parse(read("package.json")||"{}");
-ok("Package version is v1.0.0",pkg.version==="1.0.0",String(pkg.version??"missing"));
+ok("Package version is v1.0.1",pkg.version==="1.0.1",String(pkg.version??"missing"));
 
 const manifest=JSON.parse(read("public/manifest.webmanifest")||"{}");
 ok("Manifest has stable app id",manifest.id==="./");
@@ -57,7 +57,7 @@ ok("Headers deny framing",headers.includes("frame-ancestors 'none'"));
 ok("Headers restrict connections",headers.includes("connect-src 'self'"));
 
 const sw=read("public/sw.js");
-ok("Service worker uses v1 cache",sw.includes('thiepn-convert-v1-0-0'));
+ok("Service worker uses v1.0.1 cache",sw.includes('thiepn-convert-v1-0-1'));
 ok("Service worker supports explicit update activation",sw.includes('type==="SKIP_WAITING"'));
 const installBody=sw.match(/self\.addEventListener\("install"[\s\S]*?\n}\);/)?.[0]??"";
 ok("Service worker does not force updates during install",!installBody.includes("skipWaiting"));
