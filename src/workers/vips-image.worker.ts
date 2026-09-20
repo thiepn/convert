@@ -109,11 +109,15 @@ async function decodeHeifToVips(vips: VipsModule, bytes: Uint8Array): Promise<Vi
   const height = source.get_height();
   if (!width || !height) throw new Error("HEIC/HEIF decoder returned invalid dimensions.");
 
-  const target = { data: new Uint8ClampedArray(width * height * 4), width, height };
-  const displayed = await new Promise<typeof target>((resolve, reject) => {
+  const target: { data: Uint8ClampedArray; width: number; height: number } = {
+    data: new Uint8ClampedArray(width * height * 4),
+    width,
+    height
+  };
+  const displayed = await new Promise<{ data: Uint8ClampedArray; width: number; height: number }>((resolve, reject) => {
     source.display(target, result => {
       if (!result) reject(new Error("HEIC/HEIF pixel decode failed."));
-      else resolve(result);
+      else resolve({ data: new Uint8ClampedArray(result.data), width: result.width, height: result.height });
     });
   });
 
