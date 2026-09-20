@@ -6,8 +6,8 @@ function flatCopy(src:string,dest:string,name?:string){
     src,
     dest,
     rename:name
-      ?{name,stripBase:true}
-      :{stripBase:true}
+      ?{name,stripBase:true as const}
+      :{stripBase:true as const}
   };
 }
 
