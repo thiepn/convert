@@ -471,8 +471,58 @@ export class App {
     }
   }
 
+  private renderArchiveEntries(){
+    const container=element("archive-entry-list");
+    const summary=element("archive-entry-summary");
+    const note=element("archive-entry-note");
+
+    if(this.kind!=="archive"||!this.archiveDetail){
+      container.replaceChildren();
+      container.classList.add("hidden");
+      summary.textContent=this.kind==="archive-build"?"Create a new archive":"No archive inspected";
+      note.textContent="";
+      return;
+    }
+
+    const entries=this.archiveDetail.entries.filter(entry=>!entry.directory);
+    const shown=entries.slice(0,500);
+    container.replaceChildren();
+    container.classList.toggle("hidden",shown.length===0);
+
+    for(const entry of shown){
+      const row=document.createElement("label");
+      row.className="archive-entry-row";
+
+      const checkbox=document.createElement("input");
+      checkbox.type="checkbox";
+      checkbox.value=entry.path;
+      checkbox.addEventListener("change",()=>void this.renderRoute());
+
+      const meta=document.createElement("span");
+      meta.className="archive-entry-meta";
+      const name=document.createElement("strong");
+      name.textContent=entry.path;
+      const detail=document.createElement("small");
+      detail.textContent=formatBytes(entry.size)
+        +(entry.encrypted?" · encrypted":"")
+        +(entry.compressedSize!=null?" · "+formatBytes(entry.compressedSize)+" compressed":"");
+      meta.append(name,detail);
+      row.append(checkbox,meta);
+      container.append(row);
+    }
+
+    summary.textContent=this.archiveDetail.files+" file(s) · "+formatBytes(this.archiveDetail.expandedSize)+" expanded";
+    note.textContent=entries.length>shown.length
+      ?"Showing the first "+shown.length+" entries. Use Extract all for the entire archive."
+      :"";
+  }
+
   private commonTargets():string[]{
-    if(!this.inspections.length||!this.kind||this.kind==="pdf"||this.inspections.some(i=>!i.detection.format)) return [];
+    if(!this.files.length||!this.kind||this.kind==="pdf") return [];
+    if(this.kind==="archive-build"){
+      return ["zip","7z","tar","tar-gzip","tar-bzip2","tar-xz"];
+    }
+    if(!this.inspections.length||this.inspections.some(i=>!i.detection.format)) return [];
     const sets=this.inspections.map(i=>new Set(this.planner.availableTargets(i.detection.format!.id)));
     return [...sets[0]].filter(target=>sets.every(set=>set.has(target)));
   }
@@ -504,6 +554,7 @@ export class App {
     else if(this.kind==="media"&&targets.includes("mp4")) select.value="mp4";
     else if(this.kind==="image"&&targets.includes("webp")) select.value="webp";
     else if(this.kind==="document"&&targets.includes("docx")) select.value="docx";
+    else if((this.kind==="archive"||this.kind==="archive-build")&&targets.includes("zip")) select.value="zip";
 
     element<HTMLButtonElement>("convert-button").disabled=targets.length===0;
   }
