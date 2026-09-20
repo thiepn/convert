@@ -1,5 +1,5 @@
 {
-  "phase": 4,
+  "phase": 5,
   "reviewed_on": "2026-09-20",
   "dependencies": [
     {"name":"wasm-vips","version":"0.0.18","declared_license":"MIT","notes":"Image engine; preserve third-party notices."},
@@ -8,9 +8,13 @@
     {"name":"pdf-lib","version":"1.17.1","declared_license":"MIT","notes":"PDF composition and page operations."},
     {"name":"qpdf-run","version":"0.2.1","declared_license":"MIT","notes":"Browser wrapper around Apache-2.0 qpdf WASM."},
     {"name":"tesseract.js","version":"7.0.0","declared_license":"Apache-2.0","notes":"Local OCR orchestration."},
-    {"name":"pandoc-wasm","version":"1.1.0","declared_license":"GPL-2.0-or-later","notes":"Includes the official Pandoc 3.9 WASM binary. Distribution must comply with the GPL obligations applicable to the shipped component or bundle; keep corresponding source and license information available."},
-    {"name":"@matbee/libreoffice-converter","version":"2.7.2","declared_license":"MPL-2.0","notes":"Browser Worker wrapper plus packaged LibreOffice WASM/data runtime. Loaded lazily only for fidelity conversions."},
-    {"name":"jszip","version":"3.10.1","declared_license":"MIT","notes":"Dependency used by the LibreOffice converter package."},
-    {"name":"fflate","version":"0.8.3","declared_license":"MIT","notes":"Selective Office package inspection and bounded result ZIP packaging."}
+    {"name":"pandoc-wasm","version":"1.1.0","declared_license":"GPL-2.0-or-later","notes":"Includes official Pandoc 3.9 WASM. Distribution must satisfy applicable GPL obligations."},
+    {"name":"@matbee/libreoffice-converter","version":"2.7.2","declared_license":"MPL-2.0","notes":"Lazy browser LibreOffice fidelity engine."},
+    {"name":"@zip.js/zip.js","version":"2.16.0","declared_license":"BSD-3-Clause","notes":"ZIP/Zip64 streaming, AES encryption, and ZIP extraction."},
+    {"name":"libarchive.js","version":"2.0.2","declared_license":"MIT","notes":"JavaScript browser wrapper around bundled libarchive WASM."},
+    {"name":"libarchive","version":"bundled by libarchive.js 2.0.2","declared_license":"BSD-style / per-file notices","notes":"Archive format implementation. Preserve upstream binary/source redistribution notices; individual bundled codec files may carry their own permissive terms."},
+    {"name":"comlink","version":"4.4.1","declared_license":"Apache-2.0","notes":"Direct RPC to the libarchive worker so entry paths can be validated before object materialization."},
+    {"name":"fflate","version":"0.8.3","declared_license":"MIT","notes":"Document package inspection and bounded result ZIP packaging."},
+    {"name":"jszip","version":"3.10.1","declared_license":"MIT","notes":"Dependency of the LibreOffice converter package."}
   ]
 }
