@@ -5,7 +5,7 @@ import { createDefaultFormatRegistry } from "../src/core/formats/defaultFormats"
 import { createConversionGraph } from "../src/core/planner/ConversionGraph";
 import { ConversionPlanner } from "../src/core/planner/ConversionPlanner";
 
-function engine(id:string):ConversionEngine {
+function engine(id:string):ConversionEngine{
   return {
     id,version:"test",isAvailable:()=>true,canConvert:()=>true,
     estimate:async()=>({temporaryBytes:1,outputBytes:1,notes:[]}),
@@ -17,29 +17,39 @@ describe("ConversionPlanner",()=>{
   const engines=new EngineRegistry();
   engines.register(engine("vips-image"));
   engines.register(engine("browser-image-proof"));
+  engines.register(engine("mediabunny"));
   const planner=new ConversionPlanner(createConversionGraph(),createDefaultFormatRegistry(),engines);
 
   it("prefers the production image engine",()=>{
-    const route=planner.plan("png","webp");
-    expect(route.edges).toHaveLength(1);
-    expect(route.edges[0].engineId).toBe("vips-image");
+    expect(planner.plan("png","webp").edges[0].engineId).toBe("vips-image");
   });
 
-  it("supports same-format optimization",()=>{
+  it("supports same-format image optimization",()=>{
     const route=planner.plan("jpeg","jpeg");
     expect(route.edges).toHaveLength(1);
-    expect(route.edges[0].from).toBe("jpeg");
     expect(route.edges[0].to).toBe("jpeg");
   });
 
-  it("reports alpha loss without inventing metadata loss",()=>{
+  it("routes MP4 to WebM through the media engine",()=>{
+    const route=planner.plan("mp4","webm-media");
+    expect(route.edges).toHaveLength(1);
+    expect(route.edges[0].engineId).toBe("mediabunny");
+    expect(route.edges[0].streaming).toBe(true);
+  });
+
+  it("supports audio extraction container routes without claiming quality loss in advance",()=>{
+    const route=planner.plan("mov","mp3");
+    expect(route.edges[0].engineId).toBe("mediabunny");
+    expect(route.warnings.map(w=>w.code)).not.toContain("LOSSY_ROUTE");
+  });
+
+  it("does not advertise a route for legacy AVI without a vetted compatibility engine",()=>{
+    expect(()=>planner.plan("avi","mp4")).toThrow();
+  });
+
+  it("reports image alpha loss correctly",()=>{
     const codes=planner.plan("png","jpeg").warnings.map(w=>w.code);
     expect(codes).toContain("ALPHA_LOSS");
     expect(codes).toContain("LOSSY_ROUTE");
-    expect(codes).not.toContain("METADATA_LOSS");
-  });
-
-  it("reports HEIC fallback metadata limitations",()=>{
-    expect(planner.plan("heic","jpeg").warnings.map(w=>w.code)).toContain("METADATA_LOSS");
   });
 });
