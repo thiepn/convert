@@ -18,14 +18,18 @@ export class TempWorkspace {
     }
   }
 
+  async getFileHandle(name: string): Promise<FileSystemFileHandle> {
+    return this.jobRoot.getFileHandle(name, { create: true });
+  }
+
   async writeBlob(name: string, blob: Blob): Promise<void> {
-    const file = await this.jobRoot.getFileHandle(name, { create: true });
+    const file = await this.getFileHandle(name);
     const writer = await file.createWritable();
     await writer.write(blob);
     await writer.close();
   }
 
-  async readBlob(name: string): Promise<Blob> {
+  async readBlob(name: string): Promise<File> {
     const file = await this.jobRoot.getFileHandle(name);
     return file.getFile();
   }
