@@ -15,4 +15,5 @@ export interface ConversionOutput {
   formatId:string;
   jobId:string;
   warnings:string[];
+  release?:()=>Promise<void>;
 }
