@@ -7,31 +7,52 @@ import type { DetailedImageInspection, ImageConversionOptions } from "../core/im
 import type { FileInspection } from "../core/inspection/inspectFile";
 import { inspectFile } from "../core/inspection/inspectFile";
 import { JobManager } from "../core/jobs/JobManager";
+import type { ConversionOutput } from "../core/jobs/types";
+import type { DetailedMediaInspection, MediaConversionOptions } from "../core/media/types";
 import { createConversionGraph } from "../core/planner/ConversionGraph";
 import { ConversionPlanner } from "../core/planner/ConversionPlanner";
-import { ImageOutputValidator } from "../core/validation/Validator";
+import {
+  ImageOutputValidator,
+  MediaOutputValidator,
+  UniversalOutputValidator
+} from "../core/validation/Validator";
 import { BrowserImageEngine } from "../engines/browser-image/BrowserImageEngine";
 import { VipsImageEngine } from "../engines/image/VipsImageEngine";
+import { MediaEngine } from "../engines/media/MediaEngine";
+
+type SelectionKind="image"|"media"|null;
+type ResultLease={url:string;release?:()=>Promise<void>};
 
 function element<T extends HTMLElement>(id:string):T {
   const value=document.getElementById(id);
-  if (!value) throw new Error("Missing UI element: "+id);
+  if(!value) throw new Error("Missing UI element: "+id);
   return value as T;
 }
 
 function formatBytes(bytes:number|null):string {
-  if (bytes===null) return "Unknown";
-  if (bytes<1024) return bytes+" B";
+  if(bytes===null) return "Unknown";
+  if(bytes<1024) return bytes+" B";
   const units=["KB","MB","GB","TB"];
   let value=bytes/1024,unit=0;
   while(value>=1024&&unit<units.length-1){value/=1024;unit++}
   return value.toFixed(value>=100?0:value>=10?1:2)+" "+units[unit];
 }
 
-function bool(value:boolean):string { return value?"Available":"Unavailable"; }
+function formatDuration(seconds:number|null):string {
+  if(seconds==null||!Number.isFinite(seconds)) return "Unknown";
+  const total=Math.max(0,Math.round(seconds));
+  const h=Math.floor(total/3600);
+  const m=Math.floor((total%3600)/60);
+  const s=total%60;
+  return h>0
+    ? [h,m,s].map((v,i)=>i===0?String(v):String(v).padStart(2,"0")).join(":")
+    : [m,s].map(v=>String(v).padStart(2,"0")).join(":");
+}
 
-function mimeFallbackName(formatId:string):string {
-  return ({jpeg:"JPEG",png:"PNG",webp:"WebP",gif:"GIF",tiff:"TIFF",avif:"AVIF",jxl:"JPEG XL"} as Record<string,string>)[formatId] ?? formatId;
+function bool(value:boolean):string { return value?"Available":"Unavailable"; }
+function numeric(id:string,scale=1):number|undefined {
+  const value=Number(element<HTMLInputElement>(id).value);
+  return Number.isFinite(value)&&value>0?value*scale:undefined;
 }
 
 export class App {
@@ -39,227 +60,396 @@ export class App {
   private readonly engines=new EngineRegistry();
   private readonly graph=createConversionGraph();
   private readonly imageEngine=new VipsImageEngine();
+  private readonly mediaEngine=new MediaEngine();
   private readonly planner:ConversionPlanner;
   private readonly jobs:JobManager;
 
   private files:File[]=[];
   private inspections:FileInspection[]=[];
-  private detailed:DetailedImageInspection|null=null;
-  private urls:string[]=[];
+  private imageDetail:DetailedImageInspection|null=null;
+  private mediaDetail:DetailedMediaInspection|null=null;
+  private kind:SelectionKind=null;
+  private leases:ResultLease[]=[];
+  private routeRevision=0;
 
-  constructor() {
+  constructor(){
     this.engines.register(this.imageEngine);
     this.engines.register(new BrowserImageEngine());
+    this.engines.register(this.mediaEngine);
     this.planner=new ConversionPlanner(this.graph,this.formats,this.engines);
-    this.jobs=new JobManager(
+
+    const validator=new UniversalOutputValidator(
       this.formats,
-      this.engines,
-      this.planner,
       new ImageOutputValidator(this.formats,async(blob,formatId)=>{
-        const result=await this.imageEngine.inspect(blob,formatId);
-        return {width:result.width,height:result.height};
-      })
+        const detail=await this.imageEngine.inspect(blob,formatId);
+        return {width:detail.width,height:detail.height};
+      }),
+      new MediaOutputValidator(this.formats,blob=>this.mediaEngine.inspect(blob))
     );
+
+    this.jobs=new JobManager(this.formats,this.engines,this.planner,validator);
   }
 
-  async start():Promise<void> {
+  async start():Promise<void>{
     this.bindInputs();
     await this.engines.prepareAll();
     await this.renderCapabilities(await detectCapabilities());
   }
 
-  private bindInputs() {
+  private bindInputs(){
     const input=element<HTMLInputElement>("file-input");
     const zone=element<HTMLLabelElement>("drop-zone");
-    input.addEventListener("change",()=>{ if(input.files?.length) void this.loadFiles([...input.files]); });
+
+    input.addEventListener("change",()=>{
+      if(input.files?.length) void this.loadFiles([...input.files]);
+    });
+
     ["dragenter","dragover"].forEach(type=>zone.addEventListener(type,event=>{
-      event.preventDefault();zone.classList.add("dragging");
+      event.preventDefault();
+      zone.classList.add("dragging");
     }));
     ["dragleave","drop"].forEach(type=>zone.addEventListener(type,event=>{
-      event.preventDefault();zone.classList.remove("dragging");
+      event.preventDefault();
+      zone.classList.remove("dragging");
     }));
     zone.addEventListener("drop",event=>{
-      const files=[...(event.dataTransfer?.files ?? [])];
+      const files=[...(event.dataTransfer?.files??[])];
       if(files.length) void this.loadFiles(files);
     });
 
-    ["target-format","quality","metadata-policy","max-dimension","target-size","background-color","lossless"]
-      .forEach(id=>element(id).addEventListener("change",()=>this.renderRoute()));
+    const routeControls=[
+      "target-format","metadata-policy","image-quality","max-dimension","image-target-size",
+      "background-color","lossless","track-policy","media-height","media-fps","video-codec",
+      "audio-codec","video-bitrate","audio-bitrate","media-target-size","trim-start","trim-end",
+      "hardware-acceleration"
+    ];
+    for(const id of routeControls){
+      element(id).addEventListener("change",()=>void this.renderRoute());
+    }
 
     element<HTMLButtonElement>("convert-button").addEventListener("click",()=>void this.convertAll());
     element<HTMLButtonElement>("cancel-button").addEventListener("click",()=>this.jobs.cancelAll());
   }
 
-  private async loadFiles(files:File[]) {
-    this.revokeUrls();
+  private getKind(inspection:FileInspection):SelectionKind {
+    const category=inspection.detection.format?.category;
+    if(category==="image") return "image";
+    if(category==="audio"||category==="video") return "media";
+    return null;
+  }
+
+  private async loadFiles(files:File[]){
+    await this.releaseResults();
     this.files=files;
-    this.detailed=null;
+    this.imageDetail=null;
+    this.mediaDetail=null;
     this.inspections=await Promise.all(files.map(file=>inspectFile(file,this.formats)));
+
+    const kinds=new Set(this.inspections.map(i=>this.getKind(i)).filter(Boolean) as Exclude<SelectionKind,null>[]);
+    this.kind=kinds.size===1?[...kinds][0]:null;
+
     element("file-panel").classList.remove("hidden");
     element("results").classList.add("hidden");
     element("results").replaceChildren();
+    element("track-list").classList.add("hidden");
+    element("track-list").replaceChildren();
 
     const known=this.inspections.filter(item=>item.detection.format);
-    element("file-name").textContent=files.length===1?files[0].name:files.length+" image files";
+    element("file-name").textContent=files.length===1?files[0].name:files.length+" files";
     element("detection-confidence").textContent=known.length===files.length
-      ? (files.length===1
-          ? known[0].detection.format!.name+" · "+Math.round(known[0].detection.confidence*100)+"%"
-          : known.length+"/"+files.length+" recognized")
+      ? files.length===1
+        ? known[0].detection.format!.name+" · "+Math.round(known[0].detection.confidence*100)+"%"
+        : known.length+"/"+files.length+" recognized"
       : known.length+"/"+files.length+" recognized";
 
-    this.renderGenericFacts();
     const warnings=this.inspections.flatMap(item=>item.detection.warnings.map(w=>item.name+": "+w));
-    const unknown=this.inspections.filter(item=>!item.detection.format);
-    if(unknown.length) warnings.push(unknown.length+" file(s) could not be identified and block a common batch route.");
-    this.renderWarnings("inspection-warnings",warnings);
+    if(known.length!==files.length) warnings.push("At least one file could not be identified.");
+    if(kinds.size>1) warnings.push("Mixed image and media batches are intentionally separated; select one file family at a time.");
+    if(kinds.size===0) warnings.push("This format is recognized but does not have a Phase 2 local conversion engine.");
 
-    if(files.length===1 && known.length===1 && this.imageEngine.isAvailable()) {
-      try {
-        this.detailed=await this.imageEngine.inspect(files[0],known[0].detection.format!.id);
-        this.renderGenericFacts();
-        this.renderWarnings("inspection-warnings",[
-          ...warnings,
-          ...this.detailed.warnings
-        ]);
-      } catch(error) {
-        this.renderWarnings("inspection-warnings",[
-          ...warnings,
-          "Detailed libvips inspection unavailable: "+(error instanceof Error?error.message:String(error))
-        ]);
+    this.renderSelectionControls();
+
+    if(files.length===1&&known.length===1){
+      try{
+        if(this.kind==="image"&&this.imageEngine.isAvailable()){
+          this.imageDetail=await this.imageEngine.inspect(files[0],known[0].detection.format!.id);
+          warnings.push(...this.imageDetail.warnings);
+        }else if(this.kind==="media"&&this.mediaEngine.isAvailable()){
+          this.mediaDetail=await this.mediaEngine.inspect(files[0]);
+          warnings.push(...this.mediaDetail.warnings);
+        }
+      }catch(error){
+        warnings.push("Detailed inspection unavailable: "+(error instanceof Error?error.message:String(error)));
       }
     }
 
+    this.renderFacts();
+    this.renderTracks();
+    this.renderWarnings("inspection-warnings",warnings);
     this.populateTargets();
-    this.renderRoute();
+    await this.renderRoute();
   }
 
-  private renderGenericFacts() {
+  private renderSelectionControls(){
+    element("image-controls").classList.toggle("hidden",this.kind!=="image");
+    element("media-controls").classList.toggle("hidden",this.kind!=="media");
+  }
+
+  private renderFacts(){
     const total=this.files.reduce((sum,file)=>sum+file.size,0);
     const first=this.inspections[0];
-    const formatNames=[...new Set(this.inspections.map(i=>i.detection.format?.name??"Unknown"))];
-    const facts:Array<[string,string]> = this.files.length===1 ? [
-      ["Format",first?.detection.format?.name??"Unknown"],
-      ["Size",formatBytes(total)],
-      ["Dimensions",this.detailed
-        ? this.detailed.width+" × "+this.detailed.height
-        : first?.width&&first?.height?first.width+" × "+first.height:"Inspecting with engine"],
-      ["Frames / pages",this.detailed?String(this.detailed.frames):"—"],
-      ["Alpha",this.detailed?(this.detailed.alpha?"Yes":"No"):"—"],
-      ["Bit depth",this.detailed?.bitDepth?this.detailed.bitDepth+" bit":"—"],
-      ["Color",this.detailed?.colorSpace??"—"],
-      ["Decoded estimate",this.detailed?formatBytes(this.detailed.estimatedDecodedBytes):"—"]
-    ] : [
-      ["Files",String(this.files.length)],
-      ["Total size",formatBytes(total)],
-      ["Formats",formatNames.join(", ")],
-      ["Common target","Calculated locally"]
-    ];
+    let facts:Array<[string,string]>;
+
+    if(this.files.length>1){
+      const formats=[...new Set(this.inspections.map(i=>i.detection.format?.name??"Unknown"))];
+      facts=[
+        ["Files",String(this.files.length)],
+        ["Total size",formatBytes(total)],
+        ["Formats",formats.join(", ")],
+        ["Family",this.kind??"Mixed / unsupported"]
+      ];
+    }else if(this.kind==="image"){
+      facts=[
+        ["Format",first?.detection.format?.name??"Unknown"],
+        ["Size",formatBytes(total)],
+        ["Dimensions",this.imageDetail
+          ? this.imageDetail.width+" × "+this.imageDetail.height
+          : first?.width&&first?.height?first.width+" × "+first.height:"—"],
+        ["Frames / pages",this.imageDetail?String(this.imageDetail.frames):"—"],
+        ["Alpha",this.imageDetail?(this.imageDetail.alpha?"Yes":"No"):"—"],
+        ["Bit depth",this.imageDetail?.bitDepth?this.imageDetail.bitDepth+" bit":"—"],
+        ["Color",this.imageDetail?.colorSpace??"—"],
+        ["Decoded estimate",this.imageDetail?formatBytes(this.imageDetail.estimatedDecodedBytes):"—"]
+      ];
+    }else if(this.kind==="media"){
+      const primaryVideo=this.mediaDetail?.tracks.find(t=>t.type==="video");
+      const primaryAudio=this.mediaDetail?.tracks.find(t=>t.type==="audio");
+      facts=[
+        ["Container",this.mediaDetail?.container??first?.detection.format?.name??"Unknown"],
+        ["Size",formatBytes(total)],
+        ["Duration",formatDuration(this.mediaDetail?.duration??null)],
+        ["Tracks",this.mediaDetail?String(this.mediaDetail.tracks.length):"—"],
+        ["Video",primaryVideo
+          ? (primaryVideo.codec??"unknown")+" · "+(primaryVideo.displayWidth??primaryVideo.width??"?")+"×"+(primaryVideo.displayHeight??primaryVideo.height??"?")
+          : "None"],
+        ["Audio",primaryAudio
+          ? (primaryAudio.codec??"unknown")+" · "+(primaryAudio.channels??"?")+" ch · "+(primaryAudio.sampleRate??"?")+" Hz"
+          : "None"],
+        ["Subtitles",String(this.mediaDetail?.subtitleTracks??0)],
+        ["MIME",this.mediaDetail?.mimeType??first?.mime??"—"]
+      ];
+    }else{
+      facts=[
+        ["Format",first?.detection.format?.name??"Unknown"],
+        ["Size",formatBytes(total)],
+        ["Status","No active Phase 2 route"],
+        ["Category",first?.detection.format?.category??"Unknown"]
+      ];
+    }
 
     const container=element("file-facts");
     container.replaceChildren(...facts.map(([label,value])=>{
-      const node=document.createElement("div");node.className="fact";
+      const node=document.createElement("div");
+      node.className="fact";
       const caption=document.createElement("span");caption.textContent=label;
       const strong=document.createElement("strong");strong.textContent=value;
-      node.append(caption,strong);return node;
+      node.append(caption,strong);
+      return node;
     }));
   }
 
-  private commonTargets():string[] {
-    if(!this.inspections.length||this.inspections.some(i=>!i.detection.format)) return [];
+  private renderTracks(){
+    const container=element("track-list");
+    if(!this.mediaDetail||!this.mediaDetail.tracks.length){
+      container.classList.add("hidden");
+      return;
+    }
+    container.classList.remove("hidden");
+    container.replaceChildren();
+
+    for(const track of this.mediaDetail.tracks){
+      const row=document.createElement("div");row.className="track-row";
+      const type=document.createElement("strong");
+      type.textContent=track.type.toUpperCase()+" "+track.number;
+      const info=document.createElement("span");
+      const details=[
+        track.codecParameters??track.codec??"unknown codec",
+        track.language!=="und"?track.language:null,
+        track.name,
+        track.bitrate?Math.round(track.bitrate/1000)+" kbps":null,
+        track.type==="audio"&&track.channels?track.channels+" ch":null
+      ].filter(Boolean);
+      info.textContent=details.join(" · ");
+      row.append(type,info);
+      container.append(row);
+    }
+  }
+
+  private commonTargets():string[]{
+    if(!this.inspections.length||!this.kind||this.inspections.some(i=>!i.detection.format)) return [];
     const sets=this.inspections.map(i=>new Set(this.planner.availableTargets(i.detection.format!.id)));
     return [...sets[0]].filter(target=>sets.every(set=>set.has(target)));
   }
 
-  private populateTargets() {
+  private populateTargets(){
     const select=element<HTMLSelectElement>("target-format");
     select.replaceChildren();
     const targets=this.commonTargets();
+
     for(const id of targets){
-      const format=this.formats.get(id);if(!format) continue;
-      const option=document.createElement("option");option.value=id;option.textContent=format.name;
+      const format=this.formats.get(id);
+      if(!format) continue;
+      const option=document.createElement("option");
+      option.value=id;
+      option.textContent=format.name;
       select.append(option);
     }
+
     const source=this.inspections[0]?.detection.format?.id;
-    const preferred=source==="heic"?"jpeg":source==="svg"?"webp":source==="gif"?"webp":source==="png"?"webp":source;
+    const preferred=this.kind==="image"
+      ? source==="heic"?"jpeg":source==="svg"?"webp":source==="png"?"webp":source
+      : source==="mov"||source==="mkv"||source==="webm-media"?"mp4":source;
+
     if(preferred&&targets.includes(preferred)) select.value=preferred;
-    else if(targets.includes("webp")) select.value="webp";
+    else if(this.kind==="media"&&targets.includes("mp4")) select.value="mp4";
+    else if(this.kind==="image"&&targets.includes("webp")) select.value="webp";
 
     element<HTMLButtonElement>("convert-button").disabled=targets.length===0;
   }
 
-  private readOptions():ImageConversionOptions {
-    const maxValue=element<HTMLSelectElement>("max-dimension").value;
-    const sizeValue=Number(element<HTMLInputElement>("target-size").value);
+  private readImageOptions():ImageConversionOptions{
+    const max=element<HTMLSelectElement>("max-dimension").value;
+    const targetMb=numeric("image-target-size");
     return {
       metadataPolicy:element<HTMLSelectElement>("metadata-policy").value as ImageConversionOptions["metadataPolicy"],
-      maxDimension:maxValue?Number(maxValue):undefined,
-      targetBytes:Number.isFinite(sizeValue)&&sizeValue>0?Math.round(sizeValue*1024*1024):undefined,
+      maxDimension:max?Number(max):undefined,
+      targetBytes:targetMb?Math.round(targetMb*1024*1024):undefined,
       background:element<HTMLInputElement>("background-color").value,
       lossless:element<HTMLInputElement>("lossless").checked,
       preserveAnimation:true
     };
   }
 
-  private renderRoute() {
+  private readMediaOptions():MediaConversionOptions{
+    const height=element<HTMLSelectElement>("media-height").value;
+    const fps=element<HTMLSelectElement>("media-fps").value;
+    const targetMb=numeric("media-target-size");
+    const trimStart=numeric("trim-start");
+    const trimEnd=numeric("trim-end");
     const targetId=element<HTMLSelectElement>("target-format").value;
-    const routeBox=element("route-box");
-    if(!targetId||!this.inspections.length){
-      routeBox.textContent="No common local image route is available for this selection.";
-      this.renderWarnings("loss-warnings",[]);return;
+    const targetCategory=this.formats.get(targetId)?.category;
+
+    return {
+      tracks:element<HTMLSelectElement>("track-policy").value as MediaConversionOptions["tracks"],
+      metadataPolicy:element<HTMLSelectElement>("metadata-policy").value as MediaConversionOptions["metadataPolicy"],
+      trimStart,
+      trimEnd,
+      maxHeight:height?Number(height):undefined,
+      frameRate:fps?Number(fps):undefined,
+      videoCodec:element<HTMLSelectElement>("video-codec").value||undefined,
+      audioCodec:element<HTMLSelectElement>("audio-codec").value||undefined,
+      videoBitrate:numeric("video-bitrate",1_000_000),
+      audioBitrate:numeric("audio-bitrate",1_000),
+      targetBytes:targetMb?Math.round(targetMb*1024*1024):undefined,
+      extractAudio:targetCategory==="audio",
+      hardwareAcceleration:element<HTMLSelectElement>("hardware-acceleration").value as MediaConversionOptions["hardwareAcceleration"]
+    };
+  }
+
+  private async renderRoute(){
+    const revision=++this.routeRevision;
+    const targetId=element<HTMLSelectElement>("target-format").value;
+    const box=element("route-box");
+    if(!targetId||!this.kind||!this.inspections.length){
+      box.textContent="No common local conversion route is available for this selection.";
+      this.renderWarnings("loss-warnings",[]);
+      return;
     }
 
-    try {
-      const uniqueSources=[...new Set(this.inspections.map(i=>i.detection.format?.id).filter(Boolean) as string[])];
+    try{
+      const uniqueSources=[...new Set(this.inspections.map(i=>i.detection.format!.id))];
       const routes=uniqueSources.map(source=>this.planner.plan(source,targetId));
-      const engines=[...new Set(routes.flatMap(route=>route.edges.map(edge=>edge.engineId)))];
-      routeBox.textContent=(this.files.length>1?this.files.length+" files · ":"")
-        +"→ "+(this.formats.get(targetId)?.name??mimeFallbackName(targetId))
-        +" · "+engines.map(id=>id==="vips-image"?"libvips/WASM":"browser fallback").join(" + ")
-        +" · local only";
       const warnings=[...new Set(routes.flatMap(route=>route.warnings.map(w=>w.message)))];
-      if(this.detailed?.frames===1) {
-        const animationMessage=this.formats.get(this.inspections[0].detection.format?.id??"")?.capabilities.animation;
-        if(animationMessage) {
-          const index=warnings.findIndex(w=>w.includes("animated input"));
-          if(index>=0) warnings.splice(index,1);
-        }
+
+      if(this.kind==="image"){
+        box.textContent=(this.files.length>1?this.files.length+" files · ":"")
+          +"→ "+(this.formats.get(targetId)?.name??targetId)
+          +" · "+[...new Set(routes.flatMap(r=>r.edges.map(e=>e.engineId==="vips-image"?"libvips/WASM":"browser fallback")))].join(" + ")
+          +" · local only";
+      }else if(this.files.length===1){
+        box.textContent="Inspecting stream-copy compatibility…";
+        const mediaPlan=await this.mediaEngine.plan(this.files[0],targetId,this.readMediaOptions());
+        if(revision!==this.routeRevision) return;
+        const mode=mediaPlan.mode==="remux"
+          ?"Lossless stream copy / remux"
+          :mediaPlan.mode==="partial-transcode"
+            ?"Partial transcode"
+            :"Transcode required";
+        box.textContent=mode+" · "+mediaPlan.copyableTracks+"/"+mediaPlan.selectedTracks+" selected tracks directly copyable · OPFS streaming output";
+        warnings.push(...mediaPlan.warnings);
+      }else{
+        box.textContent=this.files.length+" media files · copy/transcode route assessed per file · OPFS streaming output";
       }
-      this.renderWarnings("loss-warnings",warnings);
-    } catch(error) {
-      routeBox.textContent=error instanceof Error?error.message:"No route available.";
+      this.renderWarnings("loss-warnings",[...new Set(warnings)]);
+    }catch(error){
+      if(revision!==this.routeRevision) return;
+      box.textContent=error instanceof Error?error.message:"No route available.";
       this.renderWarnings("loss-warnings",[]);
     }
   }
 
-  private renderWarnings(id:string,warnings:string[]) {
-    const container=element(id);container.replaceChildren();
-    for(const text of warnings) {
-      const warning=document.createElement("div");warning.className="warning";warning.textContent=text;container.append(warning);
+  private renderWarnings(id:string,warnings:string[]){
+    const container=element(id);
+    container.replaceChildren();
+    for(const text of warnings){
+      const warning=document.createElement("div");
+      warning.className="warning";
+      warning.textContent=text;
+      container.append(warning);
     }
   }
 
-  private async convertAll() {
-    if(!this.files.length) return;
+  private validateMediaOptions(options:MediaConversionOptions):string|null{
+    if(options.trimStart!=null&&options.trimEnd!=null&&options.trimEnd<=options.trimStart){
+      return "Trim end must be later than trim start.";
+    }
+    return null;
+  }
+
+  private async convertAll(){
+    if(!this.files.length||!this.kind) return;
     const targetId=element<HTMLSelectElement>("target-format").value;
     if(!targetId) return;
 
     const button=element<HTMLButtonElement>("convert-button");
     const cancel=element<HTMLButtonElement>("cancel-button");
-    const jobPanel=element("job-panel");
+    const panel=element("job-panel");
     const results=element("results");
-    const quality=Number(element<HTMLSelectElement>("quality").value);
-    const options=this.readOptions();
 
-    button.disabled=true;cancel.classList.remove("hidden");jobPanel.classList.remove("hidden");
-    results.classList.add("hidden");results.replaceChildren();this.revokeUrls();
+    const imageOptions=this.kind==="image"?this.readImageOptions():null;
+    const mediaOptions=this.kind==="media"?this.readMediaOptions():null;
+    if(mediaOptions){
+      const validation=this.validateMediaOptions(mediaOptions);
+      if(validation){this.renderWarnings("loss-warnings",[validation]);return;}
+    }
 
-    const outputs:Array<{blob:Blob;fileName:string;warnings:string[]}>=[];
+    button.disabled=true;
+    cancel.classList.remove("hidden");
+    panel.classList.remove("hidden");
+    results.classList.add("hidden");
+    results.replaceChildren();
+    await this.releaseResults();
+
+    const outputs:ConversionOutput[]=[];
     const failed:Array<{name:string;error:string}>=[];
-    try {
+
+    try{
       for(let index=0;index<this.files.length;index++){
         const file=this.files[index];
-        try {
-          const output=await this.jobs.convert(file,targetId,quality,options as unknown as Record<string,unknown>,snapshot=>{
+        try{
+          const options=(imageOptions??mediaOptions) as unknown as Record<string,unknown>;
+          const quality=this.kind==="image"?Number(element<HTMLSelectElement>("image-quality").value):0.82;
+          const output=await this.jobs.convert(file,targetId,quality,options,snapshot=>{
             const overall=(index+snapshot.progress)/this.files.length;
             element("job-stage").textContent=this.files.length>1
               ?"File "+(index+1)+"/"+this.files.length+" · "+snapshot.stage
@@ -268,84 +458,127 @@ export class App {
             element<HTMLElement>("progress-bar").style.width=Math.round(overall*100)+"%";
           });
           outputs.push(output);
-        } catch(error) {
+        }catch(error){
           if(error instanceof DOMException&&error.name==="AbortError") throw error;
           failed.push({name:file.name,error:error instanceof Error?error.message:String(error)});
         }
       }
-
-      this.renderResults(outputs,failed);
-    } catch(error) {
+      await this.renderResults(outputs,failed);
+    }catch(error){
       this.renderWarnings("loss-warnings",[error instanceof Error?error.message:"Conversion cancelled."]);
-    } finally {
-      button.disabled=false;cancel.classList.add("hidden");
+      for(const output of outputs) await output.release?.();
+    }finally{
+      button.disabled=false;
+      cancel.classList.add("hidden");
     }
   }
 
-  private async renderResults(
-    outputs:Array<{blob:Blob;fileName:string;warnings:string[]}>,
-    failed:Array<{name:string;error:string}>
-  ) {
-    const container=element("results");container.replaceChildren();container.classList.remove("hidden");
-    for(const output of outputs) this.addResult(container,output.fileName,output.blob,output.warnings);
+  private async renderResults(outputs:ConversionOutput[],failed:Array<{name:string;error:string}>){
+    const container=element("results");
+    container.replaceChildren();
+    container.classList.remove("hidden");
+
+    for(const output of outputs){
+      this.addResult(container,output.fileName,output.blob,output.warnings,output.release);
+    }
 
     const total=outputs.reduce((sum,item)=>sum+item.blob.size,0);
     if(outputs.length>1&&total<=512*1024*1024){
-      try {
+      try{
         const entries:Record<string,Uint8Array>={};
-        for(const output of outputs) entries[output.fileName]=new Uint8Array(await output.blob.arrayBuffer());
+        for(const output of outputs){
+          entries[output.fileName]=new Uint8Array(await output.blob.arrayBuffer());
+        }
         const zipped=zipSync(entries,{level:0});
-        this.addResult(container,"converted-images.zip",new Blob([zipped],{type:"application/zip"}),["Batch package; image payloads are stored without redundant ZIP recompression."]);
-      } catch(error) {
+        this.addResult(
+          container,
+          "converted-files.zip",
+          new Blob([zipped],{type:"application/zip"}),
+          ["Batch package; already-compressed media is stored without redundant ZIP compression."]
+        );
+      }catch(error){
         failed.push({name:"Batch ZIP",error:error instanceof Error?error.message:String(error)});
       }
     }
 
-    for(const failure of failed) {
-      const node=document.createElement("div");node.className="warning";
-      node.textContent=failure.name+": "+failure.error;container.append(node);
+    for(const failure of failed){
+      const node=document.createElement("div");
+      node.className="warning";
+      node.textContent=failure.name+": "+failure.error;
+      container.append(node);
     }
   }
 
-  private addResult(container:HTMLElement,name:string,blob:Blob,warnings:string[]) {
-    const url=URL.createObjectURL(blob);this.urls.push(url);
-    const item=document.createElement("div");item.className="result-item";
-    const meta=document.createElement("div");meta.className="result-meta";
+  private addResult(
+    container:HTMLElement,
+    name:string,
+    blob:Blob,
+    warnings:string[],
+    release?:()=>Promise<void>
+  ){
+    const url=URL.createObjectURL(blob);
+    this.leases.push({url,release});
+
+    const item=document.createElement("div");
+    item.className="result-item";
+    const meta=document.createElement("div");
+    meta.className="result-meta";
     const strong=document.createElement("strong");strong.textContent=name;
-    const sub=document.createElement("span");sub.textContent=formatBytes(blob.size)+(warnings.length?" · "+warnings.length+" warning(s)":"");
+    const sub=document.createElement("span");
+    sub.textContent=formatBytes(blob.size)+(warnings.length?" · "+warnings.length+" warning(s)":"");
     meta.append(strong,sub);
-    const link=document.createElement("a");link.className="download-link";link.href=url;link.download=name;link.textContent="Save";
-    item.append(meta,link);container.append(item);
+
+    const link=document.createElement("a");
+    link.className="download-link";
+    link.href=url;
+    link.download=name;
+    link.textContent="Save";
+    item.append(meta,link);
+    container.append(item);
   }
 
-  private revokeUrls(){ for(const url of this.urls) URL.revokeObjectURL(url);this.urls=[]; }
+  private async releaseResults(){
+    const leases=this.leases.splice(0);
+    for(const lease of leases){
+      URL.revokeObjectURL(lease.url);
+      try{await lease.release?.();}catch{}
+    }
+  }
 
-  private async renderCapabilities(profile:CapabilityProfile) {
+  private async renderCapabilities(profile:CapabilityProfile){
     const entries:Array<[string,boolean|string]>=[
-      ["Production image engine",this.imageEngine.isAvailable()],
-      ["WebAssembly",profile.webAssembly],
-      ["WASM SIMD",profile.wasmSIMD],
+      ["Image engine",this.imageEngine.isAvailable()],
+      ["Media engine",this.mediaEngine.isAvailable()],
+      ["WebCodecs",profile.webCodecs],
+      ["H.264 decode / encode",profile.codecs.h264.decode+" / "+profile.codecs.h264.encode],
+      ["VP9 decode / encode",profile.codecs.vp9.decode+" / "+profile.codecs.vp9.encode],
+      ["AV1 decode / encode",profile.codecs.av1.decode+" / "+profile.codecs.av1.encode],
+      ["AAC decode / encode",profile.codecs.aac.decode+" / "+profile.codecs.aac.encode],
+      ["Opus decode / encode",profile.codecs.opus.decode+" / "+profile.codecs.opus.encode],
+      ["OPFS",profile.opfs],
       ["WASM threads",profile.wasmThreads],
       ["Cross-origin isolated",profile.crossOriginIsolated],
-      ["OPFS",profile.opfs],
-      ["Workers",profile.workers],
-      ["WebCodecs",profile.webCodecs],
-      ["Direct file save",profile.fileSystemAccess],
       ["Storage quota",formatBytes(profile.storageQuota)],
       ["CPU threads",String(profile.hardwareConcurrency)]
     ];
-    const capabilities=element("capabilities");capabilities.replaceChildren();
+
+    const container=element("capabilities");
+    container.replaceChildren();
     for(const [label,value] of entries){
       const node=document.createElement("div");
       node.className="capability"+(typeof value==="boolean"?(value?" ok":" no"):"");
       const caption=document.createElement("span");caption.textContent=label;
-      const strong=document.createElement("strong");strong.textContent=typeof value==="boolean"?bool(value):value;
-      node.append(caption,strong);capabilities.append(node);
+      const strong=document.createElement("strong");
+      strong.textContent=typeof value==="boolean"?bool(value):String(value);
+      node.append(caption,strong);
+      container.append(node);
     }
-    element("runtime-status").textContent=this.imageEngine.isAvailable()?"Phase 1 ready":"Basic-image fallback";
+
+    element("runtime-status").textContent=this.mediaEngine.isAvailable()?"Phase 2 ready":"Media degraded";
     element("capability-json").textContent=JSON.stringify({
       ...profile,
-      imageEngine:this.imageEngine.isAvailable()?"wasm-vips (lazy)":"browser fallback"
+      imageEngine:this.imageEngine.isAvailable()?"wasm-vips":"browser fallback",
+      mediaEngine:this.mediaEngine.isAvailable()?"Mediabunny 1.58.0":"unavailable"
     },null,2);
   }
 }
