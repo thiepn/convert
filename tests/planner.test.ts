@@ -17,7 +17,7 @@ describe("ConversionPlanner",()=>{
   const engines=new EngineRegistry();
   [
     "vips-image","browser-image-proof","mediabunny","pdf-engine",
-    "pandoc-document","libreoffice-document","pdf-reconstruction"
+    "pandoc-document","libreoffice-document","pdf-reconstruction","archive-engine"
   ].forEach(id=>engines.register(engine(id)));
   const planner=new ConversionPlanner(createConversionGraph(),createDefaultFormatRegistry(),engines);
 
@@ -71,6 +71,17 @@ describe("ConversionPlanner",()=>{
     const targets=planner.availableTargets("docx");
     expect(targets).toContain("pdf");
     expect(targets).toContain("markdown");
+  });
+
+  it("routes RAR and 7z through the archive repacker",()=>{
+    expect(planner.plan("rar","zip").edges[0].engineId).toBe("archive-engine");
+    expect(planner.plan("7z","tar-gzip").edges[0].engineId).toBe("archive-engine");
+  });
+
+  it("advertises archive output targets without leaking them into ordinary files",()=>{
+    expect(planner.availableTargets("rar")).toContain("zip");
+    expect(planner.availableTargets("rar")).toContain("tar-xz");
+    expect(planner.availableTargets("jpeg")).not.toContain("zip");
   });
 
   it("keeps legacy AVI unsupported without a vetted compatibility engine",()=>{

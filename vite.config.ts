@@ -32,7 +32,10 @@ export default defineConfig({
         { src: "node_modules/pandoc-wasm/src/pandoc.wasm", dest: "engines/pandoc", rename: "pandoc.wasm" },
 
         { src: "node_modules/@matbee/libreoffice-converter/wasm/*", dest: "engines/libreoffice/wasm" },
-        { src: "node_modules/@matbee/libreoffice-converter/dist/browser.worker.global.js", dest: "engines/libreoffice", rename: "browser.worker.global.js" }
+        { src: "node_modules/@matbee/libreoffice-converter/dist/browser.worker.global.js", dest: "engines/libreoffice", rename: "browser.worker.global.js" },
+
+        { src: "node_modules/libarchive.js/dist/worker-bundle.js", dest: "engines/libarchive" },
+        { src: "node_modules/libarchive.js/dist/libarchive.wasm", dest: "engines/libarchive" }
       ]
     })
   ],

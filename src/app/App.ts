@@ -5,6 +5,7 @@ import { EngineRegistry } from "../core/engines/EngineRegistry";
 import { createDefaultFormatRegistry } from "../core/formats/defaultFormats";
 import type { DetailedImageInspection, ImageConversionOptions } from "../core/image/types";
 import type { DetailedDocumentInspection, DocumentConversionOptions } from "../core/document/types";
+import type { ArchiveConversionOptions, DetailedArchiveInspection } from "../core/archive/types";
 import type { FileInspection } from "../core/inspection/inspectFile";
 import { inspectFile } from "../core/inspection/inspectFile";
 import { JobManager } from "../core/jobs/JobManager";
@@ -18,6 +19,7 @@ import {
   MediaOutputValidator,
   PdfOutputValidator,
   DocumentOutputValidator,
+  ArchiveOutputValidator,
   UniversalOutputValidator
 } from "../core/validation/Validator";
 import { BrowserImageEngine } from "../engines/browser-image/BrowserImageEngine";
@@ -28,8 +30,9 @@ import { DocumentInspector } from "../engines/document/DocumentInspector";
 import { PandocDocumentEngine } from "../engines/document/PandocDocumentEngine";
 import { OfficeDocumentEngine } from "../engines/document/OfficeDocumentEngine";
 import { PdfReconstructionEngine } from "../engines/document/PdfReconstructionEngine";
+import { ArchiveEngine } from "../engines/archive/ArchiveEngine";
 
-type SelectionKind="image"|"media"|"pdf"|"document"|null;
+type SelectionKind="image"|"media"|"pdf"|"document"|"archive"|"archive-build"|null;
 type ResultLease={url:string;release?:()=>Promise<void>};
 
 function element<T extends HTMLElement>(id:string):T {
@@ -85,6 +88,7 @@ export class App {
   private readonly pandocDocumentEngine=new PandocDocumentEngine();
   private readonly officeDocumentEngine=new OfficeDocumentEngine();
   private readonly pdfReconstructionEngine=new PdfReconstructionEngine(this.pdfEngine,this.pandocDocumentEngine);
+  private readonly archiveEngine=new ArchiveEngine();
   private readonly planner:ConversionPlanner;
   private readonly jobs:JobManager;
 
@@ -94,6 +98,8 @@ export class App {
   private mediaDetail:DetailedMediaInspection|null=null;
   private pdfDetail:DetailedPdfInspection|null=null;
   private documentDetail:DetailedDocumentInspection|null=null;
+  private archiveDetail:DetailedArchiveInspection|null=null;
+  private archiveAbort:AbortController|null=null;
   private kind:SelectionKind=null;
   private leases:ResultLease[]=[];
   private routeRevision=0;
@@ -106,6 +112,7 @@ export class App {
     this.engines.register(this.pandocDocumentEngine);
     this.engines.register(this.officeDocumentEngine);
     this.engines.register(this.pdfReconstructionEngine);
+    this.engines.register(this.archiveEngine);
     this.planner=new ConversionPlanner(this.graph,this.formats,this.engines);
 
     const validator=new UniversalOutputValidator(
@@ -116,7 +123,8 @@ export class App {
       }),
       new MediaOutputValidator(this.formats,blob=>this.mediaEngine.inspect(blob)),
       new PdfOutputValidator(this.formats,(blob,password)=>this.pdfEngine.inspect(blob,password)),
-      new DocumentOutputValidator(this.formats,(blob,formatId)=>this.documentInspector.inspect(blob,formatId))
+      new DocumentOutputValidator(this.formats,(blob,formatId)=>this.documentInspector.inspect(blob,formatId)),
+      new ArchiveOutputValidator(this.formats,(blob,formatId,password)=>this.archiveEngine.inspect(blob,formatId,password))
     );
     this.jobs=new JobManager(this.formats,this.engines,this.planner,validator);
   }
@@ -153,18 +161,27 @@ export class App {
       "hardware-acceleration","pdf-operation","pdf-pages","pdf-split-groups","pdf-order",
       "pdf-image-format","pdf-image-quality","pdf-dpi","pdf-ocr-language","pdf-ocr-pages",
       "pdf-rotation","document-route","document-track-changes","document-assets",
-      "document-standalone","document-toc"
+      "document-standalone","document-toc","archive-operation","archive-compression-level",
+      "archive-preserve-paths","archive-input-password","archive-output-password"
     ];
     for(const id of routeControls){
       element(id).addEventListener("change",()=>{
         if(id==="pdf-operation") this.updatePdfOptionVisibility();
+        if(id==="archive-operation") this.updateArchiveOptionVisibility();
         void this.renderRoute();
       });
     }
 
     element<HTMLButtonElement>("pdf-reinspect-button").addEventListener("click",()=>void this.refreshPdfInspection());
+    element<HTMLButtonElement>("archive-pack-selection-button").addEventListener("click",()=>void this.switchToArchiveBuild());
+    element<HTMLButtonElement>("archive-reinspect-button").addEventListener("click",()=>void this.refreshArchiveInspection());
+    element<HTMLButtonElement>("archive-select-all").addEventListener("click",()=>this.setArchiveSelection(true));
+    element<HTMLButtonElement>("archive-select-none").addEventListener("click",()=>this.setArchiveSelection(false));
     element<HTMLButtonElement>("convert-button").addEventListener("click",()=>void this.convertAll());
-    element<HTMLButtonElement>("cancel-button").addEventListener("click",()=>this.jobs.cancelAll());
+    element<HTMLButtonElement>("cancel-button").addEventListener("click",()=>{
+      this.jobs.cancelAll();
+      this.archiveAbort?.abort();
+    });
   }
 
   private getKind(inspection:FileInspection):SelectionKind {
@@ -173,6 +190,7 @@ export class App {
     if(category==="audio"||category==="video") return "media";
     if(category==="pdf") return "pdf";
     if(category==="document") return "document";
+    if(category==="archive") return "archive";
     return null;
   }
 
@@ -183,10 +201,16 @@ export class App {
     this.mediaDetail=null;
     this.pdfDetail=null;
     this.documentDetail=null;
+    this.archiveDetail=null;
     this.inspections=await Promise.all(files.map(file=>inspectFile(file,this.formats)));
 
     const kinds=new Set(this.inspections.map(i=>this.getKind(i)).filter(Boolean) as Exclude<SelectionKind,null>[]);
-    this.kind=kinds.size===1?[...kinds][0]:null;
+    const allKnown=this.inspections.every(item=>Boolean(item.detection.format));
+    this.kind=kinds.size===1&&allKnown
+      ? [...kinds][0]
+      : files.length
+        ? "archive-build"
+        : null;
 
     element("file-panel").classList.remove("hidden");
     element("results").classList.add("hidden");
@@ -203,11 +227,20 @@ export class App {
       : known.length+"/"+files.length+" recognized";
 
     const warnings=this.inspections.flatMap(item=>item.detection.warnings.map(w=>item.name+": "+w));
-    if(known.length!==files.length) warnings.push("At least one file could not be identified.");
-    if(kinds.size>1) warnings.push("Mixed file families must be processed separately.");
-    if(kinds.size===0) warnings.push("This format has no active local conversion workflow.");
+    if(this.kind==="archive-build"){
+      warnings.push("Mixed or otherwise unsupported selections can be packed into a new local archive.");
+    }else{
+      if(known.length!==files.length) warnings.push("At least one file could not be identified.");
+      if(kinds.size>1) warnings.push("Mixed file families must be processed separately.");
+      if(kinds.size===0) warnings.push("This format has no active local conversion workflow.");
+    }
 
     this.renderSelectionControls();
+    if(this.kind==="archive-build"){
+      element<HTMLSelectElement>("archive-operation").value="create";
+    }else if(this.kind==="archive"){
+      element<HTMLSelectElement>("archive-operation").value="repack";
+    }
 
     if(files.length===1&&known.length===1){
       try{
@@ -224,11 +257,20 @@ export class App {
         }else if(this.kind==="document"){
           this.documentDetail=await this.documentInspector.inspect(files[0],known[0].detection.format!.id);
           warnings.push(...this.documentDetail.warnings);
+        }else if(this.kind==="archive"){
+          this.archiveDetail=await this.archiveEngine.inspect(
+            files[0],
+            known[0].detection.format!.id,
+            this.readArchiveOptions().inputPassword
+          );
+          warnings.push(...this.archiveDetail.warnings);
         }
       }catch(error){
         const message=error instanceof Error?error.message:String(error);
         if(this.kind==="pdf"&&/PDF_PASSWORD_REQUIRED|PDF_PASSWORD_INCORRECT/.test(message)){
           warnings.push("This PDF is password-protected. Enter the password and choose Re-inspect.");
+        }else if(this.kind==="archive"&&/ARCHIVE_PASSWORD_REQUIRED/.test(message)){
+          warnings.push("This archive requires a password before its entries can be listed.");
         }else{
           warnings.push("Detailed inspection unavailable: "+message);
         }
@@ -237,9 +279,11 @@ export class App {
 
     this.renderFacts();
     this.renderTracks();
+    this.renderArchiveEntries();
     this.renderWarnings("inspection-warnings",warnings);
     this.populateTargets();
     this.updatePdfOptionVisibility();
+    this.updateArchiveOptionVisibility();
     await this.renderRoute();
   }
 
@@ -258,13 +302,59 @@ export class App {
     await this.renderRoute();
   }
 
+  private async switchToArchiveBuild(){
+    if(!this.files.length) return;
+    this.kind="archive-build";
+    this.archiveDetail=null;
+    element<HTMLSelectElement>("archive-operation").value="create";
+    this.renderSelectionControls();
+    this.renderFacts();
+    this.renderArchiveEntries();
+    this.populateTargets();
+    this.updateArchiveOptionVisibility();
+    await this.renderRoute();
+  }
+
+  private async refreshArchiveInspection(){
+    if(this.kind!=="archive"||this.files.length!==1) return;
+    const warnings:string[]=[];
+    try{
+      const formatId=this.inspections[0]?.detection.format?.id;
+      if(!formatId) throw new Error("ARCHIVE_FORMAT_UNKNOWN: Archive format is unknown.");
+      this.archiveDetail=await this.archiveEngine.inspect(
+        this.files[0],
+        formatId,
+        this.readArchiveOptions().inputPassword
+      );
+      warnings.push(...this.archiveDetail.warnings);
+    }catch(error){
+      this.archiveDetail=null;
+      warnings.push(error instanceof Error?error.message:String(error));
+    }
+    this.renderFacts();
+    this.renderArchiveEntries();
+    this.renderWarnings("inspection-warnings",warnings);
+    await this.renderRoute();
+  }
+
+  private setArchiveSelection(selected:boolean){
+    document.querySelectorAll<HTMLInputElement>("#archive-entry-list input[type=checkbox]")
+      .forEach(input=>{input.checked=selected;});
+    void this.renderRoute();
+  }
+
   private renderSelectionControls(){
     element("common-controls").classList.toggle("hidden",this.kind==="pdf");
     element("image-controls").classList.toggle("hidden",this.kind!=="image");
     element("media-controls").classList.toggle("hidden",this.kind!=="media");
     element("document-controls").classList.toggle("hidden",this.kind!=="document");
-    element("metadata-control").classList.toggle("hidden",this.kind==="document");
+    element("archive-controls").classList.toggle("hidden",this.kind!=="archive"&&this.kind!=="archive-build");
+    element("metadata-control").classList.toggle("hidden",this.kind==="document"||this.kind==="archive"||this.kind==="archive-build");
     element("pdf-controls").classList.toggle("hidden",this.kind!=="pdf");
+    element("archive-pack-selection-button").classList.toggle(
+      "hidden",
+      !this.files.length||this.kind==="archive"||this.kind==="archive-build"||this.kind==="pdf"
+    );
   }
 
   private renderFacts(){
@@ -325,6 +415,24 @@ export class App {
         ["Macros",this.documentDetail?(this.documentDetail.macros?"Detected / possible":"None detected"):"—"],
         ["Expanded size",this.documentDetail?.expandedSize!=null?formatBytes(this.documentDetail.expandedSize):"—"]
       ];
+    }else if(this.kind==="archive"){
+      facts=[
+        ["Format",first?.detection.format?.name??"Archive"],
+        ["Compressed",formatBytes(total)],
+        ["Files",this.archiveDetail?String(this.archiveDetail.files):"—"],
+        ["Directories",this.archiveDetail?String(this.archiveDetail.directories):"—"],
+        ["Expanded",this.archiveDetail?formatBytes(this.archiveDetail.expandedSize):"—"],
+        ["Ratio",this.archiveDetail?this.archiveDetail.compressionRatio.toFixed(1)+"×":"—"],
+        ["Encrypted",this.archiveDetail?.encrypted==null?"Unknown":this.archiveDetail.encrypted?"Yes":"No"],
+        ["Engine",this.archiveDetail?.engine??"—"]
+      ];
+    }else if(this.kind==="archive-build"){
+      facts=[
+        ["Files",String(this.files.length)],
+        ["Total size",formatBytes(total)],
+        ["Operation","Create new archive"],
+        ["Paths","Local filenames only"]
+      ];
     }else if(this.kind==="pdf"){
       facts=[
         ["Format","PDF"],
@@ -381,8 +489,58 @@ export class App {
     }
   }
 
+  private renderArchiveEntries(){
+    const container=element("archive-entry-list");
+    const summary=element("archive-entry-summary");
+    const note=element("archive-entry-note");
+
+    if(this.kind!=="archive"||!this.archiveDetail){
+      container.replaceChildren();
+      container.classList.add("hidden");
+      summary.textContent=this.kind==="archive-build"?"Create a new archive":"No archive inspected";
+      note.textContent="";
+      return;
+    }
+
+    const entries=this.archiveDetail.entries.filter(entry=>!entry.directory);
+    const shown=entries.slice(0,500);
+    container.replaceChildren();
+    container.classList.toggle("hidden",shown.length===0);
+
+    for(const entry of shown){
+      const row=document.createElement("label");
+      row.className="archive-entry-row";
+
+      const checkbox=document.createElement("input");
+      checkbox.type="checkbox";
+      checkbox.value=entry.path;
+      checkbox.addEventListener("change",()=>void this.renderRoute());
+
+      const meta=document.createElement("span");
+      meta.className="archive-entry-meta";
+      const name=document.createElement("strong");
+      name.textContent=entry.path;
+      const detail=document.createElement("small");
+      detail.textContent=formatBytes(entry.size)
+        +(entry.encrypted?" · encrypted":"")
+        +(entry.compressedSize!=null?" · "+formatBytes(entry.compressedSize)+" compressed":"");
+      meta.append(name,detail);
+      row.append(checkbox,meta);
+      container.append(row);
+    }
+
+    summary.textContent=this.archiveDetail.files+" file(s) · "+formatBytes(this.archiveDetail.expandedSize)+" expanded";
+    note.textContent=entries.length>shown.length
+      ?"Showing the first "+shown.length+" entries. Use Extract all for the entire archive."
+      :"";
+  }
+
   private commonTargets():string[]{
-    if(!this.inspections.length||!this.kind||this.kind==="pdf"||this.inspections.some(i=>!i.detection.format)) return [];
+    if(!this.files.length||!this.kind||this.kind==="pdf") return [];
+    if(this.kind==="archive-build"){
+      return ["zip","7z","tar","tar-gzip","tar-bzip2","tar-xz"];
+    }
+    if(!this.inspections.length||this.inspections.some(i=>!i.detection.format)) return [];
     const sets=this.inspections.map(i=>new Set(this.planner.availableTargets(i.detection.format!.id)));
     return [...sets[0]].filter(target=>sets.every(set=>set.has(target)));
   }
@@ -414,6 +572,7 @@ export class App {
     else if(this.kind==="media"&&targets.includes("mp4")) select.value="mp4";
     else if(this.kind==="image"&&targets.includes("webp")) select.value="webp";
     else if(this.kind==="document"&&targets.includes("docx")) select.value="docx";
+    else if((this.kind==="archive"||this.kind==="archive-build")&&targets.includes("zip")) select.value="zip";
 
     element<HTMLButtonElement>("convert-button").disabled=targets.length===0;
   }
@@ -477,6 +636,43 @@ export class App {
     };
   }
 
+  private readArchiveOptions():ArchiveConversionOptions{
+    return {
+      inputPassword:element<HTMLInputElement>("archive-input-password").value||undefined,
+      outputPassword:element<HTMLInputElement>("archive-output-password").value||undefined,
+      compressionLevel:Number(element<HTMLSelectElement>("archive-compression-level").value)||0,
+      preservePaths:element<HTMLInputElement>("archive-preserve-paths").checked
+    };
+  }
+
+  private selectedArchivePaths():string[]{
+    return [...document.querySelectorAll<HTMLInputElement>("#archive-entry-list input[type=checkbox]:checked")]
+      .map(input=>input.value);
+  }
+
+  private updateArchiveOptionVisibility(){
+    if(this.kind!=="archive"&&this.kind!=="archive-build") return;
+    const operation=element<HTMLSelectElement>("archive-operation");
+    const isBuild=this.kind==="archive-build";
+
+    for(const option of [...operation.options]){
+      if(option.value==="create") option.disabled=!isBuild;
+      else option.disabled=isBuild;
+    }
+    if(isBuild&&operation.value!=="create") operation.value="create";
+    if(!isBuild&&operation.value==="create") operation.value="repack";
+
+    const extracting=operation.value==="extract-all"||operation.value==="extract-selected";
+    element("common-controls").classList.toggle("hidden",extracting);
+    element("archive-entry-list").classList.toggle(
+      "hidden",
+      isBuild||!this.archiveDetail||this.archiveDetail.entries.filter(entry=>!entry.directory).length===0
+    );
+    element<HTMLButtonElement>("archive-select-all").disabled=isBuild||!this.archiveDetail;
+    element<HTMLButtonElement>("archive-select-none").disabled=isBuild||!this.archiveDetail;
+    element<HTMLButtonElement>("archive-reinspect-button").disabled=isBuild||this.files.length!==1;
+  }
+
   private readPdfPassword():string|undefined{
     return element<HTMLInputElement>("pdf-password").value||undefined;
   }
@@ -498,6 +694,57 @@ export class App {
   private async renderRoute(){
     const revision=++this.routeRevision;
     const box=element("route-box");
+
+    if(this.kind==="archive"||this.kind==="archive-build"){
+      this.updateArchiveOptionVisibility();
+      const operation=element<HTMLSelectElement>("archive-operation").value;
+      const targetId=element<HTMLSelectElement>("target-format").value;
+      const options=this.readArchiveOptions();
+      const warnings:string[]=[];
+
+      if(this.kind==="archive-build"){
+        const target=this.formats.get(targetId)?.name??targetId;
+        box.textContent="Create "+target+" from "+this.files.length+" local file(s)";
+        if(targetId!=="zip"&&options.outputPassword){
+          warnings.push("Output encryption is currently implemented only for ZIP AES-256; the password will not be used for this target.");
+        }
+        warnings.push("Archive creation stays local. Large selections are bounded by a browser memory safety budget.");
+      }else{
+        if(operation==="extract-all"){
+          box.textContent="Extract all "+(this.archiveDetail?.files??"?")+" file(s) locally";
+          if(this.archiveDetail?.expandedSize){
+            warnings.push("Extraction materializes up to "+formatBytes(this.archiveDetail.expandedSize)+" of declared content in browser results.");
+          }
+        }else if(operation==="extract-selected"){
+          const count=this.selectedArchivePaths().length;
+          box.textContent="Extract "+count+" selected archive entr"+(count===1?"y":"ies")+" locally";
+          if(count===0) warnings.push("Select at least one archive entry.");
+        }else{
+          const sourceId=this.inspections[0]?.detection.format?.id;
+          if(sourceId&&targetId){
+            const route=this.planner.plan(sourceId,targetId);
+            box.textContent=(this.formats.get(sourceId)?.name??sourceId)+" → "+(this.formats.get(targetId)?.name??targetId)+" · extract + repack locally";
+            warnings.push(...route.warnings.map(w=>w.message));
+          }else{
+            box.textContent="Choose an archive output format.";
+          }
+          warnings.push("Repacking materializes archive entries locally before writing the new container.");
+          if(targetId!=="zip"&&options.outputPassword){
+            warnings.push("Output encryption is currently implemented only for ZIP AES-256.");
+          }
+        }
+
+        if(this.archiveDetail?.passwordRequired&&!options.inputPassword){
+          warnings.push("This archive reports encrypted data; enter its password before extraction/repacking.");
+        }
+        if(this.archiveDetail?.duplicatePaths.length){
+          warnings.push("Duplicate paths exist. Individual extraction avoids overwriting them, but repacking may require renamed entries.");
+        }
+      }
+
+      this.renderWarnings("loss-warnings",[...new Set(warnings)]);
+      return;
+    }
 
     if(this.kind==="pdf"){
       const operation=element<HTMLSelectElement>("pdf-operation").value;
@@ -649,6 +896,10 @@ export class App {
       await this.runPdfOperation();
       return;
     }
+    if(this.kind==="archive"||this.kind==="archive-build"){
+      await this.runArchiveOperation();
+      return;
+    }
 
     const targetId=element<HTMLSelectElement>("target-format").value;
     if(!targetId) return;
@@ -708,6 +959,124 @@ export class App {
       for(const output of outputs) await output.release?.();
     }finally{
       button.disabled=false;cancel.classList.add("hidden");
+    }
+  }
+
+  private async runArchiveOperation(){
+    const operation=element<HTMLSelectElement>("archive-operation").value;
+    const targetId=element<HTMLSelectElement>("target-format").value;
+    const options=this.readArchiveOptions();
+    const button=element<HTMLButtonElement>("convert-button");
+    const cancel=element<HTMLButtonElement>("cancel-button");
+    const results=element("results");
+
+    button.disabled=true;
+    cancel.classList.remove("hidden");
+    results.classList.add("hidden");
+    results.replaceChildren();
+    await this.releaseResults();
+
+    const controller=new AbortController();
+    this.archiveAbort=controller;
+
+    try{
+      if(this.kind==="archive-build"){
+        if(!targetId) throw new Error("ARCHIVE_TARGET_REQUIRED: Choose an archive format.");
+        const sourceFiles=this.files.map(file=>({
+          blob:file,
+          path:(file as File & {webkitRelativePath?:string}).webkitRelativePath||file.name,
+          lastModified:file.lastModified
+        }));
+        const created=await this.archiveEngine.createFromFiles(
+          sourceFiles,
+          targetId,
+          options,
+          undefined,
+          (progress,stage)=>this.setProgress(progress,stage),
+          controller.signal
+        );
+        const password=targetId==="zip"?options.outputPassword:undefined;
+        await this.archiveEngine.inspect(created.blob,targetId,password);
+        const extension=this.formats.get(targetId)?.extensions[0]??targetId;
+        this.showBlobResults([{
+          name:"archive."+extension,
+          blob:created.blob,
+          warnings:targetId!=="zip"&&options.outputPassword
+            ? ["Output password applies only to ZIP and was ignored."]
+            : []
+        }],[]);
+        this.setProgress(1,"Archive complete");
+        return;
+      }
+
+      if(this.kind!=="archive") throw new Error("ARCHIVE_SELECTION_INVALID: No archive workflow is active.");
+      if(operation==="repack"){
+        if(!targetId) throw new Error("ARCHIVE_TARGET_REQUIRED: Choose an archive output format.");
+        const outputs:ConversionOutput[]=[];
+        const failed:Array<{name:string;error:string}>=[];
+        for(let index=0;index<this.files.length;index++){
+          controller.signal.throwIfAborted?.();
+          const file=this.files[index];
+          try{
+            const output=await this.jobs.convert(
+              file,
+              targetId,
+              .82,
+              options as unknown as Record<string,unknown>,
+              snapshot=>{
+                const overall=(index+snapshot.progress)/this.files.length;
+                this.setProgress(overall,this.files.length>1
+                  ?"Archive "+(index+1)+"/"+this.files.length+" · "+snapshot.stage
+                  :snapshot.stage);
+              }
+            );
+            outputs.push(output);
+          }catch(error){
+            if(error instanceof DOMException&&error.name==="AbortError") throw error;
+            failed.push({name:file.name,error:error instanceof Error?error.message:String(error)});
+          }
+        }
+        await this.renderResults(outputs,failed);
+        return;
+      }
+
+      if(this.files.length!==1){
+        throw new Error("ARCHIVE_EXTRACTION_SINGLE: Extract one archive at a time.");
+      }
+      const sourceFormat=this.inspections[0]?.detection.format?.id;
+      if(!sourceFormat) throw new Error("ARCHIVE_FORMAT_UNKNOWN: Archive format is unknown.");
+
+      const selected=operation==="extract-selected"?this.selectedArchivePaths():undefined;
+      if(operation==="extract-selected"&&(!selected||selected.length===0)){
+        throw new Error("ARCHIVE_SELECTION_EMPTY: Select at least one entry.");
+      }
+
+      const extracted=await this.archiveEngine.extract(
+        this.files[0],
+        sourceFormat,
+        options.inputPassword,
+        selected,
+        (progress,stage)=>this.setProgress(progress,stage),
+        controller.signal
+      );
+
+      const counts=new Map<string,number>();
+      const outputs=extracted.map(item=>{
+        const seen=(counts.get(item.path)??0)+1;
+        counts.set(item.path,seen);
+        const name=seen===1?item.path:item.path+"."+seen;
+        return {name,blob:item.blob,warnings:[] as string[]};
+      });
+      this.showBlobResults(outputs,[]);
+      this.setProgress(1,"Extraction complete");
+    }catch(error){
+      this.renderWarnings("loss-warnings",[
+        error instanceof Error?error.message:String(error)
+      ]);
+    }finally{
+      this.archiveAbort=null;
+      cancel.classList.add("hidden");
+      button.disabled=false;
     }
   }
 
@@ -937,7 +1306,7 @@ export class App {
     if(outputs.length>1&&total<=512*1024*1024){
       void (async()=>{
         try{
-          const entries:Record<string,Uint8Array>={};
+          const entries=Object.create(null) as Record<string,Uint8Array>;
           for(const output of outputs) entries[output.name]=new Uint8Array(await output.blob.arrayBuffer());
           const zipped=zipSync(entries,{level:0});
           this.addResult(container,"converted-files.zip",new Blob([zipped],{type:"application/zip"}),["Local batch package."]);
@@ -980,6 +1349,7 @@ export class App {
       ["PDF engine",this.pdfEngine.isAvailable()],
       ["Semantic documents",this.pandocDocumentEngine.isAvailable()],
       ["Office fidelity",this.officeDocumentEngine.isAvailable()],
+      ["Archive engine",this.archiveEngine.isAvailable()],
       ["Local OCR","English · German · French · Turkish · Korean"],
       ["WebCodecs",profile.webCodecs],
       ["H.264 decode / encode",profile.codecs.h264.decode+" / "+profile.codecs.h264.encode],
@@ -1003,14 +1373,15 @@ export class App {
       node.append(caption,strong);container.append(node);
     }
 
-    element("runtime-status").textContent=this.pandocDocumentEngine.isAvailable()?"Phase 4 ready":"Documents degraded";
+    element("runtime-status").textContent=this.archiveEngine.isAvailable()?"Phase 5 ready":"Archives degraded";
     element("capability-json").textContent=JSON.stringify({
       ...profile,
       imageEngine:this.imageEngine.isAvailable()?"wasm-vips":"browser fallback",
       mediaEngine:this.mediaEngine.isAvailable()?"Mediabunny 1.58.0":"unavailable",
       pdfEngine:this.pdfEngine.isAvailable()?"PDF.js + pdf-lib + qpdf + Tesseract":"unavailable",
       semanticDocumentEngine:this.pandocDocumentEngine.isAvailable()?"Pandoc WASM 3.9":"unavailable",
-      fidelityDocumentEngine:this.officeDocumentEngine.isAvailable()?"LibreOffice WASM (lazy)":"unavailable"
+      fidelityDocumentEngine:this.officeDocumentEngine.isAvailable()?"LibreOffice WASM (lazy)":"unavailable",
+      archiveEngine:this.archiveEngine.isAvailable()?"zip.js 2.16.0 + libarchive.js 2.0.2":"unavailable"
     },null,2);
   }
 }

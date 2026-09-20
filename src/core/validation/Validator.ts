@@ -3,6 +3,7 @@ import { inspectFile } from "../inspection/inspectFile";
 import type { DetailedMediaInspection } from "../media/types";
 import type { DetailedPdfInspection } from "../pdf/types";
 import type { DetailedDocumentInspection } from "../document/types";
+import type { DetailedArchiveInspection } from "../archive/types";
 
 export interface ValidationResult {
   valid:boolean;
@@ -148,13 +149,53 @@ export class DocumentOutputValidator implements OutputValidator {
   }
 }
 
+
+export class ArchiveOutputValidator implements OutputValidator {
+  constructor(
+    private readonly formats:FormatRegistry,
+    private readonly probe:(blob:Blob,formatId:string,password?:string)=>Promise<DetailedArchiveInspection>
+  ) {}
+
+  async validate(blob:Blob,targetFormatId:string,options:Record<string,unknown>={}):Promise<ValidationResult>{
+    const target=this.formats.get(targetFormatId);
+    const errors:string[]=[];
+    if(blob.size===0) errors.push("Output is empty.");
+
+    const shallow=await inspectFile(
+      Object.assign(blob,{name:"output."+(target?.extensions[0]??"bin")}),
+      this.formats
+    );
+    if(shallow.detection.format?.id!==targetFormatId){
+      errors.push("Output archive signature/format does not match the requested target.");
+    }
+
+    const password=String(options.outputPassword??"")||undefined;
+    let archive:DetailedArchiveInspection|null=null;
+    try{archive=await this.probe(blob,targetFormatId,password);}
+    catch(error){errors.push("Output archive could not be reopened: "+(error instanceof Error?error.message:String(error)));}
+
+    return {
+      valid:errors.length===0,
+      errors,
+      properties:{
+        format:shallow.detection.format?.id,
+        size:blob.size,
+        files:archive?.files??null,
+        expandedSize:archive?.expandedSize??null,
+        encrypted:archive?.encrypted??null
+      }
+    };
+  }
+}
+
 export class UniversalOutputValidator implements OutputValidator {
   constructor(
     private readonly formats:FormatRegistry,
     private readonly image:ImageOutputValidator,
     private readonly media:MediaOutputValidator,
     private readonly pdf:PdfOutputValidator,
-    private readonly document:DocumentOutputValidator
+    private readonly document:DocumentOutputValidator,
+    private readonly archive:ArchiveOutputValidator
   ) {}
 
   validate(blob:Blob,targetFormatId:string,options:Record<string,unknown>={}):Promise<ValidationResult>{
@@ -163,6 +204,7 @@ export class UniversalOutputValidator implements OutputValidator {
     if(category==="audio"||category==="video") return this.media.validate(blob,targetFormatId,options);
     if(category==="pdf") return this.pdf.validate(blob,targetFormatId,options);
     if(category==="document") return this.document.validate(blob,targetFormatId,options);
+    if(category==="archive") return this.archive.validate(blob,targetFormatId,options);
     return Promise.resolve({valid:blob.size>0,errors:blob.size?[]:["Output is empty."],properties:{size:blob.size}});
   }
 }
