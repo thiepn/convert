@@ -1022,10 +1022,12 @@ export class App {
 
     try{
       const uniqueSources=[...new Set(this.inspections.map(i=>i.detection.format!.id))];
-      const documentPreference=this.kind==="document"
+      const routePreference=this.kind==="document"
         ? element<HTMLSelectElement>("document-route").value as "semantic"|"fidelity"
-        : undefined;
-      const routes=uniqueSources.map(source=>this.planner.plan(source,targetId,documentPreference));
+        : this.kind==="spreadsheet"
+          ? element<HTMLSelectElement>("data-route").value as "semantic"|"fidelity"
+          : undefined;
+      const routes=uniqueSources.map(source=>this.planner.plan(source,targetId,routePreference));
       const warnings=[...new Set(routes.flatMap(route=>route.warnings.map(w=>w.message)))];
 
       if(this.kind==="document"){
@@ -1038,8 +1040,8 @@ export class App {
         box.textContent=(this.files.length>1?this.files.length+" documents · ":"")
           +(this.formats.get(targetId)?.name??targetId)
           +" · "+engines.join(" → ")
-          +" · "+(documentPreference==="semantic"?"structure/editability priority":"appearance/layout priority");
-        if(documentPreference==="fidelity"){
+          +" · "+(routePreference==="semantic"?"structure/editability priority":"appearance/layout priority");
+        if(routePreference==="fidelity"){
           warnings.push("LibreOffice fidelity mode lazy-loads a large local WASM runtime on first use.");
         }
         if(this.documentDetail?.macros){
@@ -1048,11 +1050,65 @@ export class App {
         if(this.documentDetail?.externalLinks){
           warnings.push("External links/resources are not fetched during conversion.");
         }
-        if(this.documentDetail?.fonts.length&&documentPreference==="fidelity"){
+        if(this.documentDetail?.fonts.length&&routePreference==="fidelity"){
           warnings.push("Layout fidelity depends on matching fonts; add local font files if substitutions change pagination.");
         }
         if(["markdown","txt"].includes(targetId)){
           warnings.push("The target cannot preserve page layout, floating objects, headers/footers, or presentation positioning.");
+        }
+      }else if(this.kind==="spreadsheet"||this.kind==="data"||this.kind==="database"){
+        const engineLabel=(engineId:string)=>
+          engineId==="sheetjs-spreadsheet"?"SheetJS"
+          :engineId==="duckdb-data"?"DuckDB-Wasm"
+          :engineId==="sqlite-data"?"sql.js / SQLite"
+          :engineId==="libreoffice-document"?"LibreOffice Calc WASM"
+          :engineId;
+        const engines=[...new Set(routes.flatMap(route=>route.edges.map(edge=>engineLabel(edge.engineId))))];
+        box.textContent=(this.files.length>1?this.files.length+" files · ":"")
+          +(this.formats.get(targetId)?.name??targetId)
+          +" · "+engines.join(" → ")
+          +(this.kind==="spreadsheet"
+            ? " · "+(routePreference==="fidelity"?"appearance/layout priority":"data/formula priority")
+            : " · local structured-data pipeline");
+
+        const query=element<HTMLTextAreaElement>("data-query").value.trim();
+        const usesDuckDb=routes.some(route=>route.edges.some(edge=>edge.engineId==="duckdb-data"));
+        const usesSqlite=routes.some(route=>route.edges.some(edge=>edge.engineId==="sqlite-data"));
+        if(query&&!usesDuckDb&&!usesSqlite){
+          warnings.push("The SQL transform is ignored by this route because it does not pass through DuckDB or SQLite.");
+        }
+        if(query&&(usesDuckDb||usesSqlite)){
+          warnings.push("The optional SQL transform runs locally and is restricted to one SELECT/WITH query.");
+        }
+
+        if(this.kind==="spreadsheet"){
+          const flatTarget=["csv","tsv","json-data","jsonl","parquet","arrow","sqlite"].includes(targetId);
+          if(flatTarget){
+            warnings.push("Flat/data targets cannot preserve workbook layout, multiple-sheet presentation, charts, or cell styling.");
+          }
+          if(this.spreadsheetDetail?.macros){
+            warnings.push("VBA macro payload is never executed and is not preserved into Phase 6 output formats.");
+          }
+          if((this.spreadsheetDetail?.sheets??[]).some(sheet=>sheet.formulas>0)){
+            if(routePreference==="fidelity"){
+              warnings.push("LibreOffice Calc may recalculate formulas and update cached results during fidelity conversion.");
+            }else{
+              warnings.push("SheetJS preserves formula expressions where supported but does not calculate workbook formulas.");
+            }
+          }
+          if(element<HTMLSelectElement>("data-sheet-policy").value==="all"&&["csv","tsv","json-data"].includes(targetId)){
+            warnings.push("All-sheet flat export returns the first sheet as the main output and additional sheets as sidecar files.");
+          }
+          if(routePreference==="fidelity"){
+            warnings.push("LibreOffice spreadsheet fidelity mode lazy-loads the larger Calc WASM runtime on first use.");
+          }
+        }else if(this.kind==="database"){
+          warnings.push("SQLite is memory-backed in sql.js; database size and flat-export row counts are guarded.");
+          if(targetId!=="sqlite"){
+            warnings.push("Flat exports operate on the selected table unless a restricted SQL query is provided.");
+          }
+        }else{
+          warnings.push("DuckDB reads CSV/JSON/Parquet from the local browser file handle; Arrow IPC input is memory-gated.");
         }
       }else if(this.kind==="image"){
         box.textContent=(this.files.length>1?this.files.length+" files · ":"")
