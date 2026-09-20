@@ -33,6 +33,7 @@ function cloneTask(task:BatchTaskSnapshot):BatchTaskSnapshot {
 export class BatchRunner {
   private session:Session|null=null;
   private stopRequested=false;
+  private activeExecution:Promise<BatchRunResult>|null=null;
 
   constructor(
     private readonly formats:FormatRegistry,
@@ -82,8 +83,16 @@ export class BatchRunner {
       usedNames:new Set()
     };
 
-    await this.prepareTasks(this.session,onUpdate);
-    return this.execute(this.session,onUpdate);
+    const execution=(async()=>{
+      await this.prepareTasks(this.session!,onUpdate);
+      return this.execute(this.session!,onUpdate);
+    })();
+    this.activeExecution=execution;
+    try{
+      return await execution;
+    }finally{
+      if(this.activeExecution===execution) this.activeExecution=null;
+    }
   }
 
   async resume(
@@ -106,10 +115,20 @@ export class BatchRunner {
         task.error=undefined;
       }
     }
-    return this.execute(session,onUpdate);
+    const execution=this.execute(session,onUpdate);
+    this.activeExecution=execution;
+    try{
+      return await execution;
+    }finally{
+      if(this.activeExecution===execution) this.activeExecution=null;
+    }
   }
 
   async releaseSession():Promise<void>{
+    if(this.activeExecution){
+      this.cancel();
+      try{await this.activeExecution;}catch{}
+    }
     const session=this.session;
     this.session=null;
     if(!session) return;
@@ -120,6 +139,13 @@ export class BatchRunner {
 
   private async prepareTasks(session:Session,onUpdate?:(snapshot:BatchSnapshot)=>void){
     for(const task of session.tasks){
+      if(this.stopRequested){
+        task.state="cancelled";
+        task.progress=0;
+        task.stage="Cancelled before planning";
+        onUpdate?.(this.snapshot(session));
+        continue;
+      }
       try{
         const file=session.files[task.index];
         const inspection=await inspectFile(file,this.formats);
