@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#111318">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self' ws: wss:; font-src 'self'; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self' ws: wss:; font-src 'self'; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'self'">
   <link rel="manifest" href="./manifest.webmanifest">
   <title>Thiepn Convert</title>
 </head>
@@ -12,18 +12,18 @@
   <main class="shell">
     <header class="hero">
       <div>
-        <div class="eyebrow">THIEPN CONVERT · PHASE 0</div>
-        <h1>Local file conversion, by construction.</h1>
-        <p>Files are processed inside your browser. Phase 0 proves the engine architecture before broad format support is added.</p>
+        <div class="eyebrow">THIEPN CONVERT · IMAGE ENGINE</div>
+        <h1>Local image conversion without uploads.</h1>
+        <p>Convert and optimize photos, graphics, animated images, and modern formats entirely in your browser.</p>
       </div>
-      <div class="privacy-badge"><span class="privacy-dot"></span> No file uploads</div>
+      <div class="privacy-badge"><span class="privacy-dot"></span> Files stay local</div>
     </header>
 
     <section class="panel drop-panel">
       <label id="drop-zone" class="drop-zone" for="file-input">
-        <input id="file-input" type="file" accept="image/jpeg,image/png,image/webp">
-        <strong>Drop a JPEG, PNG, or WebP</strong>
-        <span>or click to choose a local file</span>
+        <input id="file-input" type="file" multiple accept="image/*,.heic,.heif,.jxl,.tif,.tiff,.svg">
+        <strong>Drop image files anywhere</strong>
+        <span>JPEG · PNG · WebP · GIF · TIFF · AVIF · HEIC · JXL · SVG</span>
       </label>
     </section>
 
@@ -31,7 +31,7 @@
       <div class="section-heading">
         <div>
           <div class="eyebrow">INSPECTION</div>
-          <h2 id="file-name">File</h2>
+          <h2 id="file-name">Image</h2>
         </div>
         <span id="detection-confidence" class="chip"></span>
       </div>
@@ -41,7 +41,7 @@
 
       <hr>
 
-      <div class="convert-grid">
+      <div class="convert-grid phase1-controls">
         <label>
           <span>Convert to</span>
           <select id="target-format"></select>
@@ -49,17 +49,55 @@
         <label>
           <span>Quality</span>
           <select id="quality">
-            <option value="0.92">High</option>
+            <option value="0.95">Maximum</option>
+            <option value="0.90">High</option>
             <option value="0.82" selected>Balanced</option>
             <option value="0.68">Small</option>
           </select>
         </label>
+        <label>
+          <span>Metadata</span>
+          <select id="metadata-policy">
+            <option value="preserve" selected>Preserve</option>
+            <option value="privacy">Privacy</option>
+            <option value="strip">Strip</option>
+          </select>
+        </label>
+        <label>
+          <span>Resize longest edge</span>
+          <select id="max-dimension">
+            <option value="">Original</option>
+            <option value="3840">3840 px</option>
+            <option value="2560">2560 px</option>
+            <option value="1920">1920 px</option>
+            <option value="1280">1280 px</option>
+          </select>
+        </label>
+        <label>
+          <span>Target size</span>
+          <div class="input-with-unit">
+            <input id="target-size" type="number" min="0.05" step="0.1" inputmode="decimal" placeholder="Optional">
+            <span>MB</span>
+          </div>
+        </label>
+        <label>
+          <span>Transparent background fallback</span>
+          <input id="background-color" type="color" value="#ffffff">
+        </label>
       </div>
+
+      <label class="check-row">
+        <input id="lossless" type="checkbox">
+        <span>Prefer lossless encoding when the target supports it</span>
+      </label>
 
       <div id="route-box" class="route-box"></div>
       <div id="loss-warnings" class="warnings"></div>
 
-      <button id="convert-button" class="primary-button" type="button">Convert locally</button>
+      <div class="action-row">
+        <button id="convert-button" class="primary-button" type="button">Convert locally</button>
+        <button id="cancel-button" class="secondary-button hidden" type="button">Cancel</button>
+      </div>
 
       <div id="job-panel" class="job-panel hidden">
         <div class="progress-track"><div id="progress-bar" class="progress-bar"></div></div>
@@ -69,7 +107,7 @@
         </div>
       </div>
 
-      <a id="download-link" class="download-link hidden">Save converted file</a>
+      <div id="results" class="results hidden"></div>
     </section>
 
     <section class="panel">
@@ -89,7 +127,7 @@
 
     <section class="panel compact-panel">
       <h2>Privacy model</h2>
-      <p>Conversion jobs do not call a conversion server. The app may download its own code and future converter modules from this origin. Cached modules can work offline. Source files, filenames, extracted text, and generated outputs are not uploaded by the conversion engine.</p>
+      <p>Conversion jobs do not call a conversion server. Image engines and codec modules are served from this origin and execute in local workers. Source files, filenames, metadata, previews, and generated outputs are not uploaded by the conversion engine.</p>
     </section>
   </main>
   <script type="module" src="/src/main.ts"></script>
