@@ -1078,10 +1078,12 @@ export class App {
         const query=element<HTMLTextAreaElement>("data-query").value.trim();
         const usesDuckDb=routes.some(route=>route.edges.some(edge=>edge.engineId==="duckdb-data"));
         const usesSqlite=routes.some(route=>route.edges.some(edge=>edge.engineId==="sqlite-data"));
-        if(query&&!usesDuckDb&&!usesSqlite){
-          warnings.push("The SQL transform is ignored by this route because it does not pass through DuckDB or SQLite.");
+        const queryApplied=usesDuckDb
+          ||(this.kind==="database"&&usesSqlite&&targetId!=="sqlite");
+        if(query&&!queryApplied){
+          warnings.push("The SQL transform is ignored by this route. Choose a DuckDB-backed target, or export a SQLite table to a flat/data target first.");
         }
-        if(query&&(usesDuckDb||usesSqlite)){
+        if(query&&queryApplied){
           warnings.push("The optional SQL transform runs locally and is restricted to one SELECT/WITH query.");
         }
 
