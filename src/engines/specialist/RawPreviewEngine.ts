@@ -1,5 +1,6 @@
 import type { ConversionEngine,ConversionEstimate,EngineConvertRequest,EngineConvertResult } from "../../core/engines/Engine";
 import { findLargestEmbeddedJpeg } from "../../core/specialist/rawPreview";
+import { assertMemoryBackedSource } from "../../core/performance/Budget";
 
 export class RawPreviewEngine implements ConversionEngine{
   readonly id="raw-preview";
@@ -10,18 +11,21 @@ export class RawPreviewEngine implements ConversionEngine{
   canConvert(from:string,to:string):boolean{return from==="camera-raw"&&to==="jpeg";}
 
   async estimate(source:Blob):Promise<ConversionEstimate>{
+    const memoryBytes=Math.max(32*1024*1024,source.size*2);
     return {
-      temporaryBytes:Math.max(32*1024*1024,source.size*2),
+      temporaryBytes:memoryBytes,
+      memoryBytes,
+      workspaceBytes:32*1024*1024,
       outputBytes:null,
+      sourceAccess:"buffered",
+      outputAccess:"buffered",
       notes:["Camera RAW support extracts the largest embedded JPEG preview; it does not demosaic sensor data."]
     };
   }
 
   async convert(request:EngineConvertRequest):Promise<EngineConvertResult>{
     if(!this.canConvert(request.sourceFormatId,request.targetFormatId)) throw new Error("RAW_ROUTE_UNSUPPORTED: Camera RAW currently converts only to embedded JPEG preview.");
-    const mobile=typeof matchMedia==="function"&&matchMedia("(pointer: coarse)").matches;
-    const limit=mobile?160*1024*1024:640*1024*1024;
-    if(request.source.size>limit) throw new Error("RAW_SIZE_LIMIT: RAW file exceeds this device's guarded preview-extraction limit.");
+    assertMemoryBackedSource(request.source.size,"RAW embedded-preview extraction",2,1024*1024*1024);
 
     request.onProgress?.(.2,"Scanning RAW container for embedded preview");
     const source=new Uint8Array(await request.source.arrayBuffer());
