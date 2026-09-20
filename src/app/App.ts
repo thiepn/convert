@@ -57,6 +57,7 @@ export class App {
 
   async start(): Promise<void> {
     this.bindFileInput();
+    await this.engines.prepareAll();
     await this.renderCapabilities(await detectCapabilities());
   }
 
