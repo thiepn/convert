@@ -1,3 +1,5 @@
+import type { ValidationResult } from "../validation/Validator";
+
 export type JobState =
   | "CREATED"
   | "INSPECTING"
@@ -22,4 +24,7 @@ export interface ConversionOutput {
   fileName: string;
   formatId: string;
   jobId: string;
+  sourceSize: number;
+  outputSize: number;
+  validation: ValidationResult;
 }
