@@ -126,7 +126,7 @@ export const OGG:FormatDefinition={
 export const MP3:FormatDefinition={
   id:"mp3",name:"MP3",category:"audio",extensions:["mp3"],mimeTypes:["audio/mpeg"],
   signatures:[[{offset:0,bytes:[0x49,0x44,0x33]}]],
-  matcher:bytes=>bytes.length>2&&bytes[0]===0xff&&(bytes[1]&0xe0)===0xe0,
+  matcher:bytes=>bytes.length>2&&bytes[0]===0xff&&(bytes[1]&0xe0)===0xe0&&(bytes[1]&0xf6)!==0xf0,
   capabilities:{metadata:true},status:"production"
 };
 export const WAV:FormatDefinition={
@@ -167,7 +167,7 @@ export function createDefaultFormatRegistry():FormatRegistry {
   const registry=new FormatRegistry();
   [
     JPEG,PNG,WEBP,GIF,TIFF,AVIF,HEIC,JXL,SVG,
-    MOV,MP4,WEBM_MEDIA,MKV,OGG,MP3,WAV,FLAC,AAC,MPEG_TS,AVI,FLV
+    MOV,MP4,WEBM_MEDIA,MKV,OGG,AAC,MP3,WAV,FLAC,MPEG_TS,AVI,FLV
   ].forEach(format=>registry.register(format));
   return registry;
 }
