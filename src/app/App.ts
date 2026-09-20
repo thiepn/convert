@@ -1331,6 +1331,7 @@ export class App {
       ["PDF engine",this.pdfEngine.isAvailable()],
       ["Semantic documents",this.pandocDocumentEngine.isAvailable()],
       ["Office fidelity",this.officeDocumentEngine.isAvailable()],
+      ["Archive engine",this.archiveEngine.isAvailable()],
       ["Local OCR","English · German · French · Turkish · Korean"],
       ["WebCodecs",profile.webCodecs],
       ["H.264 decode / encode",profile.codecs.h264.decode+" / "+profile.codecs.h264.encode],
@@ -1354,14 +1355,15 @@ export class App {
       node.append(caption,strong);container.append(node);
     }
 
-    element("runtime-status").textContent=this.pandocDocumentEngine.isAvailable()?"Phase 4 ready":"Documents degraded";
+    element("runtime-status").textContent=this.archiveEngine.isAvailable()?"Phase 5 ready":"Archives degraded";
     element("capability-json").textContent=JSON.stringify({
       ...profile,
       imageEngine:this.imageEngine.isAvailable()?"wasm-vips":"browser fallback",
       mediaEngine:this.mediaEngine.isAvailable()?"Mediabunny 1.58.0":"unavailable",
       pdfEngine:this.pdfEngine.isAvailable()?"PDF.js + pdf-lib + qpdf + Tesseract":"unavailable",
       semanticDocumentEngine:this.pandocDocumentEngine.isAvailable()?"Pandoc WASM 3.9":"unavailable",
-      fidelityDocumentEngine:this.officeDocumentEngine.isAvailable()?"LibreOffice WASM (lazy)":"unavailable"
+      fidelityDocumentEngine:this.officeDocumentEngine.isAvailable()?"LibreOffice WASM (lazy)":"unavailable",
+      archiveEngine:this.archiveEngine.isAvailable()?"zip.js 2.16.0 + libarchive.js 2.0.2":"unavailable"
     },null,2);
   }
 }
