@@ -1,4 +1,4 @@
-const CACHE = "thiepn-convert-phase0-v2";
+const CACHE = "thiepn-convert-phase1-v1";
 const ROOT = new URL("./", self.location.href).href;
 const MANIFEST = new URL("manifest.webmanifest", self.location.href).href;
 const CORE = [ROOT, MANIFEST];

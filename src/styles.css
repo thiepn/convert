@@ -20,7 +20,7 @@ body {
 button, input, select { font: inherit; }
 
 .shell {
-  width: min(920px, calc(100% - 32px));
+  width: min(980px, calc(100% - 32px));
   margin: 0 auto;
   padding: 56px 0 80px;
 }
@@ -77,7 +77,7 @@ button, input, select { font: inherit; }
 }
 
 .panel {
-  background: rgba(20, 23, 29, 0.92);
+  background: rgba(20, 23, 29, 0.94);
   border: 1px solid #272c35;
   border-radius: 18px;
   padding: 22px;
@@ -98,15 +98,16 @@ button, input, select { font: inherit; }
   cursor: pointer;
   transition: border-color 140ms ease, background 140ms ease;
   text-align: center;
+  padding: 24px;
 }
 
 .drop-zone:hover, .drop-zone.dragging {
   border-color: #8fa6d8;
-  background: rgba(120, 145, 196, 0.07);
+  background: rgba(120,145,196,0.07);
 }
 
 .drop-zone input { display: none; }
-.drop-zone span { color: #8f98a8; font-size: 0.9rem; }
+.drop-zone span { color: #8f98a8; font-size: 0.86rem; line-height: 1.5; }
 
 .section-heading {
   display: flex;
@@ -116,29 +117,48 @@ button, input, select { font: inherit; }
   margin-bottom: 18px;
 }
 
+.settings-heading { margin-bottom: 14px; }
 h2 { margin: 5px 0 0; font-size: 1.25rem; }
 
-.facts {
+.file-list, .results-list {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
-.fact, .capability {
+.file-row, .result-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
   border: 1px solid #292f39;
   border-radius: 12px;
   background: #111419;
-  padding: 13px;
+  padding: 12px 14px;
 }
 
-.fact span, .capability span, label > span {
-  display: block;
-  color: #858e9f;
-  font-size: 0.76rem;
-  margin-bottom: 6px;
+.file-row > div, .result-row > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
 }
 
-.fact strong { font-size: 0.92rem; }
+.file-row strong, .result-row strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-row span, .result-row span {
+  color: #8f98a8;
+  font-size: 0.78rem;
+}
+
+.file-metadata {
+  text-align: right;
+  max-width: 200px;
+}
+
+.result-row.failed { border-color: rgba(205, 102, 102, 0.35); }
 
 hr {
   border: 0;
@@ -146,23 +166,53 @@ hr {
   margin: 22px 0;
 }
 
-.convert-grid {
+.settings-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 
-select {
+label > span {
+  display: block;
+  color: #858e9f;
+  font-size: 0.76rem;
+  margin-bottom: 6px;
+}
+
+select, input[type="number"], input[type="color"] {
   width: 100%;
   color: #f1f3f5;
   background: #0e1116;
   border: 1px solid #323944;
   border-radius: 10px;
-  padding: 11px 12px;
+  min-height: 43px;
+  padding: 10px 12px;
 }
 
-.route-box {
+input[type="color"] { padding: 5px 7px; }
+
+select:disabled, input:disabled { opacity: 0.48; }
+
+.toggle-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
   margin-top: 14px;
+}
+
+.toggle {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  color: #afb5c0;
+  font-size: 0.84rem;
+}
+
+.toggle span { margin: 0; color: inherit; }
+.toggle input { accent-color: #d5dae4; }
+
+.route-box {
+  margin-top: 16px;
   border-radius: 11px;
   background: #10141b;
   border: 1px solid #28303b;
@@ -177,14 +227,20 @@ select {
 .warning {
   padding: 10px 12px;
   border-radius: 9px;
-  background: rgba(208, 157, 79, 0.09);
-  border: 1px solid rgba(208, 157, 79, 0.27);
+  background: rgba(208,157,79,0.09);
+  border: 1px solid rgba(208,157,79,0.27);
   color: #ddc294;
   font-size: 0.84rem;
   margin: 7px 0;
 }
 
-.primary-button, .download-link {
+.action-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.primary-button, .secondary-button, .download-link {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -192,18 +248,29 @@ select {
   min-height: 44px;
   padding: 0 17px;
   border-radius: 10px;
-  border: 0;
-  background: #e8ebf0;
-  color: #111318;
   font-weight: 750;
   cursor: pointer;
   text-decoration: none;
 }
 
+.primary-button {
+  border: 0;
+  background: #e8ebf0;
+  color: #111318;
+}
+
+.secondary-button {
+  background: transparent;
+  border: 1px solid #3a414c;
+  color: #d5dae2;
+}
+
 .primary-button:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .download-link {
-  margin-left: 8px;
+  min-height: 36px;
+  margin: 0;
+  padding: 0 13px;
   background: #273043;
   color: #edf1f8;
 }
@@ -227,9 +294,39 @@ select {
 .job-row {
   display: flex;
   justify-content: space-between;
+  gap: 15px;
   color: #8f98a8;
   margin-top: 8px;
   font-size: 0.8rem;
+}
+
+.comparison {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.preview-card {
+  border: 1px solid #292f39;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #0d1015;
+}
+
+.preview-card span {
+  display: block;
+  padding: 9px 11px;
+  color: #9199a7;
+  font-size: 0.76rem;
+  border-bottom: 1px solid #292f39;
+}
+
+.preview-card img {
+  display: block;
+  width: 100%;
+  height: min(42vw, 340px);
+  object-fit: contain;
 }
 
 .capability-grid {
@@ -238,12 +335,21 @@ select {
   gap: 9px;
 }
 
+.capability {
+  border: 1px solid #292f39;
+  border-radius: 12px;
+  background: #111419;
+  padding: 13px;
+}
+
+.capability span { display: block; color: #858e9f; font-size: 0.76rem; margin-bottom: 6px; }
 .capability strong { font-size: 0.87rem; }
 .capability.ok strong { color: #91d9a9; }
 .capability.no strong { color: #db9292; }
 
 details { margin-top: 16px; color: #929bab; }
 summary { cursor: pointer; }
+
 pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -256,16 +362,19 @@ pre {
 .hidden { display: none !important; }
 
 @media (max-width: 700px) {
-  .shell { width: min(100% - 20px, 920px); padding-top: 26px; }
+  .shell { width: min(100% - 20px, 980px); padding-top: 26px; }
   .hero { display: block; }
   .privacy-badge { margin-top: 18px; }
   .panel { padding: 15px; border-radius: 14px; }
-  .drop-zone { min-height: 160px; }
-  .facts { grid-template-columns: repeat(2, 1fr); }
+  .drop-zone { min-height: 155px; }
+  .settings-grid { grid-template-columns: 1fr; }
   .capability-grid { grid-template-columns: repeat(2, 1fr); }
+  .file-row { align-items: flex-start; }
+  .file-metadata { max-width: 120px; }
 }
 
-@media (max-width: 450px) {
-  .convert-grid { grid-template-columns: 1fr; }
-  .facts, .capability-grid { grid-template-columns: 1fr 1fr; }
+@media (max-width: 520px) {
+  .comparison { grid-template-columns: 1fr; }
+  .file-metadata { display: none; }
+  .job-row { display: grid; }
 }

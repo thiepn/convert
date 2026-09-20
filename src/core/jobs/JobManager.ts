@@ -1,9 +1,11 @@
+import type { ConversionSettings, EngineConvertResult } from "../engines/Engine";
 import { EngineRegistry } from "../engines/EngineRegistry";
 import { FormatRegistry } from "../formats/FormatRegistry";
+import { traitsFromImageInspection } from "../image/types";
 import { inspectFile } from "../inspection/inspectFile";
 import { ConversionPlanner } from "../planner/ConversionPlanner";
 import { NetworkGuard } from "../security/NetworkGuard";
-import { assertSafeImageDimensions } from "../security/ResourceLimits";
+import { assertSafeImageInspection } from "../security/ResourceLimits";
 import { storagePreflight } from "../storage/StorageEstimator";
 import { TempWorkspace } from "../storage/TempWorkspace";
 import type { OutputValidator } from "../validation/Validator";
@@ -47,7 +49,7 @@ export class JobManager {
   async convert(
     source: File,
     targetFormatId: string,
-    quality: number,
+    settings: ConversionSettings,
     onUpdate?: (snapshot: JobSnapshot) => void
   ): Promise<ConversionOutput> {
     const id = crypto.randomUUID();
@@ -60,16 +62,19 @@ export class JobManager {
       const inspection = await inspectFile(source, this.formats);
       const sourceFormat = inspection.detection.format;
       if (!sourceFormat) throw new Error("FORMAT_UNKNOWN: File format could not be identified.");
-      if (sourceFormat.category === "image") {
-        assertSafeImageDimensions(inspection.width, inspection.height);
-      }
+      if (sourceFormat.category === "image") assertSafeImageInspection(inspection.image);
 
       this.emit(onUpdate, id, "PLANNING", 0.08, "Planning safest local route");
-      const route = this.planner.plan(sourceFormat.id, targetFormatId);
+      const route = this.planner.plan(
+        sourceFormat.id,
+        targetFormatId,
+        traitsFromImageInspection(inspection.image),
+        sourceFormat.id === targetFormatId
+      );
       const target = this.formats.get(targetFormatId);
       if (!target) throw new Error("FORMAT_UNSUPPORTED: Target format is unknown.");
 
-      let required = source.size + 64 * 1024 * 1024;
+      let required = source.size + 96 * 1024 * 1024;
       for (const edge of route.edges) {
         const engine = this.engines.get(edge.engineId);
         if (!engine) throw new Error("ENGINE_UNAVAILABLE: " + edge.engineId);
@@ -86,7 +91,8 @@ export class JobManager {
       const networkSnapshot = this.networkGuard.snapshot();
 
       let current: Blob = source;
-      this.emit(onUpdate, id, "PREPARING", 0.12, "Preparing local worker");
+      let finalResult: EngineConvertResult | null = null;
+      this.emit(onUpdate, id, "PREPARING", 0.12, "Preparing local image engine");
 
       for (let index = 0; index < route.edges.length; index += 1) {
         const edge = route.edges[index];
@@ -95,13 +101,13 @@ export class JobManager {
         if (!engine || !edgeTarget) throw new Error("ENGINE_UNAVAILABLE: Planned engine is missing.");
 
         this.emit(onUpdate, id, "RUNNING", 0.15, "Running local conversion");
-        const result = await engine.convert({
+        finalResult = await engine.convert({
           jobId: id,
           source: current,
           sourceFormatId: edge.from,
           targetFormatId: edge.to,
           targetMime: edgeTarget.mimeTypes[0],
-          quality,
+          settings,
           signal: controller.signal,
           onProgress: (progress, stage) => {
             const base = index / route.edges.length;
@@ -109,13 +115,19 @@ export class JobManager {
             this.emit(onUpdate, id, "RUNNING", Math.min(0.9, scaled), stage);
           }
         });
-        current = result.blob;
+        current = finalResult.blob;
       }
 
+      if (!finalResult) throw new Error("ENGINE_FAILED: No conversion result was produced.");
       if (workspace) await workspace.writeBlob("output.tmp", current);
 
       this.emit(onUpdate, id, "VALIDATING", 0.92, "Validating output");
-      const validation = await this.validator.validate(current, targetFormatId);
+      const validation = await this.validator.validate(current, targetFormatId, {
+        width: finalResult.width,
+        height: finalResult.height,
+        frameCount: finalResult.frameCount,
+        metadataPolicy: settings.image?.metadataPolicy
+      });
       if (!validation.valid) {
         throw new Error("OUTPUT_INVALID: " + validation.errors.join(" "));
       }
@@ -129,7 +141,15 @@ export class JobManager {
       const fileName = outputName(source.name, extensionFor(this.formats, targetFormatId));
       this.emit(onUpdate, id, "COMPLETED", 1, "Complete");
 
-      return { blob: current, fileName, formatId: targetFormatId, jobId: id };
+      return {
+        blob: current,
+        fileName,
+        formatId: targetFormatId,
+        jobId: id,
+        sourceSize: source.size,
+        outputSize: current.size,
+        validation
+      };
     } catch (error) {
       const cancelled = controller.signal.aborted || (error instanceof DOMException && error.name === "AbortError");
       this.emit(onUpdate, id, cancelled ? "CANCELLED" : "FAILED", 1, cancelled ? "Cancelled" : "Failed");

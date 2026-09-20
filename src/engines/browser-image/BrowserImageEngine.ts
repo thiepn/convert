@@ -6,11 +6,10 @@ import type {
 } from "../../core/engines/Engine";
 import type { WorkerResponse } from "../../core/workers/WorkerProtocol";
 
-const SUPPORTED = new Set([
-  "jpeg>png", "jpeg>webp",
-  "png>jpeg", "png>webp",
-  "webp>jpeg", "webp>png"
-]);
+const SUPPORTED_FORMATS = ["jpeg", "png", "webp"];
+const SUPPORTED = new Set(
+  SUPPORTED_FORMATS.flatMap(from => SUPPORTED_FORMATS.map(to => from + ">" + to))
+);
 
 const MIME_BY_FORMAT: Record<string, string> = {
   jpeg: "image/jpeg",
@@ -19,8 +18,8 @@ const MIME_BY_FORMAT: Record<string, string> = {
 };
 
 export class BrowserImageEngine implements ConversionEngine {
-  readonly id = "browser-image-proof";
-  readonly version = "phase0";
+  readonly id = "browser-image-fallback";
+  readonly version = "phase1-fallback";
   private workers = new Set<Worker>();
   private encodableTargets = new Set<string>();
   private prepared = false;
@@ -57,13 +56,13 @@ export class BrowserImageEngine implements ConversionEngine {
     return {
       temporaryBytes: source.size * 2 + 64 * 1024 * 1024,
       outputBytes: null,
-      notes: ["Phase 0 browser proof engine is memory-backed; production image streaming arrives in Phase 1."]
+      notes: ["Canvas fallback is memory-backed and strips most metadata."]
     };
   }
 
   convert(request: EngineConvertRequest): Promise<EngineConvertResult> {
     if (!this.isAvailable() || !this.canConvert(request.sourceFormatId, request.targetFormatId)) {
-      return Promise.reject(new Error("Browser image proof engine cannot perform this route on the current runtime."));
+      return Promise.reject(new Error("Browser image fallback cannot perform this route on the current runtime."));
     }
 
     const worker = new Worker(new URL("../../workers/engine.worker.ts", import.meta.url), { type: "module" });
@@ -104,12 +103,12 @@ export class BrowserImageEngine implements ConversionEngine {
         }
 
         finish();
-        resolve({ blob: message.blob, width: message.width, height: message.height });
+        resolve({ blob: message.blob, width: message.width, height: message.height, frameCount: 1 });
       };
 
       worker.onerror = event => {
         finish();
-        reject(new Error(event.message || "Conversion worker crashed."));
+        reject(new Error(event.message || "Fallback conversion worker crashed."));
       };
 
       worker.postMessage({
@@ -117,7 +116,7 @@ export class BrowserImageEngine implements ConversionEngine {
         jobId: request.jobId,
         source: request.source,
         targetMime: request.targetMime,
-        quality: request.quality ?? 0.82
+        quality: request.settings?.image?.quality ?? 0.82
       });
     });
   }

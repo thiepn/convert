@@ -12,6 +12,16 @@ function extensionOf(name: string): string {
   return index === -1 ? "" : name.slice(index + 1).toLowerCase();
 }
 
+function binaryMatches(format: FormatDefinition, bytes: Uint8Array): boolean {
+  if (format.signatures.some(signature => matchesSignature(bytes, signature))) return true;
+  if (!format.matcher) return false;
+  try {
+    return format.matcher(bytes);
+  } catch {
+    return false;
+  }
+}
+
 export class FormatRegistry {
   private formats = new Map<string, FormatDefinition>();
 
@@ -30,9 +40,7 @@ export class FormatRegistry {
 
   detect(bytes: Uint8Array, name = "", mime = ""): FormatDetection {
     const extension = extensionOf(name);
-    const binaryMatch = this.all().find(format =>
-      format.signatures.some(signature => matchesSignature(bytes, signature))
-    );
+    const binaryMatch = this.all().find(format => binaryMatches(format, bytes));
 
     const mimeMatch = mime
       ? this.all().find(format => format.mimeTypes.includes(mime.toLowerCase()))
@@ -45,7 +53,7 @@ export class FormatRegistry {
     const reasons: string[] = [];
     const warnings: string[] = [];
 
-    if (binaryMatch) reasons.push("Matched file signature");
+    if (binaryMatch) reasons.push("Matched file signature or structure");
     if (mimeMatch) reasons.push("Matched MIME hint");
     if (extensionMatch) reasons.push("Matched filename extension");
 
@@ -53,10 +61,10 @@ export class FormatRegistry {
     const confidence = binaryMatch ? 0.99 : mimeMatch ? 0.75 : extensionMatch ? 0.55 : 0;
 
     if (binaryMatch && extensionMatch && binaryMatch.id !== extensionMatch.id) {
-      warnings.push("Filename extension does not match the file signature.");
+      warnings.push("Filename extension does not match the file contents.");
     }
     if (binaryMatch && mimeMatch && binaryMatch.id !== mimeMatch.id) {
-      warnings.push("Reported MIME type does not match the file signature.");
+      warnings.push("Reported MIME type does not match the file contents.");
     }
 
     return { format, confidence, reasons, warnings };

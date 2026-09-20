@@ -13,12 +13,14 @@ export interface FormatCapabilities {
   alpha?: boolean;
   animation?: boolean;
   hdr?: boolean;
+  highBitDepth?: boolean;
   metadata?: boolean;
   multiplePages?: boolean;
   multipleStreams?: boolean;
   subtitles?: boolean;
   chapters?: boolean;
   layers?: boolean;
+  vector?: boolean;
   formulas?: boolean;
   macros?: boolean;
 }
@@ -35,6 +37,7 @@ export interface FormatDefinition {
   extensions: string[];
   mimeTypes: string[];
   signatures: ByteSignature[][];
+  matcher?: (bytes: Uint8Array) => boolean;
   capabilities: FormatCapabilities;
 }
 

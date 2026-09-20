@@ -12,36 +12,44 @@
   <main class="shell">
     <header class="hero">
       <div>
-        <div class="eyebrow">THIEPN CONVERT · PHASE 0</div>
-        <h1>Local file conversion, by construction.</h1>
-        <p>Files are processed inside your browser. Phase 0 proves the engine architecture before broad format support is added.</p>
+        <div class="eyebrow">THIEPN CONVERT · IMAGE ENGINE</div>
+        <h1>Convert images locally.</h1>
+        <p>Production image conversion runs inside disposable browser workers. Files stay on your device.</p>
       </div>
       <div class="privacy-badge"><span class="privacy-dot"></span> No file uploads</div>
     </header>
 
     <section class="panel drop-panel">
       <label id="drop-zone" class="drop-zone" for="file-input">
-        <input id="file-input" type="file" accept="image/jpeg,image/png,image/webp">
-        <strong>Drop a JPEG, PNG, or WebP</strong>
-        <span>or click to choose a local file</span>
+        <input id="file-input" type="file" multiple
+          accept=".jpg,.jpeg,.png,.webp,.gif,.tif,.tiff,.bmp,.avif,.heic,.heif,.jxl,.svg,image/jpeg,image/png,image/webp,image/gif,image/tiff,image/bmp,image/avif,image/heic,image/heif,image/jxl,image/svg+xml">
+        <strong>Drop images here</strong>
+        <span>JPEG · PNG · WebP · GIF · TIFF · BMP · AVIF · HEIC/HEIF · JPEG XL · SVG</span>
       </label>
     </section>
 
     <section id="file-panel" class="panel hidden">
       <div class="section-heading">
         <div>
-          <div class="eyebrow">INSPECTION</div>
-          <h2 id="file-name">File</h2>
+          <div class="eyebrow">SOURCE</div>
+          <h2 id="selection-title">Images</h2>
         </div>
-        <span id="detection-confidence" class="chip"></span>
+        <span id="selection-summary" class="chip"></span>
       </div>
 
-      <div id="file-facts" class="facts"></div>
+      <div id="file-list" class="file-list"></div>
       <div id="inspection-warnings" class="warnings"></div>
 
       <hr>
 
-      <div class="convert-grid">
+      <div class="section-heading settings-heading">
+        <div>
+          <div class="eyebrow">CONVERSION</div>
+          <h2>Output settings</h2>
+        </div>
+      </div>
+
+      <div class="settings-grid">
         <label>
           <span>Convert to</span>
           <select id="target-format"></select>
@@ -49,17 +57,62 @@
         <label>
           <span>Quality</span>
           <select id="quality">
-            <option value="0.92">High</option>
+            <option value="0.95">Maximum</option>
+            <option value="0.88">High</option>
             <option value="0.82" selected>Balanced</option>
             <option value="0.68">Small</option>
           </select>
+        </label>
+        <label>
+          <span>Metadata</span>
+          <select id="metadata-policy">
+            <option value="privacy" selected>Privacy — keep color profile</option>
+            <option value="preserve">Preserve compatible metadata</option>
+            <option value="strip">Strip optional metadata</option>
+          </select>
+        </label>
+        <label>
+          <span>Resize</span>
+          <select id="resize-mode">
+            <option value="original" selected>Original dimensions</option>
+            <option value="longest-edge">Longest edge</option>
+            <option value="width">Width</option>
+            <option value="height">Height</option>
+            <option value="percentage">Percentage</option>
+          </select>
+        </label>
+        <label id="resize-value-wrap" class="hidden">
+          <span id="resize-value-label">Size</span>
+          <input id="resize-value" type="number" min="1" step="1" value="1920">
+        </label>
+        <label>
+          <span>Target size (optional, MB)</span>
+          <input id="target-size" type="number" min="0.05" step="0.05" placeholder="No limit">
+        </label>
+        <label>
+          <span>Transparency background</span>
+          <input id="background" type="color" value="#ffffff">
+        </label>
+      </div>
+
+      <div class="toggle-row">
+        <label class="toggle">
+          <input id="lossless" type="checkbox">
+          <span>Use lossless mode where supported</span>
+        </label>
+        <label class="toggle">
+          <input id="preserve-animation" type="checkbox" checked>
+          <span>Preserve animation / pages where target supports it</span>
         </label>
       </div>
 
       <div id="route-box" class="route-box"></div>
       <div id="loss-warnings" class="warnings"></div>
 
-      <button id="convert-button" class="primary-button" type="button">Convert locally</button>
+      <div class="action-row">
+        <button id="convert-button" class="primary-button" type="button">Convert locally</button>
+        <button id="cancel-button" class="secondary-button hidden" type="button">Cancel</button>
+      </div>
 
       <div id="job-panel" class="job-panel hidden">
         <div class="progress-track"><div id="progress-bar" class="progress-bar"></div></div>
@@ -68,8 +121,27 @@
           <span id="job-progress">0%</span>
         </div>
       </div>
+    </section>
 
-      <a id="download-link" class="download-link hidden">Save converted file</a>
+    <section id="results-panel" class="panel hidden">
+      <div class="section-heading">
+        <div>
+          <div class="eyebrow">OUTPUT</div>
+          <h2>Converted files</h2>
+        </div>
+        <span id="results-summary" class="chip"></span>
+      </div>
+      <div id="results-list" class="results-list"></div>
+      <div id="comparison" class="comparison hidden">
+        <div class="preview-card">
+          <span>Original</span>
+          <img id="original-preview" alt="Original preview">
+        </div>
+        <div class="preview-card">
+          <span>Converted</span>
+          <img id="converted-preview" alt="Converted preview">
+        </div>
+      </div>
     </section>
 
     <section class="panel">
@@ -89,7 +161,7 @@
 
     <section class="panel compact-panel">
       <h2>Privacy model</h2>
-      <p>Conversion jobs do not call a conversion server. The app may download its own code and future converter modules from this origin. Cached modules can work offline. Source files, filenames, extracted text, and generated outputs are not uploaded by the conversion engine.</p>
+      <p>Image bytes are decoded, transformed, encoded, and validated locally. Converter modules may be downloaded from this same origin and cached for offline use; user files are not sent to a conversion service.</p>
     </section>
   </main>
   <script type="module" src="/src/main.ts"></script>

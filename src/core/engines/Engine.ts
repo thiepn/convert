@@ -1,7 +1,13 @@
+import type { ImageConversionSettings, ImageMetadataSummary } from "../image/types";
+
 export interface ConversionEstimate {
   temporaryBytes: number;
   outputBytes: number | null;
   notes: string[];
+}
+
+export interface ConversionSettings {
+  image?: ImageConversionSettings;
 }
 
 export interface EngineConvertRequest {
@@ -10,7 +16,7 @@ export interface EngineConvertRequest {
   sourceFormatId: string;
   targetFormatId: string;
   targetMime: string;
-  quality?: number;
+  settings?: ConversionSettings;
   signal: AbortSignal;
   onProgress?: (progress: number, stage: string) => void;
 }
@@ -19,6 +25,11 @@ export interface EngineConvertResult {
   blob: Blob;
   width?: number;
   height?: number;
+  frameCount?: number;
+  hasAlpha?: boolean;
+  bitDepth?: number;
+  metadata?: ImageMetadataSummary;
+  actualQuality?: number;
 }
 
 export interface ConversionEngine {
