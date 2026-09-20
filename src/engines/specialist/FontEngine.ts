@@ -1,6 +1,7 @@
 import { createFont,woff2 } from "fonteditor-core";
 import { unzlibSync,zlibSync } from "fflate";
 import type { ConversionEngine,ConversionEstimate,EngineConvertRequest,EngineConvertResult } from "../../core/engines/Engine";
+import { assertMemoryBackedSource } from "../../core/performance/Budget";
 
 const COMMON=new Set(["ttf","woff","woff2","eot"]);
 const MIME:Record<string,string>={
@@ -24,7 +25,13 @@ export class FontEngine implements ConversionEngine{
   }
 
   async estimate(source:Blob):Promise<ConversionEstimate>{
-    return {temporaryBytes:Math.max(32*1024*1024,source.size*12),outputBytes:null,notes:["Font tables and glyph outlines are materialized in memory. WOFF2 uses a self-hosted local WASM codec."]};
+    const memoryBytes=Math.max(32*1024*1024,source.size*12);
+    return {
+      temporaryBytes:memoryBytes,memoryBytes,
+      workspaceBytes:32*1024*1024,outputBytes:null,
+      sourceAccess:"buffered",outputAccess:"buffered",
+      notes:["Font tables and glyph outlines are materialized in memory. WOFF2 uses a self-hosted local WASM codec."]
+    };
   }
 
   private async ensureWoff2(){
@@ -34,7 +41,7 @@ export class FontEngine implements ConversionEngine{
 
   async convert(request:EngineConvertRequest):Promise<EngineConvertResult>{
     if(!this.canConvert(request.sourceFormatId,request.targetFormatId)) throw new Error("FONT_ROUTE_UNSUPPORTED: Unsupported font conversion route.");
-    if(request.source.size>64*1024*1024) throw new Error("FONT_SIZE_LIMIT: Font exceeds the guarded 64 MiB parsing limit.");
+    assertMemoryBackedSource(request.source.size,"font conversion",12,96*1024*1024);
     if(request.sourceFormatId==="woff2"||request.targetFormatId==="woff2") await this.ensureWoff2();
     if(request.signal.aborted) throw new DOMException("Font conversion cancelled.","AbortError");
 
