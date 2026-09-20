@@ -187,12 +187,15 @@ export class App {
       "pdf-image-format","pdf-image-quality","pdf-dpi","pdf-ocr-language","pdf-ocr-pages",
       "pdf-rotation","document-route","document-track-changes","document-assets",
       "document-standalone","document-toc","archive-operation","archive-compression-level",
-      "archive-preserve-paths","archive-input-password","archive-output-password"
+      "archive-preserve-paths","archive-input-password","archive-output-password",
+      "data-route","data-sheet-policy","data-sheet-select","data-formula-mode",
+      "data-table-select","data-delimiter","data-header","data-query"
     ];
     for(const id of routeControls){
       element(id).addEventListener("change",()=>{
         if(id==="pdf-operation") this.updatePdfOptionVisibility();
         if(id==="archive-operation") this.updateArchiveOptionVisibility();
+        if(id==="data-table-select") void this.refreshDatabasePreview();
         void this.renderRoute();
       });
     }
@@ -216,6 +219,9 @@ export class App {
     if(category==="pdf") return "pdf";
     if(category==="document") return "document";
     if(category==="archive") return "archive";
+    if(category==="spreadsheet") return "spreadsheet";
+    if(category==="data") return "data";
+    if(category==="database") return "database";
     return null;
   }
 
@@ -227,6 +233,9 @@ export class App {
     this.pdfDetail=null;
     this.documentDetail=null;
     this.archiveDetail=null;
+    this.spreadsheetDetail=null;
+    this.dataDetail=null;
+    this.databaseDetail=null;
     this.inspections=await Promise.all(files.map(file=>inspectFile(file,this.formats)));
 
     const kinds=new Set(this.inspections.map(i=>this.getKind(i)).filter(Boolean) as Exclude<SelectionKind,null>[]);
