@@ -13,8 +13,8 @@ const MIME:Record<string,string>={
 
 function command(input:string,output:string,target:string):string[]{
   const base=["-hide_banner","-nostdin","-y","-i",input];
-  if(target==="mp4") return [...base,"-map","0:v:0?","-map","0:a:0?","-c:v","libx264","-preset","veryfast","-crf","23","-pix_fmt","yuv420p","-c:a","aac","-b:a","160k","-movflags","+faststart",output];
-  if(target==="webm-media") return [...base,"-map","0:v:0?","-map","0:a:0?","-c:v","libvpx-vp9","-crf","32","-b:v","0","-c:a","libopus","-b:a","128k",output];
+  if(target==="mp4") return [...base,"-map","0:v?","-map","0:a?","-c:v","libx264","-preset","veryfast","-crf","23","-pix_fmt","yuv420p","-c:a","aac","-b:a","160k","-movflags","+faststart",output];
+  if(target==="webm-media") return [...base,"-map","0:v?","-map","0:a?","-c:v","libvpx-vp9","-crf","32","-b:v","0","-c:a","libopus","-b:a","128k",output];
   if(target==="mp3") return [...base,"-vn","-c:a","libmp3lame","-q:a","2",output];
   if(target==="wav") return [...base,"-vn","-c:a","pcm_s16le",output];
   if(target==="flac") return [...base,"-vn","-c:a","flac",output];
