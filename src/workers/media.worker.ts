@@ -1,5 +1,5 @@
 import {
-  ADTS,
+  AdtsOutputFormat,
   ALL_FORMATS,
   BlobSource,
   BufferTarget,
