@@ -24,6 +24,7 @@ export interface EngineConvertResult {
   warnings?: string[];
   details?: Record<string, unknown>;
   outputInWorkspace?: boolean;
+  extraFiles?: Array<{name:string;blob:Blob}>;
 }
 
 export interface ConversionEngine {
