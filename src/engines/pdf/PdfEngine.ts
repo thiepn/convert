@@ -28,6 +28,7 @@ export class PdfEngine implements ConversionEngine {
   private qpdfBase="";
   private ocr=new PdfOcrEngine();
   private qpdfRunner:Awaited<ReturnType<typeof createQpdfRunner>>|null=null;
+  private cancelEpoch=0;
 
   async prepare():Promise<void>{
     this.pdfWorkerUrl=new URL("engines/pdfjs/pdf.worker.min.mjs",document.baseURI).href;
@@ -279,6 +280,7 @@ export class PdfEngine implements ConversionEngine {
   }
 
   cancelActive():void{
+    this.cancelEpoch++;
     this.worker?.terminate();
     this.worker=null;
     const error=new DOMException("PDF operation cancelled.","AbortError");
@@ -302,13 +304,19 @@ export class PdfEngine implements ConversionEngine {
     optionsContainPassword=false
   ):Promise<Blob>{
     this.assertQpdfMemory(source);
+    const epoch=this.cancelEpoch;
     const bytes=new Uint8Array(await source.arrayBuffer());
+    if(epoch!==this.cancelEpoch) throw new DOMException("PDF operation cancelled.","AbortError");
     const runner=await createQpdfRunner({
       workerUrl:new URL("worker.js",this.qpdfBase).href,
       qpdfJsUrl:new URL("lib/qpdf.js",this.qpdfBase).href,
       wasmUrl:new URL("lib/qpdf.wasm",this.qpdfBase).href,
       timeoutMs:120000
     } as any);
+    if(epoch!==this.cancelEpoch){
+      try{await runner.destroy();}catch{}
+      throw new DOMException("PDF operation cancelled.","AbortError");
+    }
     this.qpdfRunner=runner;
     try{
       const passwordArgs=password&&!optionsContainPassword?["--password="+password]:[];
