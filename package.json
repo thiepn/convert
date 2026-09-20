@@ -23,6 +23,7 @@
     "@tesseract.js-data/kor": "1.0.0",
     "@tesseract.js-data/tur": "1.0.0",
     "@zip.js/zip.js": "2.16.0",
+    "comlink": "4.4.1",
     "fflate": "0.8.3",
     "jszip": "3.10.1",
     "libarchive.js": "2.0.2",
