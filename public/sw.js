@@ -1,4 +1,4 @@
-const CACHE = "thiepn-convert-phase9-v1";
+const CACHE = "thiepn-convert-phase9-v2";
 const ROOT = new URL("./", self.location.href).href;
 const MANIFEST = new URL("manifest.webmanifest", self.location.href).href;
 const CORE = [ROOT, MANIFEST];
@@ -35,48 +35,53 @@ self.addEventListener("activate", event => {
 });
 
 self.addEventListener("fetch", event => {
-  const request = event.request;
-  const url = new URL(request.url);
-  if (request.method !== "GET" || url.origin !== self.location.origin) return;
+  const request=event.request;
+  const url=new URL(request.url);
+  if(request.method!=="GET"||url.origin!==self.location.origin) return;
 
-  event.respondWith((async () => {
-    const cache = await caches.open(CACHE);
-
-    if (isEngineAsset(url)) {
+  if(isEngineAsset(url)){
+    event.respondWith((async()=>{
+      const cache=await caches.open(CACHE);
       const cached=await cache.match(request);
-      if (cached) return withIsolationHeaders(cached);
+      if(cached) return withIsolationHeaders(cached);
       const network=withIsolationHeaders(await fetch(request));
-      if (network && network.ok) await cache.put(request,network.clone());
+      if(network&&network.ok) await cache.put(request,network.clone());
       return network;
-    }
+    })());
+    return;
+  }
 
-    if (request.mode === "navigate") {
-      try {
+  if(request.mode==="navigate"){
+    event.respondWith((async()=>{
+      const cache=await caches.open(CACHE);
+      try{
         const network=withIsolationHeaders(await fetch(request));
-        if (network && network.ok) await cache.put(ROOT,network.clone());
+        if(network&&network.ok) await cache.put(ROOT,network.clone());
         return network;
-      } catch {
+      }catch{
         const shell=await cache.match(ROOT);
-        if (shell) return withIsolationHeaders(shell);
+        if(shell) return withIsolationHeaders(shell);
         throw new Error("Offline shell unavailable");
       }
-    }
+    })());
+    return;
+  }
 
+  const cachePromise=caches.open(CACHE);
+  const networkPromise=(async()=>{
+    const response=withIsolationHeaders(await fetch(request));
+    if(response&&response.ok){
+      const cache=await cachePromise;
+      await cache.put(request,response.clone());
+    }
+    return response;
+  })();
+
+  event.waitUntil(networkPromise.then(()=>undefined).catch(()=>undefined));
+  event.respondWith((async()=>{
+    const cache=await cachePromise;
     const cached=await cache.match(request);
-    if (cached) {
-      event.waitUntil(
-        fetch(request)
-          .then(response=>{
-            const normalized=withIsolationHeaders(response);
-            if (normalized && normalized.ok) return cache.put(request,normalized.clone());
-          })
-          .catch(()=>undefined)
-      );
-      return withIsolationHeaders(cached);
-    }
-
-    const network=withIsolationHeaders(await fetch(request));
-    if (network && network.ok) await cache.put(request,network.clone());
-    return network;
+    if(cached) return withIsolationHeaders(cached);
+    return networkPromise;
   })());
 });
