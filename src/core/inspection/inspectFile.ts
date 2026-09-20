@@ -76,6 +76,25 @@ export async function inspectFile(file:Blob & {name?:string}, registry:FormatReg
     }
   }
 
+  const lowerName=name.toLowerCase();
+  const compoundId =
+    lowerName.endsWith(".tar.gz")||lowerName.endsWith(".tgz") ? "tar-gzip" :
+    lowerName.endsWith(".tar.bz2")||lowerName.endsWith(".tbz2")||lowerName.endsWith(".tbz") ? "tar-bzip2" :
+    lowerName.endsWith(".tar.xz")||lowerName.endsWith(".txz") ? "tar-xz" :
+    null;
+
+  if(compoundId){
+    const compound=registry.get(compoundId);
+    if(compound){
+      detection={
+        format:compound,
+        confidence:Math.max(.92,detection.confidence),
+        reasons:["Matched compound archive suffix",...detection.reasons],
+        warnings:detection.warnings
+      };
+    }
+  }
+
   const size = dimensions(detection.format?.id, bytes);
   return { name, size:file.size, mime, detection, width:size?.width, height:size?.height };
 }
