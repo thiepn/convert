@@ -986,7 +986,7 @@ export class App {
           "zip",
           {compressionLevel:6,preservePaths:false},
           undefined,
-          (progress,stage)=>this.setProgress(.94+progress*.05,"Packaging results · "+stage)
+          (_progress,stage)=>this.setProgress(1,"Packaging results · "+stage)
         );
         expanded.push({
           name:"converted-files.zip",
@@ -1002,6 +1002,7 @@ export class App {
     }
 
     this.showBlobResults(expanded,failures);
+    this.setProgress(1,"Batch complete");
   }
 
   private commonTargets():string[]{
