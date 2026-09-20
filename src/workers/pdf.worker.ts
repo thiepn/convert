@@ -126,7 +126,7 @@ async function inspectPdf(source:Blob,pdfWorkerUrl:string,password?:string):Prom
       attachments:attachments?Object.keys(attachments).length:0,
       outlineItems:countOutline(outline),
       javascriptActions:js?Object.keys(js).length:0,
-      permissions:permissions??null,
+      permissions:permissions?[...permissions]:null,
       pagesInfo,
       encrypted:Boolean(password),
       passwordRequired:false,
@@ -134,7 +134,7 @@ async function inspectPdf(source:Blob,pdfWorkerUrl:string,password?:string):Prom
       warnings:js&&Object.keys(js).length?["Embedded PDF JavaScript/actions were detected but are never executed."]:[]
     };
   }finally{
-    await doc.destroy();
+    doc.cleanup();
   }
 }
 
@@ -156,7 +156,7 @@ async function renderPage(source:Blob,pdfWorkerUrl:string,options:any){
     page.cleanup();
     return {blob,width:canvas.width,height:canvas.height};
   }finally{
-    await doc.destroy();
+    doc.cleanup();
   }
 }
 
@@ -187,7 +187,7 @@ async function extractText(source:Blob,pdfWorkerUrl:string,password?:string){
       page.cleanup();
     }
     return {text:pages.map(page=>page.text).join("\n\n"),pages};
-  }finally{await doc.destroy();}
+  }finally{doc.cleanup();}
 }
 
 async function loadLibPdf(source:Blob,password?:string){
