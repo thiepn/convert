@@ -68,8 +68,8 @@ export class LegacyMediaEngine implements ConversionEngine{
   async convert(request:EngineConvertRequest):Promise<EngineConvertResult>{
     if(!this.canConvert(request.sourceFormatId,request.targetFormatId)) throw new Error("LEGACY_MEDIA_ROUTE_UNSUPPORTED: FFmpeg compatibility route is not enabled for this pair.");
     const mobile=typeof matchMedia==="function"&&matchMedia("(pointer: coarse)").matches;
-    const limit=mobile?192*1024*1024:768*1024*1024;
-    if(request.source.size>limit) throw new Error("LEGACY_MEDIA_MEMORY_LIMIT: Source is too large for the browser FFmpeg memory filesystem on this device.");
+    const limit=mobile?96*1024*1024:256*1024*1024;
+    if(request.source.size>limit) throw new Error("LEGACY_MEDIA_MEMORY_LIMIT: Source is too large for the guarded browser FFmpeg memory filesystem on this device.");
 
     this.currentProgress=request.onProgress;
     request.onProgress?.(.04,"Loading legacy FFmpeg compatibility engine");
