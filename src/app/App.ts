@@ -1,3 +1,4 @@
+import { zipSync } from "fflate";
 import type { BatchExecutionMode,BatchRunResult,BatchSnapshot } from "../core/batch/types";
 import { BatchRunner } from "../core/batch/BatchRunner";
 import { buildBatchPipeline,describePipeline } from "../core/batch/pipeline";
@@ -1001,7 +1002,7 @@ export class App {
       }
     }
 
-    this.showBlobResults(expanded,failures);
+    this.showBlobResults(expanded,failures,false);
     this.setProgress(1,"Batch complete");
   }
 
@@ -1557,8 +1558,12 @@ export class App {
       targetFormatId:targetId,
       quality,
       options,
-      namingTemplate:element<HTMLInputElement>("batch-name-template").value,
-      executionMode:element<HTMLSelectElement>("batch-execution").value as BatchExecutionMode,
+      namingTemplate:this.files.length>1
+        ?element<HTMLInputElement>("batch-name-template").value
+        :"{name}-converted",
+      executionMode:this.files.length>1
+        ?element<HTMLSelectElement>("batch-execution").value as BatchExecutionMode
+        :"sequential",
       packageResults
     });
     this.batchPackageResults=pipeline.packageResults;
@@ -1903,10 +1908,32 @@ export class App {
 
   private showBlobResults(
     outputs:Array<{name:string;blob:Blob;warnings:string[];release?:()=>Promise<void>}>,
-    failed:Array<{name:string;error:string}>
+    failed:Array<{name:string;error:string}>,
+    autoPackage=true
   ){
     const container=element("results");container.replaceChildren();container.classList.remove("hidden");
     for(const output of outputs) this.addResult(container,output.name,output.blob,output.warnings,output.release);
+
+    const total=outputs.reduce((sum,item)=>sum+item.blob.size,0);
+    if(autoPackage&&outputs.length>1&&total<=512*1024*1024){
+      void (async()=>{
+        try{
+          const entries=Object.create(null) as Record<string,Uint8Array>;
+          for(const output of outputs) entries[output.name]=new Uint8Array(await output.blob.arrayBuffer());
+          const zipped=zipSync(entries,{level:0});
+          this.addResult(
+            container,
+            "converted-files.zip",
+            new Blob([zipped],{type:"application/zip"}),
+            ["Local convenience package."]
+          );
+        }catch(error){
+          const node=document.createElement("div");node.className="warning";
+          node.textContent="ZIP package: "+(error instanceof Error?error.message:String(error));
+          container.append(node);
+        }
+      })();
+    }
 
     for(const failure of failed){
       const node=document.createElement("div");node.className="warning";
