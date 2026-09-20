@@ -1,5 +1,6 @@
 import type { ConversionEngine,ConversionEstimate,EngineConvertRequest,EngineConvertResult } from "../../core/engines/Engine";
 import { parseMesh,writeMesh } from "../../core/specialist/mesh";
+import { assertMemoryBackedSource } from "../../core/performance/Budget";
 
 const FORMATS=new Set(["obj","stl","ply"]);
 const MIME:Record<string,string>={
@@ -17,14 +18,18 @@ export class MeshEngine implements ConversionEngine{
   canConvert(from:string,to:string):boolean{return FORMATS.has(from)&&FORMATS.has(to);}
 
   async estimate(source:Blob):Promise<ConversionEstimate>{
-    return {temporaryBytes:Math.max(64*1024*1024,source.size*6),outputBytes:null,notes:["Mesh conversion materializes triangle geometry in memory."]};
+    const memoryBytes=Math.max(64*1024*1024,source.size*6);
+    return {
+      temporaryBytes:memoryBytes,memoryBytes,
+      workspaceBytes:Math.max(32*1024*1024,source.size*1.5),
+      outputBytes:null,sourceAccess:"buffered",outputAccess:"buffered",
+      notes:["Mesh conversion materializes triangle geometry in memory."]
+    };
   }
 
   async convert(request:EngineConvertRequest):Promise<EngineConvertResult>{
     if(!this.canConvert(request.sourceFormatId,request.targetFormatId)) throw new Error("MESH_ROUTE_UNSUPPORTED: Unsupported mesh route.");
-    const mobile=typeof matchMedia==="function"&&matchMedia("(pointer: coarse)").matches;
-    const limit=mobile?64*1024*1024:256*1024*1024;
-    if(request.source.size>limit) throw new Error("MESH_SIZE_LIMIT: Mesh exceeds this device's guarded local parsing limit.");
+    assertMemoryBackedSource(request.source.size,"mesh conversion",6,320*1024*1024);
 
     request.onProgress?.(.15,"Parsing mesh geometry");
     const mesh=parseMesh(new Uint8Array(await request.source.arrayBuffer()),request.sourceFormatId);
