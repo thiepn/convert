@@ -14,8 +14,8 @@ import type {
 
 const EXCLUSIVE_ENGINES=new Set([
   "libreoffice-document","ffmpeg-legacy","mediabunny","vips-image","pdf-engine",
-  "pandoc-document","archive-engine","sheetjs-spreadsheet","duckdb-data","sqlite-data",
-  "psd-layered","font-compat"
+  "pandoc-document","pdf-reconstruction","archive-engine","sheetjs-spreadsheet","duckdb-data","sqlite-data",
+  "psd-layered","font-compat","raw-preview","mesh-compat"
 ]);
 
 interface Session {
