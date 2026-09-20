@@ -2,7 +2,9 @@ const CACHE="thiepn-convert-v1-0-0";
 const ROOT=new URL("./",self.location.href).href;
 const MANIFEST=new URL("manifest.webmanifest",self.location.href).href;
 const ICON=new URL("icon.svg",self.location.href).href;
-const CORE=[ROOT,MANIFEST,ICON];
+const ICON_192=new URL("icon-192.png",self.location.href).href;
+const ICON_512=new URL("icon-512.png",self.location.href).href;
+const CORE=[ROOT,MANIFEST,ICON,ICON_192,ICON_512];
 
 function withIsolationHeaders(response){
   if(!response||response.type==="opaque") return response;
@@ -12,6 +14,8 @@ function withIsolationHeaders(response){
   headers.set("Cross-Origin-Resource-Policy","same-origin");
   headers.set("X-Content-Type-Options","nosniff");
   headers.set("Referrer-Policy","no-referrer");
+  headers.set("X-Frame-Options","DENY");
+  headers.set("Content-Security-Policy","default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-src 'none'; frame-ancestors 'none'; form-action 'self'; manifest-src 'self'");
   return new Response(response.body,{
     status:response.status,
     statusText:response.statusText,
