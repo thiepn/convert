@@ -55,6 +55,7 @@ export interface DetailedDatabaseInspection {
 }
 
 export interface SpreadsheetConversionOptions {
+  routePreference:"semantic"|"fidelity";
   sheetPolicy:"first"|"selected"|"all";
   selectedSheet?:string;
   formulaMode:"preserve"|"values";
