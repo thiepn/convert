@@ -301,12 +301,41 @@ export class App {
     await this.renderRoute();
   }
 
+  private async refreshArchiveInspection(){
+    if(this.kind!=="archive"||this.files.length!==1) return;
+    const warnings:string[]=[];
+    try{
+      const formatId=this.inspections[0]?.detection.format?.id;
+      if(!formatId) throw new Error("ARCHIVE_FORMAT_UNKNOWN: Archive format is unknown.");
+      this.archiveDetail=await this.archiveEngine.inspect(
+        this.files[0],
+        formatId,
+        this.readArchiveOptions().inputPassword
+      );
+      warnings.push(...this.archiveDetail.warnings);
+    }catch(error){
+      this.archiveDetail=null;
+      warnings.push(error instanceof Error?error.message:String(error));
+    }
+    this.renderFacts();
+    this.renderArchiveEntries();
+    this.renderWarnings("inspection-warnings",warnings);
+    await this.renderRoute();
+  }
+
+  private setArchiveSelection(selected:boolean){
+    document.querySelectorAll<HTMLInputElement>("#archive-entry-list input[type=checkbox]")
+      .forEach(input=>{input.checked=selected;});
+    void this.renderRoute();
+  }
+
   private renderSelectionControls(){
     element("common-controls").classList.toggle("hidden",this.kind==="pdf");
     element("image-controls").classList.toggle("hidden",this.kind!=="image");
     element("media-controls").classList.toggle("hidden",this.kind!=="media");
     element("document-controls").classList.toggle("hidden",this.kind!=="document");
-    element("metadata-control").classList.toggle("hidden",this.kind==="document");
+    element("archive-controls").classList.toggle("hidden",this.kind!=="archive"&&this.kind!=="archive-build");
+    element("metadata-control").classList.toggle("hidden",this.kind==="document"||this.kind==="archive"||this.kind==="archive-build");
     element("pdf-controls").classList.toggle("hidden",this.kind!=="pdf");
   }
 
@@ -367,6 +396,24 @@ export class App {
         ["Slides",this.documentDetail?.slides!=null?String(this.documentDetail.slides):"—"],
         ["Macros",this.documentDetail?(this.documentDetail.macros?"Detected / possible":"None detected"):"—"],
         ["Expanded size",this.documentDetail?.expandedSize!=null?formatBytes(this.documentDetail.expandedSize):"—"]
+      ];
+    }else if(this.kind==="archive"){
+      facts=[
+        ["Format",first?.detection.format?.name??"Archive"],
+        ["Compressed",formatBytes(total)],
+        ["Files",this.archiveDetail?String(this.archiveDetail.files):"—"],
+        ["Directories",this.archiveDetail?String(this.archiveDetail.directories):"—"],
+        ["Expanded",this.archiveDetail?formatBytes(this.archiveDetail.expandedSize):"—"],
+        ["Ratio",this.archiveDetail?this.archiveDetail.compressionRatio.toFixed(1)+"×":"—"],
+        ["Encrypted",this.archiveDetail?.encrypted==null?"Unknown":this.archiveDetail.encrypted?"Yes":"No"],
+        ["Engine",this.archiveDetail?.engine??"—"]
+      ];
+    }else if(this.kind==="archive-build"){
+      facts=[
+        ["Files",String(this.files.length)],
+        ["Total size",formatBytes(total)],
+        ["Operation","Create new archive"],
+        ["Paths","Local filenames only"]
       ];
     }else if(this.kind==="pdf"){
       facts=[
