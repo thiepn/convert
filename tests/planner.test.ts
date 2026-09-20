@@ -18,7 +18,9 @@ describe("ConversionPlanner",()=>{
   [
     "vips-image","browser-image-proof","mediabunny","pdf-engine",
     "pandoc-document","libreoffice-document","pdf-reconstruction","archive-engine",
-    "sheetjs-spreadsheet","duckdb-data","sqlite-data"
+    "sheetjs-spreadsheet","duckdb-data","sqlite-data",
+    "subtitle-compat","mesh-compat","raw-preview","scientific-metadata",
+    "fb2-compat","psd-layered","font-compat","ffmpeg-legacy"
   ].forEach(id=>engines.register(engine(id)));
   const planner=new ConversionPlanner(createConversionGraph(),createDefaultFormatRegistry(),engines);
 
@@ -128,7 +130,30 @@ describe("ConversionPlanner",()=>{
     expect(route.edges[0].engineId).toBe("sheetjs-spreadsheet");
   });
 
-  it("keeps legacy AVI unsupported without a vetted compatibility engine",()=>{
-    expect(()=>planner.plan("avi","mp4")).toThrow();
+  it("routes legacy AVI through the isolated FFmpeg compatibility fallback",()=>{
+    expect(planner.plan("avi","mp4").edges[0].engineId).toBe("ffmpeg-legacy");
+  });
+
+  it("keeps specialist conversions explicit and loss-aware",()=>{
+    expect(planner.plan("psd","png").edges[0].engineId).toBe("psd-layered");
+    expect(planner.plan("camera-raw","jpeg").edges[0].engineId).toBe("raw-preview");
+    expect(planner.plan("ass","vtt").edges[0].engineId).toBe("subtitle-compat");
+    expect(planner.plan("obj","stl").edges[0].engineId).toBe("mesh-compat");
+    expect(planner.plan("otf","woff2").edges.map(edge=>edge.engineId)).toEqual(["font-compat","font-compat"]);
+    expect(planner.plan("fits","json-data").edges[0].engineId).toBe("scientific-metadata");
+  });
+
+  it("bridges FB2 into the semantic document pipeline",()=>{
+    const route=planner.plan("fb2","docx","semantic");
+    expect(route.edges[0].engineId).toBe("fb2-compat");
+    expect(route.edges.at(-1)?.engineId).toBe("pandoc-document");
+  });
+
+  it("does not advertise recognition-only specialist formats as convertible",()=>{
+    expect(planner.availableTargets("psb")).toEqual([]);
+    expect(planner.availableTargets("mobi-kindle")).toEqual([]);
+    expect(planner.availableTargets("dwg")).toEqual([]);
+    expect(planner.availableTargets("hdf5")).toEqual([]);
+    expect(planner.availableTargets("glb")).toEqual([]);
   });
 });
