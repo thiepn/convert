@@ -4,7 +4,7 @@ A local-first universal browser file-conversion platform.
 
 ## Current status
 
-Phase 5 — Archives & Compression is implemented on top of the image, media, PDF, and document engines.
+Phase 6 — Spreadsheets, Structured Data & Databases is implemented on top of the image, media, PDF, document, and archive engines.
 
 ### Images
 
@@ -22,40 +22,48 @@ Inspection, merge/split/reorder/rotate, page rendering, text extraction, searcha
 
 Pandoc WASM provides semantic conversion while a lazy self-hosted LibreOffice WASM worker handles layout-oriented Office fidelity conversion.
 
-Supported families include DOC/DOCX/DOCM input, ODT, RTF, HTML, Markdown, TXT, LaTeX, Typst, EPUB, PPT/PPTX/PPTM input, ODP, Office-to-PDF conversion, and PDF-to-editable reconstruction.
-
 ### Archives & Compression
 
-Phase 5 adds local inspection, extraction, creation, and repacking for common archive formats.
+ZIP/Zip64/AES-256, 7z, RAR extraction, TAR and compressed TAR families, safe selective extraction, archive creation, and repacking.
 
-Read/input coverage includes:
+### Spreadsheets
 
-- ZIP / Zip64
-- 7z
-- RAR v4/v5
-- TAR
-- GZIP
-- BZIP2
-- XZ
-- Zstandard where supported by bundled libarchive
-- TAR.GZ
-- TAR.BZ2
-- TAR.XZ
-- CPIO/libarchive-compatible input
+Workbook semantic processing uses SheetJS CE 0.20.3. Supported spreadsheet families include:
 
-Creation/output coverage includes:
+- XLS / XLSX
+- XLSM input with VBA detection/stripping
+- XLSB
+- ODS / FODS
+- CSV / TSV bridges
+- JSON / JSONL bridges
 
-- ZIP / Zip64
-- password-protected ZIP with AES-256
-- 7z
-- TAR
-- TAR.GZ
-- TAR.BZ2
-- TAR.XZ
+Spreadsheet inspection reports worksheets, ranges, formulas, merges, links, named ranges, metadata, hidden sheets, and macros.
 
-Archive security includes path traversal blocking, expansion-ratio/size guards, entry-count limits, extraction memory budgets, duplicate/case-collision handling, special-entry filtering, and direct raw libarchive worker RPC so hostile paths are validated before JavaScript object materialization.
+The user can choose semantic workbook conversion or the existing lazy LibreOffice Calc fidelity route. SheetJS preserves formula expressions where possible but does not calculate formulas; LibreOffice Calc may recalculate formulas during fidelity conversion.
 
-Any current file selection can be switched to Pack these files. Mixed or otherwise unsupported selections automatically enter archive-building mode.
+### Structured data
+
+DuckDB-Wasm 1.32.0 provides local schema inference, preview, restricted SQL transforms, and conversion for:
+
+- CSV / TSV
+- JSON / JSON Lines
+- Parquet
+- Apache Arrow IPC
+
+CSV defaults to dialect auto-detection. Parquet output uses Zstandard compression.
+
+### SQLite
+
+sql.js 1.14.2 provides local SQLite inspection and guarded import/export:
+
+- tables and views
+- schema
+- row counts
+- selected-table preview
+- CSV / TSV / JSON / JSONL export
+- JSON / JSONL to SQLite
+
+The optional SQL transform is restricted to one read-only SELECT/WITH query. Network URLs, file-reader functions, extensions, attachments, and mutations are blocked.
 
 ## Development
 
@@ -72,13 +80,13 @@ Checks:
 
 ## Privacy
 
-Conversion jobs do not upload files. Passwords, archive entry names, extracted files, document resources, fonts, OCR data, and all generated outputs remain local to the browser.
+Conversion jobs do not upload files. Spreadsheet contents, database tables, SQL text, passwords, OCR data, document resources, fonts, archive entries, and generated outputs remain local to the browser.
 
-See docs/privacy-model.md, docs/architecture.md, docs/image-engine.md, docs/media-engine.md, docs/pdf-engine.md, docs/document-engine.md, and docs/archive-engine.md.
+See docs/privacy-model.md, docs/architecture.md, docs/image-engine.md, docs/media-engine.md, docs/pdf-engine.md, docs/document-engine.md, docs/archive-engine.md, and docs/data-engine.md.
 
 ## Licensing
 
-Dependency/license metadata lives in licenses/dependencies.json. Notable shipped components include GPL-2.0-or-later Pandoc WASM, MPL-2.0 document/media components, BSD-3-Clause zip.js, and the permissively licensed libarchive stack. Preserve all applicable source/binary redistribution notices.
+Dependency/license metadata lives in licenses/dependencies.json. Notable components include Apache-2.0 SheetJS CE, MIT DuckDB-Wasm, Apache-2.0 Arrow JS, MIT sql.js, GPL-2.0-or-later Pandoc WASM, MPL-2.0 media/document components, and permissive archive/image dependencies.
 
 ## Roadmap
 
@@ -88,4 +96,4 @@ Dependency/license metadata lives in licenses/dependencies.json. Notable shipped
 - Phase 3: production PDF engine — implemented
 - Phase 4: documents and Office — implemented
 - Phase 5: archives and compression — implemented
-- Phase 6: spreadsheets, data, and databases
+- Phase 6: spreadsheets, data, and databases — implemented
