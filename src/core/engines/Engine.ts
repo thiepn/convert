@@ -12,6 +12,7 @@ export interface EngineConvertRequest {
   targetMime: string;
   quality?: number;
   options?: Record<string, unknown>;
+  outputHandle?: FileSystemFileHandle;
   signal: AbortSignal;
   onProgress?: (progress: number, stage: string) => void;
 }
@@ -22,6 +23,7 @@ export interface EngineConvertResult {
   height?: number;
   warnings?: string[];
   details?: Record<string, unknown>;
+  outputInWorkspace?: boolean;
 }
 
 export interface ConversionEngine {
