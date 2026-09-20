@@ -591,6 +591,129 @@ export class App {
       :"";
   }
 
+  private populateDataSelectors(){
+    const sheetSelect=element<HTMLSelectElement>("data-sheet-select");
+    sheetSelect.replaceChildren();
+    for(const sheet of this.spreadsheetDetail?.sheets??[]){
+      const option=document.createElement("option");
+      option.value=sheet.name;
+      option.textContent=sheet.name+(sheet.hidden?" · hidden":"");
+      sheetSelect.append(option);
+    }
+
+    const tableSelect=element<HTMLSelectElement>("data-table-select");
+    const previous=tableSelect.value;
+    tableSelect.replaceChildren();
+    for(const table of this.databaseDetail?.tables??[]){
+      const option=document.createElement("option");
+      option.value=table.name;
+      option.textContent=table.name+(table.type==="view"?" · view":"");
+      tableSelect.append(option);
+    }
+    if(previous&&[...tableSelect.options].some(option=>option.value===previous)) tableSelect.value=previous;
+  }
+
+  private async refreshDatabasePreview(){
+    if(this.kind!=="database"||this.files.length!==1) return;
+    const table=element<HTMLSelectElement>("data-table-select").value;
+    if(!table) return;
+    try{
+      this.dataDetail=await this.sqliteEngine.preview(this.files[0],table);
+      this.renderDataPreview();
+      await this.renderRoute();
+    }catch(error){
+      this.renderWarnings("inspection-warnings",[error instanceof Error?error.message:String(error)]);
+    }
+  }
+
+  private renderDataPreview(){
+    const container=element("data-preview");
+    container.replaceChildren();
+    if(!this.dataDetail||!this.dataDetail.columns.length){
+      container.classList.add("hidden");
+      return;
+    }
+    container.classList.remove("hidden");
+
+    const summary=document.createElement("div");
+    summary.className="data-preview-summary";
+    summary.textContent=(this.dataDetail.rows==null?"Unknown row count":this.dataDetail.rows.toLocaleString()+" row(s)")
+      +" · "+this.dataDetail.columns.length+" column(s)";
+
+    const wrap=document.createElement("div");
+    wrap.className="data-preview-scroll";
+    const table=document.createElement("table");
+    const head=document.createElement("thead");
+    const headRow=document.createElement("tr");
+    for(const column of this.dataDetail.columns.slice(0,30)){
+      const th=document.createElement("th");
+      th.textContent=column.name;
+      th.title=column.type+(column.nullable?" · nullable":"");
+      headRow.append(th);
+    }
+    head.append(headRow);
+    table.append(head);
+
+    const body=document.createElement("tbody");
+    for(const row of this.dataDetail.preview.slice(0,20)){
+      const tr=document.createElement("tr");
+      for(const column of this.dataDetail.columns.slice(0,30)){
+        const td=document.createElement("td");
+        const value=row[column.name];
+        td.textContent=value==null?"":typeof value==="object"?JSON.stringify(value):String(value);
+        tr.append(td);
+      }
+      body.append(tr);
+    }
+    table.append(body);
+    wrap.append(table);
+    container.append(summary,wrap);
+  }
+
+  private updateDataOptionVisibility(){
+    const active=this.kind==="spreadsheet"||this.kind==="data"||this.kind==="database";
+    element("data-controls").classList.toggle("hidden",!active);
+    if(!active) return;
+
+    const spreadsheet=this.kind==="spreadsheet";
+    const database=this.kind==="database";
+    element("data-route-wrap").classList.toggle("hidden",!spreadsheet);
+    element("data-sheet-policy-wrap").classList.toggle("hidden",!spreadsheet);
+    element("data-sheet-select-wrap").classList.toggle("hidden",!spreadsheet);
+    element("data-formula-wrap").classList.toggle("hidden",!spreadsheet);
+    element("data-table-select-wrap").classList.toggle("hidden",!database);
+
+    const policy=element<HTMLSelectElement>("data-sheet-policy").value;
+    element("data-sheet-select-wrap").classList.toggle("hidden",!spreadsheet||policy!=="selected");
+    element("data-query").toggleAttribute("disabled",false);
+  }
+
+  private selectedDelimiter():string{
+    const value=element<HTMLSelectElement>("data-delimiter").value;
+    return value==="\\t"?"\t":value;
+  }
+
+  private readSpreadsheetOptions():SpreadsheetConversionOptions & {query?:string}{
+    return {
+      routePreference:element<HTMLSelectElement>("data-route").value as SpreadsheetConversionOptions["routePreference"],
+      sheetPolicy:element<HTMLSelectElement>("data-sheet-policy").value as SpreadsheetConversionOptions["sheetPolicy"],
+      selectedSheet:element<HTMLSelectElement>("data-sheet-select").value||undefined,
+      formulaMode:element<HTMLSelectElement>("data-formula-mode").value as SpreadsheetConversionOptions["formulaMode"],
+      delimiter:this.selectedDelimiter(),
+      header:element<HTMLInputElement>("data-header").checked,
+      query:element<HTMLTextAreaElement>("data-query").value.trim()||undefined
+    };
+  }
+
+  private readDataOptions():DataConversionOptions{
+    return {
+      selectedTable:element<HTMLSelectElement>("data-table-select").value||undefined,
+      delimiter:this.selectedDelimiter(),
+      header:element<HTMLInputElement>("data-header").checked,
+      query:element<HTMLTextAreaElement>("data-query").value.trim()||undefined
+    };
+  }
+
   private commonTargets():string[]{
     if(!this.files.length||!this.kind||this.kind==="pdf") return [];
     if(this.kind==="archive-build"){
