@@ -310,6 +310,21 @@ export class App {
         ["Subtitles",String(this.mediaDetail?.subtitleTracks??0)],
         ["MIME",this.mediaDetail?.mimeType??first?.mime??"—"]
       ];
+    }else if(this.kind==="document"){
+      facts=[
+        ["Format",first?.detection.format?.name??"Unknown"],
+        ["Size",formatBytes(total)],
+        ["Family",this.documentDetail?.family??"—"],
+        ["Paragraphs",this.documentDetail?.paragraphs!=null?String(this.documentDetail.paragraphs):"—"],
+        ["Headings",this.documentDetail?.headings!=null?String(this.documentDetail.headings):"—"],
+        ["Tables",this.documentDetail?.tables!=null?String(this.documentDetail.tables):"—"],
+        ["Images",this.documentDetail?.images!=null?String(this.documentDetail.images):"—"],
+        ["Tracked changes",this.documentDetail?.trackedChanges!=null?String(this.documentDetail.trackedChanges):"—"],
+        ["Comments",this.documentDetail?.comments!=null?String(this.documentDetail.comments):"—"],
+        ["Slides",this.documentDetail?.slides!=null?String(this.documentDetail.slides):"—"],
+        ["Macros",this.documentDetail?(this.documentDetail.macros?"Detected / possible":"None detected"):"—"],
+        ["Expanded size",this.documentDetail?.expandedSize!=null?formatBytes(this.documentDetail.expandedSize):"—"]
+      ];
     }else if(this.kind==="pdf"){
       facts=[
         ["Format","PDF"],
