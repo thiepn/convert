@@ -82,7 +82,7 @@ const RULES:Array<{
 ];
 
 function extractCode(raw:string):string|null {
-  const match=raw.trim().match(/^([A-Z][A-Z0-9_]{2,})(?::|\b)/);
+  const match=raw.trim().match(/^([A-Z][A-Z0-9_]{2,}):/);
   return match?.[1]??null;
 }
 
