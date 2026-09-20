@@ -91,6 +91,9 @@ async function convertDocument(request:Extract<PandocWorkerRequest,{type:"conver
     standalone:request.options.standalone,
     "table-of-contents":request.options.tableOfContents
   };
+  if(!isTextInput(request.sourceFormatId)){
+    options["input-files"]=[request.sourceName];
+  }
 
   if(["docx","docm"].includes(request.sourceFormatId)){
     options["track-changes"]=request.options.trackChanges;
