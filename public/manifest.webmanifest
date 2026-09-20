@@ -1,10 +1,73 @@
 {
   "name": "Thiepn Convert",
   "short_name": "Convert",
-  "description": "Local-first universal file conversion.",
+  "id": "./",
+  "description": "Private, local-first universal file conversion in your browser.",
   "start_url": ".",
   "scope": ".",
+  "lang": "en",
   "display": "standalone",
   "background_color": "#111318",
-  "theme_color": "#111318"
+  "theme_color": "#111318",
+  "categories": [
+    "utilities",
+    "productivity"
+  ],
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "launch_handler": {
+    "client_mode": "focus-existing"
+  },
+  "file_handlers": [
+    {
+      "action": ".",
+      "accept": {
+        "application/pdf": [
+          ".pdf"
+        ],
+        "image/png": [
+          ".png"
+        ],
+        "image/jpeg": [
+          ".jpg",
+          ".jpeg"
+        ],
+        "image/webp": [
+          ".webp"
+        ],
+        "text/plain": [
+          ".txt",
+          ".md",
+          ".markdown",
+          ".csv",
+          ".tsv",
+          ".srt",
+          ".vtt"
+        ],
+        "application/json": [
+          ".json",
+          ".jsonl",
+          ".ndjson"
+        ],
+        "application/zip": [
+          ".zip"
+        ],
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [
+          ".docx"
+        ],
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [
+          ".xlsx"
+        ],
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation": [
+          ".pptx"
+        ]
+      }
+    }
+  ]
 }
