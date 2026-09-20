@@ -62,6 +62,7 @@ export class VipsImageEngine implements ConversionEngine {
   }
 
   async inspect(source:Blob, sourceFormatId:string):Promise<DetailedImageInspection> {
+    assertMemoryBackedSource(source.size,"libvips image inspection",3,512*1024*1024);
     const requestId = crypto.randomUUID();
     return this.request({
       type:"inspect", requestId, source, sourceFormatId, assetBase:this.assetBase
