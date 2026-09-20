@@ -12,7 +12,7 @@ const INPUTS=new Set(["csv","tsv","json-data","jsonl","parquet","arrow"]);
 const OUTPUTS=new Set(["csv","tsv","json-data","jsonl","parquet","arrow"]);
 
 function defaultOptions():DataConversionOptions{
-  return {delimiter:",",header:true};
+  return {delimiter:"auto",header:true};
 }
 
 function sqlQuote(value:string):string{
@@ -228,7 +228,12 @@ export class DuckDbDataEngine implements ConversionEngine{
 
   private sourceExpression(formatId:string,fileName:string,options:DataConversionOptions):string{
     const file=sqlQuote(fileName);
-    if(formatId==="csv") return "read_csv_auto("+file+", delim="+sqlQuote(options.delimiter||",")+", header="+(options.header?"true":"false")+")";
+    if(formatId==="csv"){
+      const delimiter=options.delimiter&&options.delimiter!=="auto"
+        ? ", delim="+sqlQuote(options.delimiter)
+        : "";
+      return "read_csv_auto("+file+delimiter+", header="+(options.header?"true":"false")+")";
+    }
     if(formatId==="tsv") return "read_csv_auto("+file+", delim='\\t', header="+(options.header?"true":"false")+")";
     if(formatId==="json-data") return "read_json_auto("+file+", format='auto')";
     if(formatId==="jsonl") return "read_json_auto("+file+", format='newline_delimited')";
@@ -239,7 +244,7 @@ export class DuckDbDataEngine implements ConversionEngine{
   private copySql(query:string,fileName:string,target:string,options:DataConversionOptions):string{
     const out=sqlQuote(fileName);
     if(target==="csv"){
-      return "COPY ("+query+") TO "+out+" (FORMAT CSV, HEADER "+(options.header?"TRUE":"FALSE")+", DELIMITER "+sqlQuote(options.delimiter||",")+")";
+      return "COPY ("+query+") TO "+out+" (FORMAT CSV, HEADER "+(options.header?"TRUE":"FALSE")+", DELIMITER "+sqlQuote(options.delimiter==="auto"||!options.delimiter?",":options.delimiter)+")";
     }
     if(target==="tsv"){
       return "COPY ("+query+") TO "+out+" (FORMAT CSV, HEADER "+(options.header?"TRUE":"FALSE")+", DELIMITER '\\t')";
