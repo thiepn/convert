@@ -195,6 +195,7 @@ export class App {
       element(id).addEventListener("change",()=>{
         if(id==="pdf-operation") this.updatePdfOptionVisibility();
         if(id==="archive-operation") this.updateArchiveOptionVisibility();
+        if(id==="data-sheet-policy") this.updateDataOptionVisibility();
         if(id==="data-table-select") void this.refreshDatabasePreview();
         void this.renderRoute();
       });
@@ -1195,19 +1196,30 @@ export class App {
     const imageOptions=this.kind==="image"?this.readImageOptions():null;
     const mediaOptions=this.kind==="media"?this.readMediaOptions():null;
     const documentOptions=this.kind==="document"?await this.readDocumentOptions():null;
+    const spreadsheetOptions=this.kind==="spreadsheet"?this.readSpreadsheetOptions():null;
+    const dataOptions=(this.kind==="data"||this.kind==="database")?this.readDataOptions():null;
     if(mediaOptions){
       const validation=this.validateMediaOptions(mediaOptions);
       if(validation){this.renderWarnings("loss-warnings",[validation]);return;}
     }
 
-    await this.runGenericBatch(targetId,imageOptions,mediaOptions,documentOptions);
+    await this.runGenericBatch(
+      targetId,
+      imageOptions,
+      mediaOptions,
+      documentOptions,
+      spreadsheetOptions,
+      dataOptions
+    );
   }
 
   private async runGenericBatch(
     targetId:string,
     imageOptions:ImageConversionOptions|null,
     mediaOptions:MediaConversionOptions|null,
-    documentOptions:DocumentConversionOptions|null
+    documentOptions:DocumentConversionOptions|null,
+    spreadsheetOptions:(SpreadsheetConversionOptions & {query?:string})|null,
+    dataOptions:DataConversionOptions|null
   ){
     const button=element<HTMLButtonElement>("convert-button");
     const cancel=element<HTMLButtonElement>("cancel-button");
@@ -1222,7 +1234,14 @@ export class App {
       for(let index=0;index<this.files.length;index++){
         const file=this.files[index];
         try{
-          const options=(imageOptions??mediaOptions??documentOptions??{}) as unknown as Record<string,unknown>;
+          const options=(
+            imageOptions
+            ??mediaOptions
+            ??documentOptions
+            ??spreadsheetOptions
+            ??dataOptions
+            ??{}
+          ) as unknown as Record<string,unknown>;
           const quality=this.kind==="image"?Number(element<HTMLSelectElement>("image-quality").value):.82;
           const output=await this.jobs.convert(file,targetId,quality,options,snapshot=>{
             const overall=(index+snapshot.progress)/this.files.length;
