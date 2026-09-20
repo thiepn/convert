@@ -50,6 +50,27 @@ function defaultOptions():ArchiveConversionOptions{
   return {compressionLevel:6,preservePaths:true};
 }
 
+
+function uniqueArchivePaths<T extends {path:string}>(items:T[]):T[]{
+  const used=new Set<string>();
+  return items.map(item=>{
+    let path=item.path;
+    const parts=path.split("/");
+    const file=parts.pop()||"file";
+    const dot=file.lastIndexOf(".");
+    const stem=dot>0?file.slice(0,dot):file;
+    const ext=dot>0?file.slice(dot):"";
+    let candidate=path;
+    let index=2;
+    while(used.has(candidate.toLocaleLowerCase("en-US"))){
+      candidate=[...parts,stem+" ("+index+")"+ext].filter(Boolean).join("/");
+      index++;
+    }
+    used.add(candidate.toLocaleLowerCase("en-US"));
+    return {...item,path:candidate};
+  });
+}
+
 function toFile(source:Blob,name:string):File{
   if(source instanceof File) return source;
   return new File([source],name,{type:source.type||"application/octet-stream"});
@@ -131,10 +152,10 @@ export class ArchiveEngine implements ConversionEngine{
     }
     if(!files.length) throw new Error("ARCHIVE_EMPTY: No files selected.");
 
-    const normalized=files.map(item=>({
+    const normalized=uniqueArchivePaths(files.map(item=>({
       ...item,
       path:normalizeArchivePath(item.path)
-    }));
+    })));
     const total=normalized.reduce((sum,item)=>sum+item.blob.size,0);
     const mobile=typeof matchMedia==="function"&&matchMedia("(pointer: coarse)").matches;
     const maxTotal=mobile?256*1024*1024:1024*1024*1024;
