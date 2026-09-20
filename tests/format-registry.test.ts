@@ -62,4 +62,24 @@ describe("FormatRegistry",()=>{
     expect(registry.detect(new Uint8Array([71,73,70,56,57,97,1,0,1,0]),"x.bin").format?.id).toBe("gif");
     expect(registry.detect(new Uint8Array([0xff,0x0a]),"x.bin").format?.id).toBe("jxl");
   });
+
+  it("distinguishes PSD and PSB and recognizes specialist signatures",()=>{
+    expect(registry.detect(new Uint8Array([0x38,0x42,0x50,0x53,0,1]),"x.bin").format?.id).toBe("psd");
+    expect(registry.detect(new Uint8Array([0x38,0x42,0x50,0x53,0,2]),"x.bin").format?.id).toBe("psb");
+    expect(registry.detect(new TextEncoder().encode("WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nHi"),"x.bin").format?.id).toBe("vtt");
+    expect(registry.detect(new TextEncoder().encode("ply\nformat ascii 1.0\n"),"x.bin").format?.id).toBe("ply");
+    expect(registry.detect(new TextEncoder().encode("SIMPLE  =                    T"),"x.bin").format?.id).toBe("fits");
+  });
+
+  it("uses RAW extensions to disambiguate TIFF-based camera formats",()=>{
+    const tiff=new Uint8Array([0x49,0x49,0x2a,0x00,8,0,0,0,0,0,0,0]);
+    expect(registry.detect(tiff,"photo.nef","application/octet-stream").format?.id).toBe("camera-raw");
+    expect(registry.detect(tiff,"scan.tiff","image/tiff").format?.id).toBe("tiff");
+  });
+
+  it("recognizes legacy ASF and font containers",()=>{
+    const asf=new Uint8Array([0x30,0x26,0xb2,0x75,0x8e,0x66,0xcf,0x11,0xa6,0xd9,0x00,0xaa,0x00,0x62,0xce,0x6c]);
+    expect(registry.detect(asf,"x.bin").format?.id).toBe("asf");
+    expect(registry.detect(new TextEncoder().encode("wOF2payload"),"x.bin").format?.id).toBe("woff2");
+  });
 });
