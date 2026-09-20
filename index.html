@@ -317,7 +317,7 @@
         <label class="data-query-wrap">
           <span>Optional local SQL transform</span>
           <textarea id="data-query" rows="4" spellcheck="false" placeholder="SELECT * FROM data WHERE amount > 0 ORDER BY date"></textarea>
-          <small>Restricted to one local SELECT/WITH query over the input view named <code>data</code>. Network URLs, extensions, file readers, and mutating statements are blocked.</small>
+          <small>Restricted to one local SELECT/WITH query. DuckDB inputs expose the source as <code>data</code>; SQLite queries can read local tables. Network URLs, extensions, file readers, attachments, and mutations are blocked.</small>
         </label>
 
         <div id="data-preview" class="data-preview hidden"></div>
