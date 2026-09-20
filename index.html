@@ -14,16 +14,16 @@
       <div>
         <div class="eyebrow">THIEPN CONVERT · LOCAL ENGINE</div>
         <h1>Convert files locally in your browser.</h1>
-        <p>Images, audio, video, PDFs, documents, presentations, and e-books stay on your device. No conversion server is involved.</p>
+        <p>Images, audio, video, PDFs, documents, presentations, e-books, and archives stay on your device. No conversion server is involved.</p>
       </div>
       <div class="privacy-badge"><span class="privacy-dot"></span> No file uploads</div>
     </header>
 
     <section class="panel drop-panel">
       <label id="drop-zone" class="drop-zone" for="file-input">
-        <input id="file-input" type="file" multiple accept="image/*,audio/*,video/*,application/pdf,text/*,.pdf,.doc,.docx,.docm,.odt,.rtf,.html,.htm,.md,.markdown,.tex,.typ,.epub,.ppt,.pptx,.pptm,.odp,.heic,.heif,.jxl,.tif,.tiff,.svg,.mkv,.webm,.mov,.m4a,.aac,.flac,.ogg,.opus,.ts,.m2ts,.avi,.flv">
+        <input id="file-input" type="file" multiple accept="image/*,audio/*,video/*,application/pdf,text/*,.pdf,.doc,.docx,.docm,.odt,.rtf,.html,.htm,.md,.markdown,.tex,.typ,.epub,.ppt,.pptx,.pptm,.odp,.zip,.zipx,.7z,.rar,.tar,.gz,.gzip,.tgz,.bz2,.tbz,.tbz2,.xz,.txz,.zst,.zstd,.cpio,.heic,.heif,.jxl,.tif,.tiff,.svg,.mkv,.webm,.mov,.m4a,.aac,.flac,.ogg,.opus,.ts,.m2ts,.avi,.flv">
         <strong>Drop files anywhere</strong>
-        <span>Images · Audio · Video · PDF · Word · PowerPoint · EPUB · Markdown · LaTeX</span>
+        <span>Images · Audio · Video · PDF · Documents · EPUB · ZIP · 7z · RAR · TAR</span>
       </label>
     </section>
 
@@ -259,6 +259,59 @@
         </div>
       </div>
 
+      <div id="archive-controls" class="control-section hidden">
+        <div class="control-title">Archive tools</div>
+        <div class="convert-grid phase-controls archive-controls-grid">
+          <label>
+            <span>Operation</span>
+            <select id="archive-operation">
+              <option value="repack" selected>Repack / convert archive</option>
+              <option value="extract-all">Extract all files</option>
+              <option value="extract-selected">Extract selected entries</option>
+              <option value="create">Create archive from selected files</option>
+            </select>
+          </label>
+          <label>
+            <span>Input password</span>
+            <input id="archive-input-password" type="password" autocomplete="off" placeholder="If encrypted">
+          </label>
+          <label>
+            <span>ZIP output password</span>
+            <input id="archive-output-password" type="password" autocomplete="new-password" placeholder="Optional AES-256">
+          </label>
+          <label>
+            <span>Compression level</span>
+            <select id="archive-compression-level">
+              <option value="0">Store only</option>
+              <option value="3">Fast</option>
+              <option value="6" selected>Balanced</option>
+              <option value="9">Maximum</option>
+            </select>
+          </label>
+          <label class="check-row archive-preserve-row">
+            <input id="archive-preserve-paths" type="checkbox" checked>
+            <span>Preserve directory paths</span>
+          </label>
+        </div>
+
+        <div class="archive-entry-toolbar">
+          <div>
+            <strong id="archive-entry-summary">No archive inspected</strong>
+            <span id="archive-entry-note"></span>
+          </div>
+          <div class="archive-entry-actions">
+            <button id="archive-select-all" class="secondary-button" type="button">Select shown</button>
+            <button id="archive-select-none" class="secondary-button" type="button">Clear</button>
+            <button id="archive-reinspect-button" class="secondary-button" type="button">Re-inspect</button>
+          </div>
+        </div>
+        <div id="archive-entry-list" class="archive-entry-list hidden"></div>
+
+        <div class="route-box compact-route">
+          ZIP creation uses zip.js with Zip64 and optional AES-256. 7z/RAR/TAR and compressed TAR inputs are handled locally by libarchive WASM.
+        </div>
+      </div>
+
       <div id="pdf-controls" class="control-section hidden">
         <div class="control-title">PDF tools</div>
         <div class="convert-grid phase-controls pdf-controls-grid">
@@ -407,7 +460,7 @@
 
     <section class="panel compact-panel">
       <h2>Privacy model</h2>
-      <p>Conversion uses local browser APIs, WebAssembly, WebCodecs, workers, OPFS, PDF.js, qpdf, and Tesseract. Source files, passwords, extracted text, OCR results, and outputs are not uploaded to a conversion server.</p>
+      <p>Conversion uses local browser APIs, WebAssembly, WebCodecs, workers, OPFS, PDF.js, qpdf, Tesseract, zip.js, and libarchive. Source files, passwords, extracted text, OCR results, and outputs are not uploaded to a conversion server.</p>
     </section>
   </main>
   <script type="module" src="/src/main.ts"></script>
