@@ -228,7 +228,8 @@ async function convert(request:Extract<MediaWorkerRequest,{type:"convert"}>){
       target=new BufferTarget();
     }
 
-    const outputFormat=formatFor(request.targetFormatId);\n    const output=new Output({format:outputFormat,target});
+    const outputFormat=formatFor(request.targetFormatId);
+    const output=new Output({format:outputFormat,target});
     const conversion=await Conversion.init(conversionOptions(input,request.targetFormatId,adjusted,output));
     active.set(request.jobId,conversion);
 
