@@ -33,8 +33,14 @@ export function estimateRouteResources(
 
     memoryBytes=Math.max(memoryBytes,memory);
     workspaceBytes=Math.max(workspaceBytes,workspace);
-    streamingInput=streamingInput&&(estimate.sourceAccess==="streaming"||Boolean(edge?.streaming));
-    streamingOutput=streamingOutput&&(estimate.outputAccess==="streaming"||Boolean(edge?.streaming));
+    const sourceStreaming=estimate.sourceAccess
+      ?estimate.sourceAccess==="streaming"
+      :Boolean(edge?.streaming);
+    const outputStreaming=estimate.outputAccess
+      ?estimate.outputAccess==="streaming"
+      :Boolean(edge?.streaming);
+    streamingInput=streamingInput&&sourceStreaming;
+    streamingOutput=streamingOutput&&outputStreaming;
     notes.push(...estimate.notes);
   });
 
