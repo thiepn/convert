@@ -103,7 +103,8 @@ export class ArchiveEngine implements ConversionEngine{
     sourceFormatId:string,
     password?:string,
     selectedPaths?:string[],
-    onProgress?:(progress:number,stage:string)=>void
+    onProgress?:(progress:number,stage:string)=>void,
+    signal?:AbortSignal
   ):Promise<ExtractedArchiveFile[]>{
     const inspection=await this.inspect(source,sourceFormatId,password);
     const selected=selectedPaths?.length?new Set(selectedPaths.map(normalizeArchivePath)):null;
@@ -112,9 +113,9 @@ export class ArchiveEngine implements ConversionEngine{
     assertExtractionBudget(selectedSize,candidates.length);
 
     if(sourceFormatId==="zip"){
-      return this.extractZip(source,password,selected,onProgress);
+      return this.extractZip(source,password,selected,onProgress,signal);
     }
-    return this.extractLibarchive(source,sourceFormatId,password,selected,onProgress);
+    return this.extractLibarchive(source,sourceFormatId,password,selected,onProgress,signal);
   }
 
   async createFromFiles(
@@ -122,7 +123,8 @@ export class ArchiveEngine implements ConversionEngine{
     targetFormatId:string,
     options:Partial<ArchiveConversionOptions>={},
     outputHandle?:FileSystemFileHandle,
-    onProgress?:(progress:number,stage:string)=>void
+    onProgress?:(progress:number,stage:string)=>void,
+    signal?:AbortSignal
   ):Promise<{blob:Blob;outputInWorkspace:boolean}>{
     if(!OUTPUTS.has(targetFormatId)){
       throw new Error("ARCHIVE_TARGET_UNSUPPORTED: Unsupported archive output.");
@@ -142,9 +144,9 @@ export class ArchiveEngine implements ConversionEngine{
 
     const merged={...defaultOptions(),...options};
     if(targetFormatId==="zip"){
-      return this.createZip(normalized,merged,outputHandle,onProgress);
+      return this.createZip(normalized,merged,outputHandle,onProgress,signal);
     }
-    return this.createLibarchive(normalized,targetFormatId,outputHandle,onProgress);
+    return this.createLibarchive(normalized,targetFormatId,outputHandle,onProgress,signal);
   }
 
   async convert(request:EngineConvertRequest):Promise<EngineConvertResult>{
@@ -163,7 +165,8 @@ export class ArchiveEngine implements ConversionEngine{
       request.sourceFormatId,
       options.inputPassword,
       undefined,
-      (progress,stage)=>request.onProgress?.(.12+progress*.48,stage)
+      (progress,stage)=>request.onProgress?.(.12+progress*.48,stage),
+      request.signal
     );
 
     request.signal.throwIfAborted?.();
@@ -173,7 +176,8 @@ export class ArchiveEngine implements ConversionEngine{
       request.targetFormatId,
       options,
       request.outputHandle,
-      (progress,stage)=>request.onProgress?.(.62+progress*.34,stage)
+      (progress,stage)=>request.onProgress?.(.62+progress*.34,stage),
+      request.signal
     );
 
     return {
@@ -284,7 +288,8 @@ export class ArchiveEngine implements ConversionEngine{
     source:Blob,
     password:string|undefined,
     selected:Set<string>|null,
-    onProgress?:(progress:number,stage:string)=>void
+    onProgress?:(progress:number,stage:string)=>void,
+    signal?:AbortSignal
   ):Promise<ExtractedArchiveFile[]>{
     const reader=new ZipReader(new BlobReader(source),password?{password}:undefined as any);
     const outputs:ExtractedArchiveFile[]=[];
@@ -292,6 +297,7 @@ export class ArchiveEngine implements ConversionEngine{
       const entries=(await reader.getEntries()).filter((entry:any)=>!entry.directory);
       const targets=entries.filter((entry:any)=>!selected||selected.has(normalizeArchivePath(String(entry.filename))));
       for(let index=0;index<targets.length;index++){
+        signal?.throwIfAborted?.();
         const entry:any=targets[index];
         const path=normalizeArchivePath(String(entry.filename));
         onProgress?.(index/Math.max(1,targets.length),"Extracting "+path);
@@ -315,7 +321,8 @@ export class ArchiveEngine implements ConversionEngine{
     sourceFormatId:string,
     password:string|undefined,
     selected:Set<string>|null,
-    onProgress?:(progress:number,stage:string)=>void
+    onProgress?:(progress:number,stage:string)=>void,
+    signal?:AbortSignal
   ):Promise<ExtractedArchiveFile[]>{
     const archive=await Archive.open(toFile(source,"archive."+sourceFormatId));
     const outputs:ExtractedArchiveFile[]=[];
@@ -328,6 +335,7 @@ export class ArchiveEngine implements ConversionEngine{
         return !selected||selected.has(path);
       });
       for(let index=0;index<targets.length;index++){
+        signal?.throwIfAborted?.();
         const item:any=targets[index];
         const parent=String(item.path??"").replaceAll("\\","/");
         const path=normalizeArchivePath((parent.endsWith("/")||!parent?parent:parent+"/")+String(item.file?.name??"file"));
@@ -346,7 +354,8 @@ export class ArchiveEngine implements ConversionEngine{
     files:Array<{blob:Blob;path:string;lastModified?:number|null}>,
     options:ArchiveConversionOptions,
     outputHandle?:FileSystemFileHandle,
-    onProgress?:(progress:number,stage:string)=>void
+    onProgress?:(progress:number,stage:string)=>void,
+    signal?:AbortSignal
   ):Promise<{blob:Blob;outputInWorkspace:boolean}>{
     const writerOptions:any={
       zip64:true,
@@ -371,6 +380,7 @@ export class ArchiveEngine implements ConversionEngine{
     const writer=new ZipWriter(sink,writerOptions);
     try{
       for(let index=0;index<files.length;index++){
+        signal?.throwIfAborted?.();
         const item=files[index];
         const path=options.preservePaths?item.path:basename(item.path);
         onProgress?.(index/Math.max(1,files.length),"Compressing "+path);
@@ -398,7 +408,8 @@ export class ArchiveEngine implements ConversionEngine{
     files:Array<{blob:Blob;path:string;lastModified?:number|null}>,
     targetFormatId:string,
     outputHandle?:FileSystemFileHandle,
-    onProgress?:(progress:number,stage:string)=>void
+    onProgress?:(progress:number,stage:string)=>void,
+    signal?:AbortSignal
   ):Promise<{blob:Blob;outputInWorkspace:boolean}>{
     const mapping:Record<string,{format:ArchiveFormat;compression:ArchiveCompression}>={
       "7z":{format:ArchiveFormat.SEVEN_ZIP,compression:ArchiveCompression.LZMA},
@@ -410,6 +421,7 @@ export class ArchiveEngine implements ConversionEngine{
     const config=mapping[targetFormatId];
     if(!config) throw new Error("ARCHIVE_TARGET_UNSUPPORTED: Unsupported libarchive output.");
 
+    signal?.throwIfAborted?.();
     onProgress?.(.05,"Preparing archive writer");
     const inputFiles=files.map(item=>({
       file:new File([item.blob],basename(item.path),{
