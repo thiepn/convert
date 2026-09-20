@@ -507,6 +507,10 @@ export class App {
         repair:"Rewrite PDF structure with qpdf",
         "export-images":"Render selected pages locally with PDF.js",
         "extract-text":"Extract positioned PDF text locally",
+        "reconstruct-docx":"Editable reconstruction: PDF text → DOCX",
+        "reconstruct-markdown":"Editable reconstruction: PDF text → Markdown",
+        "reconstruct-html":"Editable reconstruction: PDF text → HTML",
+        "reconstruct-odt":"Editable reconstruction: PDF text → ODT",
         ocr:"Render → Tesseract OCR → searchable PDF pages",
         split:"Create selected page groups without rasterizing",
         rotate:"Rotate page metadata/content without rasterizing",
@@ -529,6 +533,9 @@ export class App {
       }
       if(operation==="merge"&&this.files.length<2) warnings.push("Select at least two PDF files to merge.");
       if(operation==="ocr") warnings.push("OCR assets and selected language data are self-hosted and processed locally.");
+      if(operation.startsWith("reconstruct-")){
+        warnings.push("Editable reconstruction preserves reading text, not exact PDF layout, fonts, floating objects, headers/footers, or pagination.");
+      }
       this.renderWarnings("loss-warnings",warnings);
       return;
     }
@@ -653,18 +660,20 @@ export class App {
 
     const imageOptions=this.kind==="image"?this.readImageOptions():null;
     const mediaOptions=this.kind==="media"?this.readMediaOptions():null;
+    const documentOptions=this.kind==="document"?await this.readDocumentOptions():null;
     if(mediaOptions){
       const validation=this.validateMediaOptions(mediaOptions);
       if(validation){this.renderWarnings("loss-warnings",[validation]);return;}
     }
 
-    await this.runGenericBatch(targetId,imageOptions,mediaOptions);
+    await this.runGenericBatch(targetId,imageOptions,mediaOptions,documentOptions);
   }
 
   private async runGenericBatch(
     targetId:string,
     imageOptions:ImageConversionOptions|null,
-    mediaOptions:MediaConversionOptions|null
+    mediaOptions:MediaConversionOptions|null,
+    documentOptions:DocumentConversionOptions|null
   ){
     const button=element<HTMLButtonElement>("convert-button");
     const cancel=element<HTMLButtonElement>("cancel-button");
@@ -679,7 +688,7 @@ export class App {
       for(let index=0;index<this.files.length;index++){
         const file=this.files[index];
         try{
-          const options=(imageOptions??mediaOptions) as unknown as Record<string,unknown>;
+          const options=(imageOptions??mediaOptions??documentOptions??{}) as unknown as Record<string,unknown>;
           const quality=this.kind==="image"?Number(element<HTMLSelectElement>("image-quality").value):.82;
           const output=await this.jobs.convert(file,targetId,quality,options,snapshot=>{
             const overall=(index+snapshot.progress)/this.files.length;
@@ -798,6 +807,41 @@ export class App {
           this.setProgress(.2,"Extracting PDF text");
           const result=await this.pdfEngine.extractText(source,password);
           outputs.push({name:base+".txt",blob:new Blob([result.text],{type:"text/plain;charset=utf-8"}),warnings:[]});
+        }else if(operation.startsWith("reconstruct-")){
+          const targetMap:Record<string,string>={
+            "reconstruct-docx":"docx",
+            "reconstruct-markdown":"markdown",
+            "reconstruct-html":"html-doc",
+            "reconstruct-odt":"odt"
+          };
+          const targetId=targetMap[operation];
+          const docOptions:DocumentConversionOptions={
+            routePreference:"semantic",
+            trackChanges:"all",
+            assets:"extract",
+            standalone:true,
+            tableOfContents:false,
+            preserveComments:true
+          };
+          const output=await this.jobs.convert(
+            source,
+            targetId,
+            .9,
+            {...docOptions,password} as unknown as Record<string,unknown>,
+            snapshot=>this.setProgress(snapshot.progress,snapshot.stage)
+          );
+          outputs.push({
+            name:base+"-reconstructed."+(this.formats.get(targetId)?.extensions[0]??targetId),
+            blob:output.blob,
+            warnings:output.warnings
+          });
+          for(const extra of output.extraFiles??[]){
+            outputs.push({
+              name:base+"-assets-"+sanitizeFilename(extra.name.replaceAll("/","-")),
+              blob:extra.blob,
+              warnings:[]
+            });
+          }
         }else if(operation==="export-images"){
           const detail=await this.ensurePdfDetail();
           const pages=this.parsePageSpec(element<HTMLInputElement>("pdf-pages").value,detail.pages);
@@ -864,7 +908,21 @@ export class App {
   }
 
   private async renderResults(outputs:ConversionOutput[],failed:Array<{name:string;error:string}>){
-    this.showBlobResults(outputs.map(o=>({name:o.fileName,blob:o.blob,warnings:o.warnings,release:o.release})),failed);
+    const expanded:Array<{name:string;blob:Blob;warnings:string[];release?:()=>Promise<void>}>=[];
+
+    for(const output of outputs){
+      expanded.push({name:output.fileName,blob:output.blob,warnings:output.warnings,release:output.release});
+      const prefix=sanitizeFilename(stem(output.fileName));
+      for(const extra of output.extraFiles??[]){
+        expanded.push({
+          name:prefix+"-assets-"+sanitizeFilename(extra.name.replaceAll("/","-")),
+          blob:extra.blob,
+          warnings:[]
+        });
+      }
+    }
+
+    this.showBlobResults(expanded,failed);
   }
 
   private showBlobResults(
@@ -919,6 +977,8 @@ export class App {
       ["Image engine",this.imageEngine.isAvailable()],
       ["Media engine",this.mediaEngine.isAvailable()],
       ["PDF engine",this.pdfEngine.isAvailable()],
+      ["Semantic documents",this.pandocDocumentEngine.isAvailable()],
+      ["Office fidelity",this.officeDocumentEngine.isAvailable()],
       ["Local OCR","English · German · French · Turkish · Korean"],
       ["WebCodecs",profile.webCodecs],
       ["H.264 decode / encode",profile.codecs.h264.decode+" / "+profile.codecs.h264.encode],
@@ -942,12 +1002,14 @@ export class App {
       node.append(caption,strong);container.append(node);
     }
 
-    element("runtime-status").textContent=this.pdfEngine.isAvailable()?"Phase 3 ready":"PDF degraded";
+    element("runtime-status").textContent=this.pandocDocumentEngine.isAvailable()?"Phase 4 ready":"Documents degraded";
     element("capability-json").textContent=JSON.stringify({
       ...profile,
       imageEngine:this.imageEngine.isAvailable()?"wasm-vips":"browser fallback",
       mediaEngine:this.mediaEngine.isAvailable()?"Mediabunny 1.58.0":"unavailable",
-      pdfEngine:this.pdfEngine.isAvailable()?"PDF.js + pdf-lib + qpdf + Tesseract":"unavailable"
+      pdfEngine:this.pdfEngine.isAvailable()?"PDF.js + pdf-lib + qpdf + Tesseract":"unavailable",
+      semanticDocumentEngine:this.pandocDocumentEngine.isAvailable()?"Pandoc WASM 3.9":"unavailable",
+      fidelityDocumentEngine:this.officeDocumentEngine.isAvailable()?"LibreOffice WASM (lazy)":"unavailable"
     },null,2);
   }
 }
