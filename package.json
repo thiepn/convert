@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "libheif-js": "1.23.2",
     "wasm-vips": "0.0.18"
   },
   "devDependencies": {
