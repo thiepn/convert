@@ -30,6 +30,7 @@ import {
   SpreadsheetOutputValidator,
   DataOutputValidator,
   DatabaseOutputValidator,
+  SpecialistOutputValidator,
   UniversalOutputValidator
 } from "../core/validation/Validator";
 import { BrowserImageEngine } from "../engines/browser-image/BrowserImageEngine";
@@ -44,8 +45,16 @@ import { ArchiveEngine } from "../engines/archive/ArchiveEngine";
 import { SpreadsheetEngine } from "../engines/data/SpreadsheetEngine";
 import { DuckDbDataEngine } from "../engines/data/DuckDbDataEngine";
 import { SqliteEngine } from "../engines/data/SqliteEngine";
+import { SubtitleEngine } from "../engines/specialist/SubtitleEngine";
+import { MeshEngine } from "../engines/specialist/MeshEngine";
+import { RawPreviewEngine } from "../engines/specialist/RawPreviewEngine";
+import { ScientificMetadataEngine } from "../engines/specialist/ScientificMetadataEngine";
+import { Fb2Engine } from "../engines/specialist/Fb2Engine";
+import { LayeredImageEngine } from "../engines/specialist/LayeredImageEngine";
+import { FontEngine } from "../engines/specialist/FontEngine";
+import { LegacyMediaEngine } from "../engines/specialist/LegacyMediaEngine";
 
-type SelectionKind="image"|"media"|"pdf"|"document"|"archive"|"archive-build"|"spreadsheet"|"data"|"database"|null;
+type SelectionKind="image"|"media"|"pdf"|"document"|"archive"|"archive-build"|"spreadsheet"|"data"|"database"|"specialist"|null;
 type ResultLease={url:string;release?:()=>Promise<void>};
 
 function element<T extends HTMLElement>(id:string):T {
@@ -105,6 +114,14 @@ export class App {
   private readonly spreadsheetEngine=new SpreadsheetEngine();
   private readonly duckDbDataEngine=new DuckDbDataEngine();
   private readonly sqliteEngine=new SqliteEngine();
+  private readonly subtitleEngine=new SubtitleEngine();
+  private readonly meshEngine=new MeshEngine();
+  private readonly rawPreviewEngine=new RawPreviewEngine();
+  private readonly scientificMetadataEngine=new ScientificMetadataEngine();
+  private readonly fb2Engine=new Fb2Engine();
+  private readonly layeredImageEngine=new LayeredImageEngine();
+  private readonly fontEngine=new FontEngine();
+  private readonly legacyMediaEngine=new LegacyMediaEngine();
   private readonly planner:ConversionPlanner;
   private readonly jobs:JobManager;
 
@@ -135,6 +152,14 @@ export class App {
     this.engines.register(this.spreadsheetEngine);
     this.engines.register(this.duckDbDataEngine);
     this.engines.register(this.sqliteEngine);
+    this.engines.register(this.subtitleEngine);
+    this.engines.register(this.meshEngine);
+    this.engines.register(this.rawPreviewEngine);
+    this.engines.register(this.scientificMetadataEngine);
+    this.engines.register(this.fb2Engine);
+    this.engines.register(this.layeredImageEngine);
+    this.engines.register(this.fontEngine);
+    this.engines.register(this.legacyMediaEngine);
     this.planner=new ConversionPlanner(this.graph,this.formats,this.engines);
 
     const validator=new UniversalOutputValidator(
@@ -152,7 +177,8 @@ export class App {
         this.formats,
         (blob,formatId,options)=>this.duckDbDataEngine.inspect(blob,formatId,options as Partial<DataConversionOptions>)
       ),
-      new DatabaseOutputValidator(this.formats,blob=>this.sqliteEngine.inspect(blob))
+      new DatabaseOutputValidator(this.formats,blob=>this.sqliteEngine.inspect(blob)),
+      new SpecialistOutputValidator(this.formats)
     );
     this.jobs=new JobManager(this.formats,this.engines,this.planner,validator);
   }
@@ -226,6 +252,7 @@ export class App {
     if(category==="spreadsheet") return "spreadsheet";
     if(category==="data") return "data";
     if(category==="database") return "database";
+    if(["layered","raw","font","subtitle","model","vector","scientific","ebook-legacy"].includes(category??"")) return "specialist";
     return null;
   }
 
@@ -413,7 +440,7 @@ export class App {
     element("metadata-control").classList.toggle(
       "hidden",
       this.kind==="document"||this.kind==="archive"||this.kind==="archive-build"
-        ||this.kind==="spreadsheet"||this.kind==="data"||this.kind==="database"
+        ||this.kind==="spreadsheet"||this.kind==="data"||this.kind==="database"||this.kind==="specialist"
     );
     element("pdf-controls").classList.toggle("hidden",this.kind!=="pdf");
     element("archive-pack-selection-button").classList.toggle(
@@ -795,7 +822,13 @@ export class App {
               ? (source&&targets.includes(source)?source:targets.includes("parquet")?"parquet":source)
               : this.kind==="database"
                 ? (targets.includes("sqlite")?"sqlite":targets.includes("csv")?"csv":source)
-                : source;
+                : this.kind==="specialist"
+                  ? (source==="psd"?(targets.includes("png")?"png":targets[0])
+                    :source==="camera-raw"?"jpeg"
+                    :source==="fits"?"json-data"
+                    :source==="fb2"?(targets.includes("docx")?"docx":targets.includes("html-doc")?"html-doc":targets[0])
+                    :source&&targets.includes(source)?source:targets[0])
+                  : source;
 
     if(preferred&&targets.includes(preferred)) select.value=preferred;
     else if(this.kind==="media"&&targets.includes("mp4")) select.value="mp4";
@@ -1126,15 +1159,40 @@ export class App {
           +" · "+[...new Set(routes.flatMap(r=>r.edges.map(e=>
             e.engineId==="vips-image"?"libvips/WASM":e.engineId==="pdf-engine"?"PDF engine":"browser fallback"
           )))].join(" + ")+" · local only";
-      }else if(this.files.length===1){
-        box.textContent="Inspecting stream-copy compatibility…";
-        const mediaPlan=await this.mediaEngine.plan(this.files[0],targetId,this.readMediaOptions());
-        if(revision!==this.routeRevision) return;
-        const mode=mediaPlan.mode==="remux"?"Lossless stream copy / remux":mediaPlan.mode==="partial-transcode"?"Partial transcode":"Transcode required";
-        box.textContent=mode+" · "+mediaPlan.copyableTracks+"/"+mediaPlan.selectedTracks+" selected tracks directly copyable · OPFS streaming output";
-        warnings.push(...mediaPlan.warnings);
+      }else if(this.kind==="media"){
+        const usesLegacy=routes.some(route=>route.edges.some(edge=>edge.engineId==="ffmpeg-legacy"));
+        if(usesLegacy){
+          box.textContent=(this.files.length>1?this.files.length+" legacy media files · ":"")
+            +(this.formats.get(targetId)?.name??targetId)
+            +" · FFmpeg WASM compatibility transcode · local only";
+          warnings.push("Legacy AVI/FLV/ASF/WMV/WMA routes lazy-load FFmpeg WASM and are memory-backed. They do not use the primary streaming Mediabunny path.");
+        }else if(this.files.length===1){
+          box.textContent="Inspecting stream-copy compatibility…";
+          const mediaPlan=await this.mediaEngine.plan(this.files[0],targetId,this.readMediaOptions());
+          if(revision!==this.routeRevision) return;
+          const mode=mediaPlan.mode==="remux"?"Lossless stream copy / remux":mediaPlan.mode==="partial-transcode"?"Partial transcode":"Transcode required";
+          box.textContent=mode+" · "+mediaPlan.copyableTracks+"/"+mediaPlan.selectedTracks+" selected tracks directly copyable · OPFS streaming output";
+          warnings.push(...mediaPlan.warnings);
+        }else{
+          box.textContent=this.files.length+" media files · copy/transcode route assessed per file · OPFS streaming output";
+        }
       }else{
-        box.textContent=this.files.length+" media files · copy/transcode route assessed per file · OPFS streaming output";
+        const labels:Record<string,string>={
+          "psd-layered":"PSD composite flattening",
+          "raw-preview":"embedded RAW JPEG preview",
+          "subtitle-compat":"subtitle semantics",
+          "mesh-compat":"triangle-mesh converter",
+          "font-compat":"fonteditor-core",
+          "fb2-compat":"FB2 semantic extraction",
+          "scientific-metadata":"FITS metadata extractor"
+        };
+        const engines=[...new Set(routes.flatMap(route=>route.edges.map(edge=>labels[edge.engineId]??edge.engineId)))];
+        box.textContent=(this.files.length>1?this.files.length+" files · ":"")
+          +(this.formats.get(targetId)?.name??targetId)+" · "+engines.join(" → ")+" · specialist local route";
+        const sourceIds=new Set(uniqueSources);
+        if(sourceIds.has("camera-raw")) warnings.push("RAW conversion extracts an embedded camera JPEG preview; it does not develop sensor data.");
+        if(sourceIds.has("psd")) warnings.push("PSD conversion flattens the composite image and cannot preserve editable layers.");
+        if(sourceIds.has("fits")) warnings.push("FITS conversion exports header metadata only; numerical payloads are intentionally left untouched.");
       }
       this.renderWarnings("loss-warnings",[...new Set(warnings)]);
     }catch(error){
@@ -1670,6 +1728,13 @@ export class App {
       ["Spreadsheet engine",this.spreadsheetEngine.isAvailable()],
       ["Structured data",this.duckDbDataEngine.isAvailable()],
       ["SQLite engine",this.sqliteEngine.isAvailable()],
+      ["PSD compatibility",this.layeredImageEngine.isAvailable()],
+      ["Legacy media fallback",this.legacyMediaEngine.isAvailable()],
+      ["Font conversion",this.fontEngine.isAvailable()],
+      ["Subtitle conversion",this.subtitleEngine.isAvailable()],
+      ["Mesh conversion",this.meshEngine.isAvailable()],
+      ["RAW preview extraction",this.rawPreviewEngine.isAvailable()],
+      ["Scientific metadata",this.scientificMetadataEngine.isAvailable()],
       ["Local OCR","English · German · French · Turkish · Korean"],
       ["WebCodecs",profile.webCodecs],
       ["H.264 decode / encode",profile.codecs.h264.decode+" / "+profile.codecs.h264.encode],
@@ -1693,9 +1758,12 @@ export class App {
       node.append(caption,strong);container.append(node);
     }
 
-    element("runtime-status").textContent=this.duckDbDataEngine.isAvailable()&&this.sqliteEngine.isAvailable()
-      ?"Phase 6 ready"
-      :"Data engines degraded";
+    element("runtime-status").textContent=this.duckDbDataEngine.isAvailable()
+      &&this.sqliteEngine.isAvailable()
+      &&this.subtitleEngine.isAvailable()
+      &&this.meshEngine.isAvailable()
+      ?"Phase 7 ready"
+      :"One or more local engines degraded";
     element("capability-json").textContent=JSON.stringify({
       ...profile,
       imageEngine:this.imageEngine.isAvailable()?"wasm-vips":"browser fallback",
@@ -1706,7 +1774,11 @@ export class App {
       archiveEngine:this.archiveEngine.isAvailable()?"zip.js 2.16.0 + libarchive.js 2.0.2":"unavailable",
       spreadsheetEngine:this.spreadsheetEngine.isAvailable()?"SheetJS CE 0.20.3":"unavailable",
       structuredDataEngine:this.duckDbDataEngine.isAvailable()?"DuckDB-Wasm 1.32.0":"unavailable",
-      sqliteEngine:this.sqliteEngine.isAvailable()?"sql.js 1.14.2":"unavailable"
+      sqliteEngine:this.sqliteEngine.isAvailable()?"sql.js 1.14.2":"unavailable",
+      psdEngine:this.layeredImageEngine.isAvailable()?"ag-psd 31.0.2":"unavailable",
+      legacyMediaEngine:this.legacyMediaEngine.isAvailable()?"FFmpeg WASM 0.12.10 (lazy)":"unavailable",
+      fontEngine:this.fontEngine.isAvailable()?"fonteditor-core 2.6.3":"unavailable",
+      specialistNativeEngines:"subtitles + meshes + RAW preview + FITS metadata + FB2"
     },null,2);
   }
 }
