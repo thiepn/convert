@@ -20,6 +20,11 @@ describe("archive security",()=>{
     expect(normalizeArchivePath("./folder\\file.txt")).toBe("folder/file.txt");
   });
 
+  it("keeps prototype-looking names as opaque paths without object traversal",()=>{
+    expect(normalizeArchivePath("__proto__/payload.txt")).toBe("__proto__/payload.txt");
+    expect(normalizeArchivePath("constructor/data.bin")).toBe("constructor/data.bin");
+  });
+
   it("rejects traversal and absolute paths",()=>{
     expect(()=>normalizeArchivePath("../evil.txt")).toThrow(/ARCHIVE_PATH_UNSAFE/);
     expect(()=>normalizeArchivePath("/etc/passwd")).toThrow(/ARCHIVE_PATH_UNSAFE/);
