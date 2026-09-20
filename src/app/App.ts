@@ -147,6 +147,7 @@ export class App {
   private kind:SelectionKind=null;
   private leases:ResultLease[]=[];
   private routeRevision=0;
+  private selectionRevision=0;
   private batchPackageResults=true;
 
   constructor(){
@@ -261,6 +262,7 @@ export class App {
     element<HTMLButtonElement>("cancel-button").addEventListener("click",()=>{
       this.batchRunner.cancel();
       this.jobs.cancelAll();
+      this.pdfEngine.cancelActive();
       this.archiveAbort?.abort();
     });
   }
@@ -284,6 +286,7 @@ export class App {
   private async resetSelection(){
     this.batchRunner.cancel();
     this.jobs.cancelAll();
+    this.pdfEngine.cancelActive();
     this.archiveAbort?.abort();
     await this.batchRunner.releaseSession();
     await this.releaseResults();
@@ -301,6 +304,7 @@ export class App {
     this.archiveDetail=null;
     this.kind=null;
     this.routeRevision++;
+    this.selectionRevision++;
 
     const input=element<HTMLInputElement>("file-input");
     input.value="";
@@ -338,6 +342,7 @@ export class App {
   private async loadFiles(files:File[]){
     await this.batchRunner.releaseSession();
     await this.releaseResults();
+    const selectionRevision=++this.selectionRevision;
     this.files=files;
     this.imageDetail=null;
     this.mediaDetail=null;
@@ -348,6 +353,7 @@ export class App {
     this.dataDetail=null;
     this.databaseDetail=null;
     this.inspections=await Promise.all(files.map(file=>inspectFile(file,this.formats)));
+    if(selectionRevision!==this.selectionRevision) return;
 
     const kinds=new Set(this.inspections.map(i=>this.getKind(i)).filter(Boolean) as Exclude<SelectionKind,null>[]);
     const allKnown=this.inspections.every(item=>Boolean(item.detection.format));
@@ -456,6 +462,8 @@ export class App {
         }
       }
     }
+
+    if(selectionRevision!==this.selectionRevision) return;
 
     this.populateDataSelectors();
     if(this.kind==="database"&&this.databaseDetail?.tables.length){
@@ -1798,7 +1806,8 @@ export class App {
 
   private async createCombinedImagePdf(){
     const button=element<HTMLButtonElement>("convert-button");
-    button.disabled=true;
+    const cancel=element<HTMLButtonElement>("cancel-button");
+    button.disabled=true;cancel.classList.remove("hidden");
     await this.releaseResults();
     element("job-panel").classList.remove("hidden");
     const normalized:Array<PdfCreateImage>=[];
@@ -1827,6 +1836,7 @@ export class App {
       this.renderWarnings("loss-warnings",[error instanceof Error?error.message:String(error)]);
     }finally{
       for(const release of releases){try{await release();}catch{}}
+      cancel.classList.add("hidden");
       button.disabled=false;
     }
   }
@@ -1834,8 +1844,9 @@ export class App {
   private async runPdfOperation(){
     const operation=element<HTMLSelectElement>("pdf-operation").value;
     const button=element<HTMLButtonElement>("convert-button");
+    const cancel=element<HTMLButtonElement>("cancel-button");
     const panel=element("job-panel");
-    button.disabled=true;panel.classList.remove("hidden");
+    button.disabled=true;cancel.classList.remove("hidden");panel.classList.remove("hidden");
     await this.releaseResults();
     element("results").classList.add("hidden");
     element("results").replaceChildren();
@@ -1981,6 +1992,7 @@ export class App {
     }catch(error){
       this.renderWarnings("loss-warnings",[error instanceof Error?error.message:String(error)]);
     }finally{
+      cancel.classList.add("hidden");
       button.disabled=false;
     }
   }
