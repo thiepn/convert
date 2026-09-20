@@ -9,6 +9,7 @@ import {
   ArchiveCompression,
   ArchiveFormat
 } from "libarchive.js";
+import { RawLibarchiveSession } from "./RawLibarchiveSession";
 import type {
   ConversionEngine,
   ConversionEstimate,
@@ -253,15 +254,14 @@ export class ArchiveEngine implements ConversionEngine{
     sourceFormatId:string,
     password?:string
   ):Promise<DetailedArchiveInspection>{
-    const file=toFile(source,"archive."+sourceFormatId);
-    const archive=await Archive.open(file);
+    const session=await RawLibarchiveSession.open(toFile(source,"archive."+sourceFormatId),this.workerUrl);
     try{
-      const encrypted=await archive.hasEncryptedData();
-      if(password) await archive.usePassword(password);
+      const encrypted=await session.hasEncryptedData();
+      if(password) await session.usePassword(password);
 
-      let listed:any[];
+      let listed;
       try{
-        listed=await archive.getFilesArray();
+        listed=await session.listFiles();
       }catch(error){
         if(encrypted&&!password){
           throw new Error("ARCHIVE_PASSWORD_REQUIRED: Encrypted archive requires a password before its entries can be listed.");
@@ -269,39 +269,50 @@ export class ArchiveEngine implements ConversionEngine{
         throw error;
       }
 
-      const entries:ArchiveEntryInfo[]=listed.map((item:any)=>{
-        const parent=String(item.path??"").replaceAll("\\","/");
-        const name=String(item.file?.name??"file");
-        const path=(parent.endsWith("/")||!parent?parent:parent+"/")+name;
+      const warnings:string[]=[];
+      const entries:ArchiveEntryInfo[]=listed.map(item=>{
+        const rawType=String(item.type??"").toUpperCase();
+        const type:ArchiveEntryInfo["type"]=
+          rawType==="FILE"?"file":
+          rawType.includes("DIR")?"directory":
+          rawType.includes("LINK")?"symlink":
+          "other";
+        if(type==="symlink"||type==="other"){
+          warnings.push("Special archive entry will not be materialized: "+String(item.path??item.fileName));
+        }
         return {
-          path,
-          name,
-          size:Number(item.file?.size??0),
+          path:String(item.path??item.fileName??""),
+          name:String(item.fileName??basename(String(item.path??"file"))),
+          size:type==="file"?Number(item.size??0):0,
           compressedSize:null,
-          directory:false,
+          directory:type==="directory",
           encrypted:encrypted===null?null:Boolean(encrypted),
-          lastModified:Number.isFinite(item.file?.lastModified)?Math.floor(Number(item.file.lastModified)/1_000_000):null,
-          comment:null
+          lastModified:Number.isFinite(item.lastModified)?Math.floor(Number(item.lastModified)/1_000_000):null,
+          comment:null,
+          type
         };
       });
 
       const assessed=assessArchiveEntries(entries,source.size);
+      const materialized=assessed.normalized.filter(entry=>entry.type==="file");
       return {
         formatId:sourceFormatId,
-        files:assessed.normalized.length,
-        directories:0,
+        files:materialized.length,
+        directories:assessed.normalized.filter(entry=>entry.type==="directory").length,
         compressedSize:source.size,
-        expandedSize:assessed.expandedSize,
-        compressionRatio:source.size?assessed.expandedSize/source.size:1,
+        expandedSize:materialized.reduce((sum,entry)=>sum+entry.size,0),
+        compressionRatio:source.size
+          ?materialized.reduce((sum,entry)=>sum+entry.size,0)/source.size
+          :1,
         encrypted,
         passwordRequired:Boolean(encrypted)&&!password,
         entries:assessed.normalized,
         duplicatePaths:assessed.duplicatePaths,
-        warnings:assessed.warnings,
-        engine:"libarchive.js 2.0.2"
+        warnings:[...assessed.warnings,...warnings],
+        engine:"libarchive.js 2.0.2 raw worker RPC"
       };
     }finally{
-      await archive.close();
+      await session.close();
     }
   }
 
@@ -345,29 +356,35 @@ export class ArchiveEngine implements ConversionEngine{
     onProgress?:(progress:number,stage:string)=>void,
     signal?:AbortSignal
   ):Promise<ExtractedArchiveFile[]>{
-    const archive=await Archive.open(toFile(source,"archive."+sourceFormatId));
+    const session=await RawLibarchiveSession.open(toFile(source,"archive."+sourceFormatId),this.workerUrl);
     const outputs:ExtractedArchiveFile[]=[];
     try{
-      if(password) await archive.usePassword(password);
-      const entries=await archive.getFilesArray();
-      const targets=entries.filter((item:any)=>{
-        const parent=String(item.path??"").replaceAll("\\","/");
-        const path=normalizeArchivePath((parent.endsWith("/")||!parent?parent:parent+"/")+String(item.file?.name??"file"));
-        return !selected||selected.has(path);
-      });
+      if(password) await session.usePassword(password);
+      const entries=await session.listFiles();
+      const targets=entries
+        .filter(item=>String(item.type??"").toUpperCase()==="FILE")
+        .map(item=>({...item,safePath:normalizeArchivePath(String(item.path??item.fileName??"file"))}))
+        .filter(item=>!selected||selected.has(item.safePath));
+
       for(let index=0;index<targets.length;index++){
         signal?.throwIfAborted?.();
-        const item:any=targets[index];
-        const parent=String(item.path??"").replaceAll("\\","/");
-        const path=normalizeArchivePath((parent.endsWith("/")||!parent?parent:parent+"/")+String(item.file?.name??"file"));
-        onProgress?.(index/Math.max(1,targets.length),"Extracting "+path);
-        const file:File=await item.file.extract();
-        outputs.push({path,blob:file,lastModified:file.lastModified||null});
+        const item=targets[index];
+        onProgress?.(index/Math.max(1,targets.length),"Extracting "+item.safePath);
+        const extracted=await session.extractSingleFile(String(item.path));
+        if(!extracted?.fileData) throw new Error("ARCHIVE_EXTRACT_FAILED: "+item.safePath);
+        const blob=new Blob([extracted.fileData],{type:"application/octet-stream"});
+        outputs.push({
+          path:item.safePath,
+          blob,
+          lastModified:Number.isFinite(extracted.lastModified)
+            ?Math.floor(Number(extracted.lastModified)/1_000_000)
+            :null
+        });
       }
       onProgress?.(1,"Archive extracted");
       return outputs;
     }finally{
-      await archive.close();
+      await session.close();
     }
   }
 
