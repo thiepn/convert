@@ -1,3 +1,4 @@
+import { getDeviceProfile } from "../performance/DeviceProfile";
 import type { ArchiveEntryInfo } from "./types";
 
 export interface ArchiveSafetyAssessment {
@@ -81,13 +82,14 @@ export function assessArchiveEntries(
 }
 
 export function assertExtractionBudget(expandedSize:number,fileCount:number):void {
-  const mobile=typeof matchMedia==="function"&&matchMedia("(pointer: coarse)").matches;
-  const maxBytes=mobile?192*1024*1024:768*1024*1024;
-  const maxFiles=mobile?3000:15000;
-  if(expandedSize>maxBytes){
-    throw new Error("ARCHIVE_EXTRACTION_BUDGET: Extract-all would materialize too much data in browser memory. Select fewer entries.");
+  const profile=getDeviceProfile();
+  if(expandedSize>profile.maxArchiveExpandedBytes){
+    throw new Error(
+      "ARCHIVE_EXTRACTION_BUDGET: Extract-all would materialize more than "
+      +Math.floor(profile.maxArchiveExpandedBytes/(1024*1024))+" MiB on this "+profile.tier+" device. Select fewer entries."
+    );
   }
-  if(fileCount>maxFiles){
-    throw new Error("ARCHIVE_EXTRACTION_BUDGET: Too many files for one browser extraction result.");
+  if(fileCount>profile.maxArchiveFiles){
+    throw new Error("ARCHIVE_EXTRACTION_BUDGET: Too many files for one browser extraction result on this device.");
   }
 }
