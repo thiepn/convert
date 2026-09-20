@@ -4,7 +4,7 @@ A local-first universal browser file-conversion platform.
 
 ## Current status
 
-Phase 9 — Mobile, Performance & Large Files is implemented on top of the verified Phase 8 batch/pipeline stack.
+Thiepn Convert v1.0.0 is release-certified. Phase 10 — Universal UX, Hardening & Release completes the Phase 0–10 roadmap.
 
 ### Images
 
@@ -113,6 +113,21 @@ Phase 9 adds a centralized device profile and route-aware memory/storage preflig
 
 See docs/mobile-performance-large-files.md for exact behavior and remaining memory-backed boundaries.
 
+### Universal UX, hardening & release
+
+Phase 10 turns the Phase 9 engine stack into the stable v1.0 product:
+
+- human-readable error/recovery messages across engines
+- keyboard-operable file selection, skip navigation, visible focus, live progress and result semantics
+- explicit Start over cleanup and installed-app file-open handling
+- safe service-worker updates that wait for user activation
+- stricter local-only production CSP and framing protection
+- stable PWA identity and install icon
+- one reproducible `npm run release:certify` gate
+- release-contract tests, critical engine-asset verification, changelog, and certification documentation
+
+See docs/release-certification.md for the stable-release contract.
+
 ## Development
 
 Requirements: Node.js 22 or newer.
@@ -125,12 +140,13 @@ Checks:
     npm test
     npm run typecheck
     npm run build
+    npm run release:certify
 
 ## Privacy
 
 Conversion jobs do not upload files. Spreadsheet contents, database tables, SQL text, passwords, OCR data, document resources, fonts, archive entries, and generated outputs remain local to the browser.
 
-See docs/privacy-model.md, docs/architecture.md, docs/image-engine.md, docs/media-engine.md, docs/pdf-engine.md, docs/document-engine.md, docs/archive-engine.md, docs/data-engine.md, docs/specialist-engine.md, docs/batch-pipelines.md, and docs/mobile-performance-large-files.md.
+See docs/privacy-model.md, docs/architecture.md, docs/image-engine.md, docs/media-engine.md, docs/pdf-engine.md, docs/document-engine.md, docs/archive-engine.md, docs/data-engine.md, docs/specialist-engine.md, docs/batch-pipelines.md, docs/mobile-performance-large-files.md, and docs/release-certification.md.
 
 ## Licensing
 
@@ -148,3 +164,4 @@ Dependency/license metadata lives in licenses/dependencies.json. Notable compone
 - Phase 7: advanced and legacy format coverage — implemented
 - Phase 8: batch conversion and pipelines — implemented
 - Phase 9: mobile, performance, and large files — implemented
+- Phase 10: universal UX, hardening, and release — implemented
