@@ -2,6 +2,7 @@ import { FormatRegistry } from "../formats/FormatRegistry";
 import { inspectFile } from "../inspection/inspectFile";
 import type { DetailedMediaInspection } from "../media/types";
 import type { DetailedPdfInspection } from "../pdf/types";
+import type { DetailedDocumentInspection } from "../document/types";
 
 export interface ValidationResult {
   valid:boolean;
@@ -109,12 +110,51 @@ export class PdfOutputValidator implements OutputValidator {
   }
 }
 
+
+export class DocumentOutputValidator implements OutputValidator {
+  constructor(
+    private readonly formats:FormatRegistry,
+    private readonly probe:(blob:Blob,formatId:string)=>Promise<DetailedDocumentInspection>
+  ) {}
+
+  async validate(blob:Blob,targetFormatId:string,_options:Record<string,unknown>={}):Promise<ValidationResult>{
+    const target=this.formats.get(targetFormatId);
+    const errors:string[]=[];
+    if(blob.size===0) errors.push("Output is empty.");
+
+    const shallow=await inspectFile(
+      Object.assign(blob,{name:"output."+(target?.extensions[0]??"bin")}),
+      this.formats
+    );
+    if(shallow.detection.format?.id!==targetFormatId){
+      errors.push("Output format does not match the requested document type.");
+    }
+
+    let document:DetailedDocumentInspection|null=null;
+    try{document=await this.probe(blob,targetFormatId);}
+    catch(error){errors.push("Output document could not be reopened: "+(error instanceof Error?error.message:String(error)));}
+
+    return {
+      valid:errors.length===0,
+      errors,
+      properties:{
+        format:shallow.detection.format?.id,
+        size:blob.size,
+        paragraphs:document?.paragraphs??null,
+        slides:document?.slides??null,
+        packageEntries:document?.packageEntries??null
+      }
+    };
+  }
+}
+
 export class UniversalOutputValidator implements OutputValidator {
   constructor(
     private readonly formats:FormatRegistry,
     private readonly image:ImageOutputValidator,
     private readonly media:MediaOutputValidator,
-    private readonly pdf:PdfOutputValidator
+    private readonly pdf:PdfOutputValidator,
+    private readonly document:DocumentOutputValidator
   ) {}
 
   validate(blob:Blob,targetFormatId:string,options:Record<string,unknown>={}):Promise<ValidationResult>{
@@ -122,6 +162,7 @@ export class UniversalOutputValidator implements OutputValidator {
     if(category==="image") return this.image.validate(blob,targetFormatId,options);
     if(category==="audio"||category==="video") return this.media.validate(blob,targetFormatId,options);
     if(category==="pdf") return this.pdf.validate(blob,targetFormatId,options);
+    if(category==="document") return this.document.validate(blob,targetFormatId,options);
     return Promise.resolve({valid:blob.size>0,errors:blob.size?[]:["Output is empty."],properties:{size:blob.size}});
   }
 }
