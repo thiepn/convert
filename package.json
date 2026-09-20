@@ -1,6 +1,6 @@
 {
   "name": "thiepn-convert",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,8 +11,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@keeratita/heic-converter": "0.4.1",
     "@bjorn3/browser_wasi_shim": "0.4.2",
+    "@keeratita/heic-converter": "0.4.1",
     "@matbee/libreoffice-converter": "2.7.2",
     "@mediabunny/aac-encoder": "1.58.0",
     "@mediabunny/flac-encoder": "1.58.0",
@@ -22,8 +22,10 @@
     "@tesseract.js-data/fra": "1.0.0",
     "@tesseract.js-data/kor": "1.0.0",
     "@tesseract.js-data/tur": "1.0.0",
+    "@zip.js/zip.js": "2.16.0",
     "fflate": "0.8.3",
     "jszip": "3.10.1",
+    "libarchive.js": "2.0.2",
     "mediabunny": "1.58.0",
     "pandoc-wasm": "1.1.0",
     "pdf-lib": "1.17.1",
