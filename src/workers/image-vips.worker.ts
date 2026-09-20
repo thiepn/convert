@@ -263,7 +263,9 @@ scope.onmessage=async(event:MessageEvent<ImageWorkerRequest>)=>{
         jpeg:"image/jpeg",png:"image/png",webp:"image/webp",gif:"image/gif",
         tiff:"image/tiff",avif:"image/avif",jxl:"image/jxl"
       } as Record<string,string>)[request.targetFormatId] ?? "application/octet-stream";
-      const blob=new Blob([output],{type:mime});
+      const outputBuffer=new ArrayBuffer(output.byteLength);
+      new Uint8Array(outputBuffer).set(output);
+      const blob=new Blob([outputBuffer],{type:mime});
       send({type:"progress",requestId:request.requestId,progress:0.94,stage:"Finalizing"});
       send({type:"result",requestId:request.requestId,blob,width:image.width,height:image.height,warnings});
     } finally {
