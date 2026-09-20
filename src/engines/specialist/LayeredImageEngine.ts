@@ -1,5 +1,7 @@
 import { readPsd } from "ag-psd";
 import type { ConversionEngine,ConversionEstimate,EngineConvertRequest,EngineConvertResult } from "../../core/engines/Engine";
+import { assertDecodedImageBudget,assertMemoryBackedSource } from "../../core/performance/Budget";
+import { getDeviceProfile } from "../../core/performance/DeviceProfile";
 
 const OUTPUTS=new Set(["png","jpeg","webp"]);
 const MIME:Record<string,string>={png:"image/png",jpeg:"image/jpeg",webp:"image/webp"};
@@ -31,14 +33,22 @@ export class LayeredImageEngine implements ConversionEngine{
   canConvert(from:string,to:string):boolean{return from==="psd"&&OUTPUTS.has(to);}
 
   async estimate(source:Blob):Promise<ConversionEstimate>{
-    return {temporaryBytes:Math.max(192*1024*1024,source.size*6),outputBytes:null,notes:["PSD decoding materializes the composite bitmap and document structure in browser memory."]};
+    const memoryBytes=Math.max(192*1024*1024,source.size*6);
+    return {
+      temporaryBytes:memoryBytes,
+      memoryBytes,
+      workspaceBytes:Math.max(64*1024*1024,source.size),
+      outputBytes:null,
+      sourceAccess:"buffered",
+      outputAccess:"buffered",
+      notes:["PSD decoding materializes the composite bitmap and document structure in browser memory."]
+    };
   }
 
   async convert(request:EngineConvertRequest):Promise<EngineConvertResult>{
     if(!this.canConvert(request.sourceFormatId,request.targetFormatId)) throw new Error("PSD_ROUTE_UNSUPPORTED: Phase 7 supports PSD flattening to PNG, JPEG, or WebP.");
-    const mobile=typeof matchMedia==="function"&&matchMedia("(pointer: coarse)").matches;
-    const limit=mobile?80*1024*1024:256*1024*1024;
-    if(request.source.size>limit) throw new Error("PSD_SIZE_LIMIT: PSD exceeds this device's guarded browser decode limit.");
+    const profile=getDeviceProfile();
+    assertMemoryBackedSource(request.source.size,"PSD flattening",6,320*1024*1024,profile);
 
     request.onProgress?.(.15,"Reading PSD structure and composite");
     const buffer=await request.source.arrayBuffer();
@@ -50,10 +60,8 @@ export class LayeredImageEngine implements ConversionEngine{
     const headerWidth=header.getUint32(18,false);
     const channels=header.getUint16(12,false);
     const depth=header.getUint16(22,false);
-    const pixelLimit=mobile?48_000_000:120_000_000;
-    if(!headerWidth||!headerHeight||headerWidth*headerHeight>pixelLimit){
-      throw new Error("PSD_DIMENSION_LIMIT: PSD dimensions exceed this device's guarded decoded-pixel limit.");
-    }
+    if(!headerWidth||!headerHeight) throw new Error("PSD_DIMENSION_LIMIT: PSD dimensions are invalid.");
+    assertDecodedImageBudget(headerWidth,headerHeight,1,Math.max(4,channels*Math.max(1,depth/8)),profile);
     if(channels<1||channels>56||![1,8,16,32].includes(depth)){
       throw new Error("PSD_HEADER_INVALID: PSD channel count or bit depth is invalid.");
     }
