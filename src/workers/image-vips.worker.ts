@@ -1,7 +1,10 @@
 import type { DetailedImageInspection, ImageConversionOptions, MetadataPolicy } from "../core/image/types";
 import type { ImageWorkerRequest, ImageWorkerResponse } from "../engines/image/protocol";
 
-declare const self: DedicatedWorkerGlobalScope;
+const scope = globalThis as unknown as {
+  postMessage(message:ImageWorkerResponse):void;
+  onmessage:((event:MessageEvent<ImageWorkerRequest>)=>void)|null;
+};
 
 let vipsPromise: Promise<any> | null = null;
 let loadedBase = "";
