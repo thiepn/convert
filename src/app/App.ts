@@ -747,6 +747,7 @@ export class App {
 
   private readDataOptions():DataConversionOptions{
     return {
+      routePreference:"semantic",
       selectedTable:element<HTMLSelectElement>("data-table-select").value||undefined,
       delimiter:this.selectedDelimiter(),
       header:element<HTMLInputElement>("data-header").checked,
@@ -1027,7 +1028,9 @@ export class App {
         ? element<HTMLSelectElement>("document-route").value as "semantic"|"fidelity"
         : this.kind==="spreadsheet"
           ? element<HTMLSelectElement>("data-route").value as "semantic"|"fidelity"
-          : undefined;
+          : this.kind==="data"||this.kind==="database"
+            ? "semantic"
+            : undefined;
       const routes=uniqueSources.map(source=>this.planner.plan(source,targetId,routePreference));
       const warnings=[...new Set(routes.flatMap(route=>route.warnings.map(w=>w.message)))];
 
