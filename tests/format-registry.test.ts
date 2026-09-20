@@ -17,9 +17,24 @@ describe("FormatRegistry",()=>{
     expect(registry.detect(new TextEncoder().encode("\\documentclass{article}"),"x.bin").format?.id).toBe("latex");
   });
 
-  it("prefers specific document extensions over generic text MIME",()=>{
+  it("prefers specific text/data extensions over generic text MIME",()=>{
     expect(registry.detect(new TextEncoder().encode("# title"),"notes.md","text/plain").format?.id).toBe("markdown");
     expect(registry.detect(new TextEncoder().encode("= title"),"notes.typ","text/plain").format?.id).toBe("typst");
+    expect(registry.detect(new TextEncoder().encode("a;b\n1;2"),"data.csv","text/plain").format?.id).toBe("csv");
+    expect(registry.detect(new TextEncoder().encode('{"a":1}\n{"a":2}'),"rows.jsonl","text/plain").format?.id).toBe("jsonl");
+  });
+
+  it("recognizes Parquet, Arrow IPC, and SQLite signatures",()=>{
+    expect(registry.detect(new TextEncoder().encode("PAR1payload"),"x.bin").format?.id).toBe("parquet");
+    expect(registry.detect(new TextEncoder().encode("ARROW1payload"),"x.bin").format?.id).toBe("arrow");
+    const sqlite=new Uint8Array(32);
+    sqlite.set(new TextEncoder().encode("SQLite format 3"),0);
+    sqlite[15]=0;
+    expect(registry.detect(sqlite,"x.bin").format?.id).toBe("sqlite");
+  });
+
+  it("recognizes JSON from content",()=>{
+    expect(registry.detect(new TextEncoder().encode('{"name":"Jonathan"}'),"x.bin").format?.id).toBe("json-data");
   });
 
   it("detects PDF by its file header",()=>{

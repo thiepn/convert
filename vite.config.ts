@@ -35,7 +35,14 @@ export default defineConfig({
         { src: "node_modules/@matbee/libreoffice-converter/dist/browser.worker.global.js", dest: "engines/libreoffice", rename: "browser.worker.global.js" },
 
         { src: "node_modules/libarchive.js/dist/worker-bundle.js", dest: "engines/libarchive" },
-        { src: "node_modules/libarchive.js/dist/libarchive.wasm", dest: "engines/libarchive" }
+        { src: "node_modules/libarchive.js/dist/libarchive.wasm", dest: "engines/libarchive" },
+
+        { src: "node_modules/@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm", dest: "engines/duckdb" },
+        { src: "node_modules/@duckdb/duckdb-wasm/dist/duckdb-eh.wasm", dest: "engines/duckdb" },
+        { src: "node_modules/@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js", dest: "engines/duckdb" },
+        { src: "node_modules/@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js", dest: "engines/duckdb" },
+
+        { src: "node_modules/sql.js/dist/sql-wasm.wasm", dest: "engines/sqlite" }
       ]
     })
   ],

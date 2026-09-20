@@ -1,5 +1,5 @@
 {
-  "phase": 5,
+  "phase": 6,
   "reviewed_on": "2026-09-20",
   "dependencies": [
     {"name":"wasm-vips","version":"0.0.18","declared_license":"MIT","notes":"Image engine; preserve third-party notices."},
@@ -9,12 +9,17 @@
     {"name":"qpdf-run","version":"0.2.1","declared_license":"MIT","notes":"Browser wrapper around Apache-2.0 qpdf WASM."},
     {"name":"tesseract.js","version":"7.0.0","declared_license":"Apache-2.0","notes":"Local OCR orchestration."},
     {"name":"pandoc-wasm","version":"1.1.0","declared_license":"GPL-2.0-or-later","notes":"Includes official Pandoc 3.9 WASM. Distribution must satisfy applicable GPL obligations."},
-    {"name":"@matbee/libreoffice-converter","version":"2.7.2","declared_license":"MPL-2.0","notes":"Lazy browser LibreOffice fidelity engine."},
+    {"name":"@matbee/libreoffice-converter","version":"2.7.2","declared_license":"MPL-2.0","notes":"Lazy browser LibreOffice fidelity engine including Calc routes."},
     {"name":"@zip.js/zip.js","version":"2.16.0","declared_license":"BSD-3-Clause","notes":"ZIP/Zip64 streaming, AES encryption, and ZIP extraction."},
     {"name":"libarchive.js","version":"2.0.2","declared_license":"MIT","notes":"JavaScript browser wrapper around bundled libarchive WASM."},
-    {"name":"libarchive","version":"bundled by libarchive.js 2.0.2","declared_license":"BSD-style / per-file notices","notes":"Archive format implementation. Preserve upstream binary/source redistribution notices; individual bundled codec files may carry their own permissive terms."},
-    {"name":"comlink","version":"4.4.1","declared_license":"Apache-2.0","notes":"Direct RPC to the libarchive worker so entry paths can be validated before object materialization."},
+    {"name":"comlink","version":"4.4.1","declared_license":"Apache-2.0","notes":"Direct RPC to libarchive worker."},
+    {"name":"xlsx / SheetJS Community Edition","version":"0.20.3","declared_license":"Apache-2.0","notes":"Installed from SheetJS LLC official CDN tarball; workbook semantic conversion and inspection."},
+    {"name":"@duckdb/duckdb-wasm","version":"1.32.0","declared_license":"MIT","notes":"Stable local analytical engine for CSV/JSON/Parquet/Arrow."},
+    {"name":"DuckDB","version":"bundled by duckdb-wasm","declared_license":"MIT","notes":"Underlying analytical database implementation."},
+    {"name":"apache-arrow","version":"17.0.0","declared_license":"Apache-2.0","notes":"Pinned to the Arrow line used by stable DuckDB-Wasm for IPC conversion."},
+    {"name":"sql.js","version":"1.14.2","declared_license":"MIT","notes":"SQLite compiled to WebAssembly; database files are memory-backed."},
+    {"name":"SQLite","version":"bundled by sql.js","declared_license":"Public Domain","notes":"Embedded SQLite engine."},
     {"name":"fflate","version":"0.8.3","declared_license":"MIT","notes":"Document package inspection and bounded result ZIP packaging."},
-    {"name":"jszip","version":"3.10.1","declared_license":"MIT","notes":"Dependency of the LibreOffice converter package."}
+    {"name":"jszip","version":"3.10.1","declared_license":"MIT","notes":"Dependency of LibreOffice converter package."}
   ]
 }

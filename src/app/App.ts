@@ -6,6 +6,13 @@ import { createDefaultFormatRegistry } from "../core/formats/defaultFormats";
 import type { DetailedImageInspection, ImageConversionOptions } from "../core/image/types";
 import type { DetailedDocumentInspection, DocumentConversionOptions } from "../core/document/types";
 import type { ArchiveConversionOptions, DetailedArchiveInspection } from "../core/archive/types";
+import type {
+  DataConversionOptions,
+  DetailedDataInspection,
+  DetailedDatabaseInspection,
+  DetailedSpreadsheetInspection,
+  SpreadsheetConversionOptions
+} from "../core/data/types";
 import type { FileInspection } from "../core/inspection/inspectFile";
 import { inspectFile } from "../core/inspection/inspectFile";
 import { JobManager } from "../core/jobs/JobManager";
@@ -20,6 +27,9 @@ import {
   PdfOutputValidator,
   DocumentOutputValidator,
   ArchiveOutputValidator,
+  SpreadsheetOutputValidator,
+  DataOutputValidator,
+  DatabaseOutputValidator,
   UniversalOutputValidator
 } from "../core/validation/Validator";
 import { BrowserImageEngine } from "../engines/browser-image/BrowserImageEngine";
@@ -31,8 +41,11 @@ import { PandocDocumentEngine } from "../engines/document/PandocDocumentEngine";
 import { OfficeDocumentEngine } from "../engines/document/OfficeDocumentEngine";
 import { PdfReconstructionEngine } from "../engines/document/PdfReconstructionEngine";
 import { ArchiveEngine } from "../engines/archive/ArchiveEngine";
+import { SpreadsheetEngine } from "../engines/data/SpreadsheetEngine";
+import { DuckDbDataEngine } from "../engines/data/DuckDbDataEngine";
+import { SqliteEngine } from "../engines/data/SqliteEngine";
 
-type SelectionKind="image"|"media"|"pdf"|"document"|"archive"|"archive-build"|null;
+type SelectionKind="image"|"media"|"pdf"|"document"|"archive"|"archive-build"|"spreadsheet"|"data"|"database"|null;
 type ResultLease={url:string;release?:()=>Promise<void>};
 
 function element<T extends HTMLElement>(id:string):T {
@@ -89,6 +102,9 @@ export class App {
   private readonly officeDocumentEngine=new OfficeDocumentEngine();
   private readonly pdfReconstructionEngine=new PdfReconstructionEngine(this.pdfEngine,this.pandocDocumentEngine);
   private readonly archiveEngine=new ArchiveEngine();
+  private readonly spreadsheetEngine=new SpreadsheetEngine();
+  private readonly duckDbDataEngine=new DuckDbDataEngine();
+  private readonly sqliteEngine=new SqliteEngine();
   private readonly planner:ConversionPlanner;
   private readonly jobs:JobManager;
 
@@ -99,6 +115,9 @@ export class App {
   private pdfDetail:DetailedPdfInspection|null=null;
   private documentDetail:DetailedDocumentInspection|null=null;
   private archiveDetail:DetailedArchiveInspection|null=null;
+  private spreadsheetDetail:DetailedSpreadsheetInspection|null=null;
+  private dataDetail:DetailedDataInspection|null=null;
+  private databaseDetail:DetailedDatabaseInspection|null=null;
   private archiveAbort:AbortController|null=null;
   private kind:SelectionKind=null;
   private leases:ResultLease[]=[];
@@ -113,6 +132,9 @@ export class App {
     this.engines.register(this.officeDocumentEngine);
     this.engines.register(this.pdfReconstructionEngine);
     this.engines.register(this.archiveEngine);
+    this.engines.register(this.spreadsheetEngine);
+    this.engines.register(this.duckDbDataEngine);
+    this.engines.register(this.sqliteEngine);
     this.planner=new ConversionPlanner(this.graph,this.formats,this.engines);
 
     const validator=new UniversalOutputValidator(
@@ -124,7 +146,13 @@ export class App {
       new MediaOutputValidator(this.formats,blob=>this.mediaEngine.inspect(blob)),
       new PdfOutputValidator(this.formats,(blob,password)=>this.pdfEngine.inspect(blob,password)),
       new DocumentOutputValidator(this.formats,(blob,formatId)=>this.documentInspector.inspect(blob,formatId)),
-      new ArchiveOutputValidator(this.formats,(blob,formatId,password)=>this.archiveEngine.inspect(blob,formatId,password))
+      new ArchiveOutputValidator(this.formats,(blob,formatId,password)=>this.archiveEngine.inspect(blob,formatId,password)),
+      new SpreadsheetOutputValidator(this.formats,(blob,formatId)=>this.spreadsheetEngine.inspect(blob,formatId)),
+      new DataOutputValidator(
+        this.formats,
+        (blob,formatId,options)=>this.duckDbDataEngine.inspect(blob,formatId,options as Partial<DataConversionOptions>)
+      ),
+      new DatabaseOutputValidator(this.formats,blob=>this.sqliteEngine.inspect(blob))
     );
     this.jobs=new JobManager(this.formats,this.engines,this.planner,validator);
   }
@@ -162,12 +190,16 @@ export class App {
       "pdf-image-format","pdf-image-quality","pdf-dpi","pdf-ocr-language","pdf-ocr-pages",
       "pdf-rotation","document-route","document-track-changes","document-assets",
       "document-standalone","document-toc","archive-operation","archive-compression-level",
-      "archive-preserve-paths","archive-input-password","archive-output-password"
+      "archive-preserve-paths","archive-input-password","archive-output-password",
+      "data-route","data-sheet-policy","data-sheet-select","data-formula-mode",
+      "data-table-select","data-delimiter","data-header","data-query"
     ];
     for(const id of routeControls){
       element(id).addEventListener("change",()=>{
         if(id==="pdf-operation") this.updatePdfOptionVisibility();
         if(id==="archive-operation") this.updateArchiveOptionVisibility();
+        if(id==="data-sheet-policy") this.updateDataOptionVisibility();
+        if(id==="data-table-select") void this.refreshDatabasePreview();
         void this.renderRoute();
       });
     }
@@ -191,6 +223,9 @@ export class App {
     if(category==="pdf") return "pdf";
     if(category==="document") return "document";
     if(category==="archive") return "archive";
+    if(category==="spreadsheet") return "spreadsheet";
+    if(category==="data") return "data";
+    if(category==="database") return "database";
     return null;
   }
 
@@ -202,6 +237,9 @@ export class App {
     this.pdfDetail=null;
     this.documentDetail=null;
     this.archiveDetail=null;
+    this.spreadsheetDetail=null;
+    this.dataDetail=null;
+    this.databaseDetail=null;
     this.inspections=await Promise.all(files.map(file=>inspectFile(file,this.formats)));
 
     const kinds=new Set(this.inspections.map(i=>this.getKind(i)).filter(Boolean) as Exclude<SelectionKind,null>[]);
@@ -264,6 +302,19 @@ export class App {
             this.readArchiveOptions().inputPassword
           );
           warnings.push(...this.archiveDetail.warnings);
+        }else if(this.kind==="spreadsheet"){
+          this.spreadsheetDetail=await this.spreadsheetEngine.inspect(files[0],known[0].detection.format!.id);
+          warnings.push(...this.spreadsheetDetail.warnings);
+        }else if(this.kind==="data"){
+          this.dataDetail=await this.duckDbDataEngine.inspect(
+            files[0],
+            known[0].detection.format!.id,
+            this.readDataOptions()
+          );
+          warnings.push(...this.dataDetail.warnings);
+        }else if(this.kind==="database"){
+          this.databaseDetail=await this.sqliteEngine.inspect(files[0]);
+          warnings.push(...this.databaseDetail.warnings);
         }
       }catch(error){
         const message=error instanceof Error?error.message:String(error);
@@ -277,13 +328,22 @@ export class App {
       }
     }
 
+    this.populateDataSelectors();
+    if(this.kind==="database"&&this.databaseDetail?.tables.length){
+      const selected=this.databaseDetail.tables[0].name;
+      element<HTMLSelectElement>("data-table-select").value=selected;
+      this.dataDetail=await this.sqliteEngine.preview(this.files[0],selected).catch(()=>null);
+    }
+
     this.renderFacts();
     this.renderTracks();
     this.renderArchiveEntries();
+    this.renderDataPreview();
     this.renderWarnings("inspection-warnings",warnings);
     this.populateTargets();
     this.updatePdfOptionVisibility();
     this.updateArchiveOptionVisibility();
+    this.updateDataOptionVisibility();
     await this.renderRoute();
   }
 
@@ -349,7 +409,12 @@ export class App {
     element("media-controls").classList.toggle("hidden",this.kind!=="media");
     element("document-controls").classList.toggle("hidden",this.kind!=="document");
     element("archive-controls").classList.toggle("hidden",this.kind!=="archive"&&this.kind!=="archive-build");
-    element("metadata-control").classList.toggle("hidden",this.kind==="document"||this.kind==="archive"||this.kind==="archive-build");
+    element("data-controls").classList.toggle("hidden",this.kind!=="spreadsheet"&&this.kind!=="data"&&this.kind!=="database");
+    element("metadata-control").classList.toggle(
+      "hidden",
+      this.kind==="document"||this.kind==="archive"||this.kind==="archive-build"
+        ||this.kind==="spreadsheet"||this.kind==="data"||this.kind==="database"
+    );
     element("pdf-controls").classList.toggle("hidden",this.kind!=="pdf");
     element("archive-pack-selection-button").classList.toggle(
       "hidden",
@@ -414,6 +479,40 @@ export class App {
         ["Slides",this.documentDetail?.slides!=null?String(this.documentDetail.slides):"—"],
         ["Macros",this.documentDetail?(this.documentDetail.macros?"Detected / possible":"None detected"):"—"],
         ["Expanded size",this.documentDetail?.expandedSize!=null?formatBytes(this.documentDetail.expandedSize):"—"]
+      ];
+    }else if(this.kind==="spreadsheet"){
+      const firstSheet=this.spreadsheetDetail?.sheets[0];
+      const totalFormulas=(this.spreadsheetDetail?.sheets??[]).reduce((sum,sheet)=>sum+sheet.formulas,0);
+      const totalCells=(this.spreadsheetDetail?.sheets??[]).reduce((sum,sheet)=>sum+sheet.cells,0);
+      facts=[
+        ["Format",first?.detection.format?.name??"Spreadsheet"],
+        ["Size",formatBytes(total)],
+        ["Sheets",this.spreadsheetDetail?String(this.spreadsheetDetail.sheets.length):"—"],
+        ["Cells",this.spreadsheetDetail?totalCells.toLocaleString():"—"],
+        ["Formulas",this.spreadsheetDetail?totalFormulas.toLocaleString():"—"],
+        ["First sheet",firstSheet?.name??"—"],
+        ["Used range",firstSheet?.range??"—"],
+        ["Macros",this.spreadsheetDetail?(this.spreadsheetDetail.macros?"Detected":"None detected"):"—"]
+      ];
+    }else if(this.kind==="data"){
+      facts=[
+        ["Format",first?.detection.format?.name??"Data"],
+        ["Size",formatBytes(total)],
+        ["Rows",this.dataDetail?.rows==null?"—":this.dataDetail.rows.toLocaleString()],
+        ["Columns",this.dataDetail?String(this.dataDetail.columns.length):"—"],
+        ["Engine",this.dataDetail?.engine??"—"],
+        ["Preview rows",this.dataDetail?String(this.dataDetail.preview.length):"—"]
+      ];
+    }else if(this.kind==="database"){
+      facts=[
+        ["Format","SQLite"],
+        ["Size",formatBytes(total)],
+        ["Tables / views",this.databaseDetail?String(this.databaseDetail.tables.length):"—"],
+        ["User version",this.databaseDetail?.userVersion==null?"—":String(this.databaseDetail.userVersion)],
+        ["Application ID",this.databaseDetail?.applicationId==null?"—":String(this.databaseDetail.applicationId)],
+        ["Selected rows",this.dataDetail?.rows==null?"—":this.dataDetail.rows.toLocaleString()],
+        ["Selected columns",this.dataDetail?String(this.dataDetail.columns.length):"—"],
+        ["Engine",this.databaseDetail?.engine??"—"]
       ];
     }else if(this.kind==="archive"){
       facts=[
@@ -535,6 +634,130 @@ export class App {
       :"";
   }
 
+  private populateDataSelectors(){
+    const sheetSelect=element<HTMLSelectElement>("data-sheet-select");
+    sheetSelect.replaceChildren();
+    for(const sheet of this.spreadsheetDetail?.sheets??[]){
+      const option=document.createElement("option");
+      option.value=sheet.name;
+      option.textContent=sheet.name+(sheet.hidden?" · hidden":"");
+      sheetSelect.append(option);
+    }
+
+    const tableSelect=element<HTMLSelectElement>("data-table-select");
+    const previous=tableSelect.value;
+    tableSelect.replaceChildren();
+    for(const table of this.databaseDetail?.tables??[]){
+      const option=document.createElement("option");
+      option.value=table.name;
+      option.textContent=table.name+(table.type==="view"?" · view":"");
+      tableSelect.append(option);
+    }
+    if(previous&&[...tableSelect.options].some(option=>option.value===previous)) tableSelect.value=previous;
+  }
+
+  private async refreshDatabasePreview(){
+    if(this.kind!=="database"||this.files.length!==1) return;
+    const table=element<HTMLSelectElement>("data-table-select").value;
+    if(!table) return;
+    try{
+      this.dataDetail=await this.sqliteEngine.preview(this.files[0],table);
+      this.renderDataPreview();
+      await this.renderRoute();
+    }catch(error){
+      this.renderWarnings("inspection-warnings",[error instanceof Error?error.message:String(error)]);
+    }
+  }
+
+  private renderDataPreview(){
+    const container=element("data-preview");
+    container.replaceChildren();
+    if(!this.dataDetail||!this.dataDetail.columns.length){
+      container.classList.add("hidden");
+      return;
+    }
+    container.classList.remove("hidden");
+
+    const summary=document.createElement("div");
+    summary.className="data-preview-summary";
+    summary.textContent=(this.dataDetail.rows==null?"Unknown row count":this.dataDetail.rows.toLocaleString()+" row(s)")
+      +" · "+this.dataDetail.columns.length+" column(s)";
+
+    const wrap=document.createElement("div");
+    wrap.className="data-preview-scroll";
+    const table=document.createElement("table");
+    const head=document.createElement("thead");
+    const headRow=document.createElement("tr");
+    for(const column of this.dataDetail.columns.slice(0,30)){
+      const th=document.createElement("th");
+      th.textContent=column.name;
+      th.title=column.type+(column.nullable?" · nullable":"");
+      headRow.append(th);
+    }
+    head.append(headRow);
+    table.append(head);
+
+    const body=document.createElement("tbody");
+    for(const row of this.dataDetail.preview.slice(0,20)){
+      const tr=document.createElement("tr");
+      for(const column of this.dataDetail.columns.slice(0,30)){
+        const td=document.createElement("td");
+        const value=row[column.name];
+        td.textContent=value==null?"":typeof value==="object"?JSON.stringify(value):String(value);
+        tr.append(td);
+      }
+      body.append(tr);
+    }
+    table.append(body);
+    wrap.append(table);
+    container.append(summary,wrap);
+  }
+
+  private updateDataOptionVisibility(){
+    const active=this.kind==="spreadsheet"||this.kind==="data"||this.kind==="database";
+    element("data-controls").classList.toggle("hidden",!active);
+    if(!active) return;
+
+    const spreadsheet=this.kind==="spreadsheet";
+    const database=this.kind==="database";
+    element("data-route-wrap").classList.toggle("hidden",!spreadsheet);
+    element("data-sheet-policy-wrap").classList.toggle("hidden",!spreadsheet);
+    element("data-sheet-select-wrap").classList.toggle("hidden",!spreadsheet);
+    element("data-formula-wrap").classList.toggle("hidden",!spreadsheet);
+    element("data-table-select-wrap").classList.toggle("hidden",!database);
+
+    const policy=element<HTMLSelectElement>("data-sheet-policy").value;
+    element("data-sheet-select-wrap").classList.toggle("hidden",!spreadsheet||policy!=="selected");
+    element("data-query").toggleAttribute("disabled",false);
+  }
+
+  private selectedDelimiter():string{
+    const value=element<HTMLSelectElement>("data-delimiter").value;
+    return value==="\\t"?"\t":value;
+  }
+
+  private readSpreadsheetOptions():SpreadsheetConversionOptions & {query?:string}{
+    return {
+      routePreference:element<HTMLSelectElement>("data-route").value as SpreadsheetConversionOptions["routePreference"],
+      sheetPolicy:element<HTMLSelectElement>("data-sheet-policy").value as SpreadsheetConversionOptions["sheetPolicy"],
+      selectedSheet:element<HTMLSelectElement>("data-sheet-select").value||undefined,
+      formulaMode:element<HTMLSelectElement>("data-formula-mode").value as SpreadsheetConversionOptions["formulaMode"],
+      delimiter:this.selectedDelimiter(),
+      header:element<HTMLInputElement>("data-header").checked,
+      query:element<HTMLTextAreaElement>("data-query").value.trim()||undefined
+    };
+  }
+
+  private readDataOptions():DataConversionOptions{
+    return {
+      routePreference:"semantic",
+      selectedTable:element<HTMLSelectElement>("data-table-select").value||undefined,
+      delimiter:this.selectedDelimiter(),
+      header:element<HTMLInputElement>("data-header").checked,
+      query:element<HTMLTextAreaElement>("data-query").value.trim()||undefined
+    };
+  }
+
   private commonTargets():string[]{
     if(!this.files.length||!this.kind||this.kind==="pdf") return [];
     if(this.kind==="archive-build"){
@@ -566,12 +789,21 @@ export class App {
         ? (source==="mov"||source==="mkv"||source==="webm-media"?"mp4":source)
         : this.kind==="document"
           ? (["markdown","latex","typst","txt","html-doc","epub"].includes(source??"")?"docx":targets.includes("pdf")?"pdf":source)
-          : source;
+          : this.kind==="spreadsheet"
+            ? (source&&targets.includes(source)?source:targets.includes("xlsx")?"xlsx":source)
+            : this.kind==="data"
+              ? (source&&targets.includes(source)?source:targets.includes("parquet")?"parquet":source)
+              : this.kind==="database"
+                ? (targets.includes("sqlite")?"sqlite":targets.includes("csv")?"csv":source)
+                : source;
 
     if(preferred&&targets.includes(preferred)) select.value=preferred;
     else if(this.kind==="media"&&targets.includes("mp4")) select.value="mp4";
     else if(this.kind==="image"&&targets.includes("webp")) select.value="webp";
     else if(this.kind==="document"&&targets.includes("docx")) select.value="docx";
+    else if(this.kind==="spreadsheet"&&targets.includes("xlsx")) select.value="xlsx";
+    else if(this.kind==="data"&&targets.includes("parquet")) select.value="parquet";
+    else if(this.kind==="database"&&targets.includes("sqlite")) select.value="sqlite";
     else if((this.kind==="archive"||this.kind==="archive-build")&&targets.includes("zip")) select.value="zip";
 
     element<HTMLButtonElement>("convert-button").disabled=targets.length===0;
@@ -795,10 +1027,14 @@ export class App {
 
     try{
       const uniqueSources=[...new Set(this.inspections.map(i=>i.detection.format!.id))];
-      const documentPreference=this.kind==="document"
+      const routePreference=this.kind==="document"
         ? element<HTMLSelectElement>("document-route").value as "semantic"|"fidelity"
-        : undefined;
-      const routes=uniqueSources.map(source=>this.planner.plan(source,targetId,documentPreference));
+        : this.kind==="spreadsheet"
+          ? element<HTMLSelectElement>("data-route").value as "semantic"|"fidelity"
+          : this.kind==="data"||this.kind==="database"
+            ? "semantic"
+            : undefined;
+      const routes=uniqueSources.map(source=>this.planner.plan(source,targetId,routePreference));
       const warnings=[...new Set(routes.flatMap(route=>route.warnings.map(w=>w.message)))];
 
       if(this.kind==="document"){
@@ -811,8 +1047,8 @@ export class App {
         box.textContent=(this.files.length>1?this.files.length+" documents · ":"")
           +(this.formats.get(targetId)?.name??targetId)
           +" · "+engines.join(" → ")
-          +" · "+(documentPreference==="semantic"?"structure/editability priority":"appearance/layout priority");
-        if(documentPreference==="fidelity"){
+          +" · "+(routePreference==="semantic"?"structure/editability priority":"appearance/layout priority");
+        if(routePreference==="fidelity"){
           warnings.push("LibreOffice fidelity mode lazy-loads a large local WASM runtime on first use.");
         }
         if(this.documentDetail?.macros){
@@ -821,11 +1057,68 @@ export class App {
         if(this.documentDetail?.externalLinks){
           warnings.push("External links/resources are not fetched during conversion.");
         }
-        if(this.documentDetail?.fonts.length&&documentPreference==="fidelity"){
+        if(this.documentDetail?.fonts.length&&routePreference==="fidelity"){
           warnings.push("Layout fidelity depends on matching fonts; add local font files if substitutions change pagination.");
         }
         if(["markdown","txt"].includes(targetId)){
           warnings.push("The target cannot preserve page layout, floating objects, headers/footers, or presentation positioning.");
+        }
+      }else if(this.kind==="spreadsheet"||this.kind==="data"||this.kind==="database"){
+        const engineLabel=(engineId:string)=>
+          engineId==="sheetjs-spreadsheet"?"SheetJS"
+          :engineId==="duckdb-data"?"DuckDB-Wasm"
+          :engineId==="sqlite-data"?"sql.js / SQLite"
+          :engineId==="libreoffice-document"?"LibreOffice Calc WASM"
+          :engineId;
+        const engines=[...new Set(routes.flatMap(route=>route.edges.map(edge=>engineLabel(edge.engineId))))];
+        const usesLibreOffice=routes.some(route=>route.edges.some(edge=>edge.engineId==="libreoffice-document"));
+        box.textContent=(this.files.length>1?this.files.length+" files · ":"")
+          +(this.formats.get(targetId)?.name??targetId)
+          +" · "+engines.join(" → ")
+          +(this.kind==="spreadsheet"
+            ? " · "+(routePreference==="fidelity"?"appearance/layout priority":"data/formula priority")
+            : " · local structured-data pipeline");
+
+        const query=element<HTMLTextAreaElement>("data-query").value.trim();
+        const usesDuckDb=routes.some(route=>route.edges.some(edge=>edge.engineId==="duckdb-data"));
+        const usesSqlite=routes.some(route=>route.edges.some(edge=>edge.engineId==="sqlite-data"));
+        const queryApplied=usesDuckDb
+          ||(this.kind==="database"&&usesSqlite&&targetId!=="sqlite");
+        if(query&&!queryApplied){
+          warnings.push("The SQL transform is ignored by this route. Choose a DuckDB-backed target, or export a SQLite table to a flat/data target first.");
+        }
+        if(query&&queryApplied){
+          warnings.push("The optional SQL transform runs locally and is restricted to one SELECT/WITH query.");
+        }
+
+        if(this.kind==="spreadsheet"){
+          const flatTarget=["csv","tsv","json-data","jsonl","parquet","arrow","sqlite"].includes(targetId);
+          if(flatTarget){
+            warnings.push("Flat/data targets cannot preserve workbook layout, multiple-sheet presentation, charts, or cell styling.");
+          }
+          if(this.spreadsheetDetail?.macros){
+            warnings.push("VBA macro payload is never executed and is not preserved into Phase 6 output formats.");
+          }
+          if((this.spreadsheetDetail?.sheets??[]).some(sheet=>sheet.formulas>0)){
+            if(usesLibreOffice){
+              warnings.push("LibreOffice Calc may recalculate formulas and update cached results during fidelity conversion.");
+            }else{
+              warnings.push("SheetJS preserves formula expressions where supported but does not calculate workbook formulas.");
+            }
+          }
+          if(element<HTMLSelectElement>("data-sheet-policy").value==="all"&&["csv","tsv","json-data"].includes(targetId)){
+            warnings.push("All-sheet flat export returns the first sheet as the main output and additional sheets as sidecar files.");
+          }
+          if(usesLibreOffice){
+            warnings.push("LibreOffice spreadsheet fidelity mode lazy-loads the larger Calc WASM runtime on first use.");
+          }
+        }else if(this.kind==="database"){
+          warnings.push("SQLite is memory-backed in sql.js; database size and flat-export row counts are guarded.");
+          if(targetId!=="sqlite"){
+            warnings.push("Flat exports operate on the selected table unless a restricted SQL query is provided.");
+          }
+        }else{
+          warnings.push("DuckDB reads CSV/JSON/Parquet from the local browser file handle; Arrow IPC input is memory-gated.");
         }
       }else if(this.kind==="image"){
         box.textContent=(this.files.length>1?this.files.length+" files · ":"")
@@ -912,19 +1205,36 @@ export class App {
     const imageOptions=this.kind==="image"?this.readImageOptions():null;
     const mediaOptions=this.kind==="media"?this.readMediaOptions():null;
     const documentOptions=this.kind==="document"?await this.readDocumentOptions():null;
+    const spreadsheetOptions=this.kind==="spreadsheet"?this.readSpreadsheetOptions():null;
+    const dataOptions=(this.kind==="data"||this.kind==="database")?this.readDataOptions():null;
+    if(spreadsheetOptions?.sheetPolicy==="all"&&["parquet","arrow","sqlite","jsonl"].includes(targetId)){
+      this.renderWarnings("loss-warnings",[
+        "This target represents one logical table. Choose First sheet or Selected sheet instead of All sheets."
+      ]);
+      return;
+    }
     if(mediaOptions){
       const validation=this.validateMediaOptions(mediaOptions);
       if(validation){this.renderWarnings("loss-warnings",[validation]);return;}
     }
 
-    await this.runGenericBatch(targetId,imageOptions,mediaOptions,documentOptions);
+    await this.runGenericBatch(
+      targetId,
+      imageOptions,
+      mediaOptions,
+      documentOptions,
+      spreadsheetOptions,
+      dataOptions
+    );
   }
 
   private async runGenericBatch(
     targetId:string,
     imageOptions:ImageConversionOptions|null,
     mediaOptions:MediaConversionOptions|null,
-    documentOptions:DocumentConversionOptions|null
+    documentOptions:DocumentConversionOptions|null,
+    spreadsheetOptions:(SpreadsheetConversionOptions & {query?:string})|null,
+    dataOptions:DataConversionOptions|null
   ){
     const button=element<HTMLButtonElement>("convert-button");
     const cancel=element<HTMLButtonElement>("cancel-button");
@@ -939,7 +1249,14 @@ export class App {
       for(let index=0;index<this.files.length;index++){
         const file=this.files[index];
         try{
-          const options=(imageOptions??mediaOptions??documentOptions??{}) as unknown as Record<string,unknown>;
+          const options=(
+            imageOptions
+            ??mediaOptions
+            ??documentOptions
+            ??spreadsheetOptions
+            ??dataOptions
+            ??{}
+          ) as unknown as Record<string,unknown>;
           const quality=this.kind==="image"?Number(element<HTMLSelectElement>("image-quality").value):.82;
           const output=await this.jobs.convert(file,targetId,quality,options,snapshot=>{
             const overall=(index+snapshot.progress)/this.files.length;
@@ -1350,6 +1667,9 @@ export class App {
       ["Semantic documents",this.pandocDocumentEngine.isAvailable()],
       ["Office fidelity",this.officeDocumentEngine.isAvailable()],
       ["Archive engine",this.archiveEngine.isAvailable()],
+      ["Spreadsheet engine",this.spreadsheetEngine.isAvailable()],
+      ["Structured data",this.duckDbDataEngine.isAvailable()],
+      ["SQLite engine",this.sqliteEngine.isAvailable()],
       ["Local OCR","English · German · French · Turkish · Korean"],
       ["WebCodecs",profile.webCodecs],
       ["H.264 decode / encode",profile.codecs.h264.decode+" / "+profile.codecs.h264.encode],
@@ -1373,7 +1693,9 @@ export class App {
       node.append(caption,strong);container.append(node);
     }
 
-    element("runtime-status").textContent=this.archiveEngine.isAvailable()?"Phase 5 ready":"Archives degraded";
+    element("runtime-status").textContent=this.duckDbDataEngine.isAvailable()&&this.sqliteEngine.isAvailable()
+      ?"Phase 6 ready"
+      :"Data engines degraded";
     element("capability-json").textContent=JSON.stringify({
       ...profile,
       imageEngine:this.imageEngine.isAvailable()?"wasm-vips":"browser fallback",
@@ -1381,7 +1703,10 @@ export class App {
       pdfEngine:this.pdfEngine.isAvailable()?"PDF.js + pdf-lib + qpdf + Tesseract":"unavailable",
       semanticDocumentEngine:this.pandocDocumentEngine.isAvailable()?"Pandoc WASM 3.9":"unavailable",
       fidelityDocumentEngine:this.officeDocumentEngine.isAvailable()?"LibreOffice WASM (lazy)":"unavailable",
-      archiveEngine:this.archiveEngine.isAvailable()?"zip.js 2.16.0 + libarchive.js 2.0.2":"unavailable"
+      archiveEngine:this.archiveEngine.isAvailable()?"zip.js 2.16.0 + libarchive.js 2.0.2":"unavailable",
+      spreadsheetEngine:this.spreadsheetEngine.isAvailable()?"SheetJS CE 0.20.3":"unavailable",
+      structuredDataEngine:this.duckDbDataEngine.isAvailable()?"DuckDB-Wasm 1.32.0":"unavailable",
+      sqliteEngine:this.sqliteEngine.isAvailable()?"sql.js 1.14.2":"unavailable"
     },null,2);
   }
 }

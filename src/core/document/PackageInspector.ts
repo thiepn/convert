@@ -135,11 +135,14 @@ export async function detectPackagedDocument(blob:Blob):Promise<string|null>{
     const names=new Set(pkg.entries.map(entry=>entry.name));
     if(names.has("word/document.xml")) return names.has("word/vbaProject.bin")?"docm":"docx";
     if(names.has("ppt/presentation.xml")) return names.has("ppt/vbaProject.bin")?"pptm":"pptx";
+    if(names.has("xl/workbook.bin")) return "xlsb";
+    if(names.has("xl/workbook.xml")) return names.has("xl/vbaProject.bin")?"xlsm":"xlsx";
     if(names.has("META-INF/container.xml")&&pkg.entries.some(entry=>entry.name.endsWith(".opf"))) return "epub";
     if(names.has("mimetype")){
       const mimetype=(await pkg.readText("mimetype",1024))?.trim();
       if(mimetype==="application/vnd.oasis.opendocument.text") return "odt";
       if(mimetype==="application/vnd.oasis.opendocument.presentation") return "odp";
+      if(mimetype==="application/vnd.oasis.opendocument.spreadsheet") return "ods";
     }
     return null;
   }catch{

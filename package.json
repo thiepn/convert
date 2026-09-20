@@ -1,6 +1,6 @@
 {
   "name": "thiepn-convert",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@bjorn3/browser_wasi_shim": "0.4.2",
+    "@duckdb/duckdb-wasm": "1.32.0",
     "@keeratita/heic-converter": "0.4.1",
     "@matbee/libreoffice-converter": "2.7.2",
     "@mediabunny/aac-encoder": "1.58.0",
@@ -32,13 +33,17 @@
     "pdf-lib": "1.17.1",
     "pdfjs-dist": "6.3.289",
     "qpdf-run": "0.2.1",
+    "sql.js": "1.14.2",
     "tesseract.js": "7.0.0",
-    "wasm-vips": "0.0.18"
+    "wasm-vips": "0.0.18",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+    "apache-arrow": "17.0.0"
   },
   "devDependencies": {
     "typescript": "^5.9.2",
     "vite": "8.3.0",
     "vite-plugin-static-copy": "4.1.1",
-    "vitest": "5.0.1"
+    "vitest": "5.0.1",
+    "@types/sql.js": "1.4.11"
   }
 }

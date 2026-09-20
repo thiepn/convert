@@ -30,8 +30,14 @@ const OFFICE_WRITER_INPUTS=["doc","docx","odt","rtf","html-doc","txt","epub"];
 const OFFICE_WRITER_OUTPUTS=["pdf","docx","doc","odt","rtf","txt","html-doc"];
 const OFFICE_PRESENTATION_INPUTS=["ppt","pptx","odp"];
 const OFFICE_PRESENTATION_OUTPUTS=["pdf","pptx","ppt","odp","html-doc"];
+const OFFICE_SPREADSHEET_INPUTS=["xls","xlsx","ods","csv"];
+const OFFICE_SPREADSHEET_OUTPUTS=["pdf","xlsx","xls","ods","csv"];
 const ARCHIVE_INPUTS=["zip","7z","rar","tar","gzip","bzip2","xz","zstd","tar-gzip","tar-bzip2","tar-xz","cpio"];
 const ARCHIVE_OUTPUTS=["zip","7z","tar","tar-gzip","tar-bzip2","tar-xz"];
+const SHEET_INPUTS=["xlsx","xlsm","xlsb","xls","ods","fods","csv","tsv","json-data","jsonl"];
+const SHEET_OUTPUTS=["xlsx","xlsb","xls","ods","fods","csv","tsv","json-data"];
+const DATA_FORMATS=["csv","tsv","json-data","jsonl","parquet","arrow"];
+const SQLITE_OUTPUTS=["csv","tsv","json-data","jsonl"];
 
 function imageQualityLoss(target:string):number {
   if(target==="jpeg") return .12;
@@ -137,6 +143,20 @@ export function createConversionGraph():ConversionGraph {
     }
   }
 
+  for(const from of OFFICE_SPREADSHEET_INPUTS){
+    for(const to of OFFICE_SPREADSHEET_OUTPUTS){
+      edges.push({
+        from,to,engineId:"libreoffice-document",
+        qualityLoss:to==="pdf"||from===to?0:.015,
+        metadataLoss:[],
+        temporaryMultiplier:4,
+        streaming:false,
+        baseCost:5,
+        mode:"fidelity"
+      });
+    }
+  }
+
   for(const from of ARCHIVE_INPUTS){
     for(const to of ARCHIVE_OUTPUTS){
       edges.push({
@@ -149,6 +169,55 @@ export function createConversionGraph():ConversionGraph {
         mode:"neutral"
       });
     }
+  }
+
+  for(const from of SHEET_INPUTS){
+    for(const to of SHEET_OUTPUTS){
+      edges.push({
+        from,to,engineId:"sheetjs-spreadsheet",
+        qualityLoss:from===to?0:.02,
+        metadataLoss:["unsupported workbook styling/features"],
+        temporaryMultiplier:5,
+        streaming:false,
+        baseCost:8,
+        mode:"semantic"
+      });
+    }
+  }
+
+  for(const from of DATA_FORMATS){
+    for(const to of DATA_FORMATS){
+      edges.push({
+        from,to,engineId:"duckdb-data",
+        qualityLoss:0,
+        metadataLoss:[],
+        temporaryMultiplier:2,
+        streaming:false,
+        baseCost:6,
+        mode:"neutral"
+      });
+    }
+  }
+
+  edges.push({
+    from:"sqlite",to:"sqlite",engineId:"sqlite-data",
+    qualityLoss:0,metadataLoss:[],
+    temporaryMultiplier:3,streaming:false,baseCost:2,mode:"semantic"
+  });
+
+  for(const to of SQLITE_OUTPUTS){
+    edges.push({
+      from:"sqlite",to,engineId:"sqlite-data",
+      qualityLoss:0,metadataLoss:["indexes","constraints","triggers","multiple tables"],
+      temporaryMultiplier:3,streaming:false,baseCost:10,mode:"semantic"
+    });
+  }
+  for(const from of ["json-data","jsonl"]){
+    edges.push({
+      from,to:"sqlite",engineId:"sqlite-data",
+      qualityLoss:0,metadataLoss:[],
+      temporaryMultiplier:3,streaming:false,baseCost:10,mode:"semantic"
+    });
   }
 
   for(const to of ["txt","markdown","html-doc","docx","odt","rtf","latex","typst","epub"]){
