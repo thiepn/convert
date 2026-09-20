@@ -30,9 +30,10 @@ export interface DeviceProfile extends DeviceSignals {
 export function detectDeviceSignals():DeviceSignals {
   const nav=globalThis.navigator as (Navigator & {deviceMemory?:number})|undefined;
   const width=typeof globalThis.innerWidth==="number"?globalThis.innerWidth:null;
+  const mobileUa=/Android|iPhone|iPad|iPod|Mobile/i.test(nav?.userAgent??"");
   const coarse=typeof globalThis.matchMedia==="function"
-    ?globalThis.matchMedia("(pointer: coarse)").matches
-    :Boolean(nav?.maxTouchPoints&&nav.maxTouchPoints>0);
+    ?globalThis.matchMedia("(pointer: coarse)").matches||mobileUa
+    :Boolean(nav?.maxTouchPoints&&nav.maxTouchPoints>0)||mobileUa;
   const memory=typeof nav?.deviceMemory==="number"&&Number.isFinite(nav.deviceMemory)
     ?nav.deviceMemory
     :null;
