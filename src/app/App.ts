@@ -756,7 +756,7 @@ export class App {
     element("results").replaceChildren();
 
     const password=this.readPdfPassword();
-    const outputs:Array<{name:string;blob:Blob;warnings:string[]}>=[];
+    const outputs:Array<{name:string;blob:Blob;warnings:string[];release?:()=>Promise<void>}>=[];
 
     try{
       if(operation==="merge"){
@@ -833,7 +833,8 @@ export class App {
           outputs.push({
             name:base+"-reconstructed."+(this.formats.get(targetId)?.extensions[0]??targetId),
             blob:output.blob,
-            warnings:output.warnings
+            warnings:output.warnings,
+            release:output.release
           });
           for(const extra of output.extraFiles??[]){
             outputs.push({
