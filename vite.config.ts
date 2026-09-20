@@ -77,5 +77,5 @@ export default defineConfig({
   },
   build: { target: "es2022" },
   worker: { format: "es" },
-  test: { environment: "node" }
+  test: { environment: "node", include: ["tests/**/*.test.ts"] }
 });
