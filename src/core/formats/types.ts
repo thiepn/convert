@@ -7,7 +7,15 @@ export type FormatCategory =
   | "archive"
   | "spreadsheet"
   | "data"
-  | "database";
+  | "database"
+  | "layered"
+  | "raw"
+  | "font"
+  | "subtitle"
+  | "model"
+  | "vector"
+  | "scientific"
+  | "ebook-legacy";
 
 export interface FormatCapabilities {
   alpha?: boolean;

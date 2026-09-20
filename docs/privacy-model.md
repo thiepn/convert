@@ -5,7 +5,7 @@
 1. Source file contents are never uploaded by a conversion engine.
 2. Filenames, extracted text, hashes, previews, and outputs are not sent to analytics or conversion APIs.
 3. Runtime converter assets must be served from the application origin in production.
-4. Conversion engines may use browser-native APIs, WebAssembly, workers, streams, and OPFS.
+4. Conversion engines may use browser-native APIs, WebAssembly, workers, streams, and OPFS. Phase 7 FFmpeg and WOFF2 binaries are self-hosted and lazy-loaded from the application origin.
 5. External resources referenced by future documents must remain blocked unless a future feature explicitly and safely handles them.
 6. Temporary job workspaces are removed after the job terminates.
 

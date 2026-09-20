@@ -53,10 +53,17 @@ export class FormatRegistry {
     const genericMime = mime === "text/plain" || mime === "application/octet-stream" || mime === "application/zip";
     const hintedMatch = extensionMatch && genericMime ? extensionMatch : (mimeMatch ?? extensionMatch);
     const specificJsonLinesHint = extensionMatch?.id === "jsonl" && binaryMatch?.id === "json-data";
-    const format = specificJsonLinesHint ? extensionMatch : (binaryMatch ?? hintedMatch ?? null);
-    const confidence = specificJsonLinesHint ? 0.92 : binaryMatch ? 0.99 : (hintedMatch === mimeMatch ? 0.75 : extensionMatch ? 0.62 : 0);
+    const specialistContainerAlias = Boolean(
+      extensionMatch && binaryMatch && (
+        (extensionMatch.id === "camera-raw" && binaryMatch.id === "tiff")
+        || (extensionMatch.id === "gltf" && binaryMatch.id === "json-data")
+      )
+    );
+    const extensionOverride = specificJsonLinesHint || specialistContainerAlias;
+    const format = extensionOverride ? extensionMatch! : (binaryMatch ?? hintedMatch ?? null);
+    const confidence = extensionOverride ? 0.92 : binaryMatch ? 0.99 : (hintedMatch === mimeMatch ? 0.75 : extensionMatch ? 0.62 : 0);
 
-    if (binaryMatch && extensionMatch && binaryMatch.id !== extensionMatch.id && !specificJsonLinesHint) {
+    if (binaryMatch && extensionMatch && binaryMatch.id !== extensionMatch.id && !extensionOverride) {
       warnings.push("Filename extension does not match the file contents.");
     }
     if (binaryMatch && mimeMatch && binaryMatch.id !== mimeMatch.id) {

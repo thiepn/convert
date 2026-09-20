@@ -4,6 +4,8 @@ import type { DetailedMediaInspection } from "../media/types";
 import type { DetailedPdfInspection } from "../pdf/types";
 import type { DetailedDocumentInspection } from "../document/types";
 import type { DetailedArchiveInspection } from "../archive/types";
+import { parseSubtitle } from "../specialist/subtitles";
+import { parseMesh } from "../specialist/mesh";
 import type {
   DetailedSpreadsheetInspection,
   DetailedDataInspection,
@@ -273,6 +275,39 @@ export class DatabaseOutputValidator implements OutputValidator {
   }
 }
 
+
+export class SpecialistOutputValidator implements OutputValidator {
+  constructor(private readonly formats:FormatRegistry) {}
+
+  async validate(blob:Blob,targetFormatId:string,_options:Record<string,unknown>={}):Promise<ValidationResult>{
+    const target=this.formats.get(targetFormatId);
+    const errors:string[]=[];
+    if(blob.size===0) errors.push("Output is empty.");
+    const shallow=await inspectFile(
+      Object.assign(blob,{name:"output."+(target?.extensions[0]??"bin")}),
+      this.formats
+    );
+    if(shallow.detection.format?.id!==targetFormatId){
+      errors.push("Output format does not match requested specialist target.");
+    }
+
+    if(target?.category==="subtitle"){
+      try{parseSubtitle(await blob.text(),targetFormatId);}
+      catch(error){errors.push("Subtitle output could not be reparsed: "+(error instanceof Error?error.message:String(error)));}
+    }
+    if(target?.category==="model"&&["obj","stl","ply"].includes(targetFormatId)){
+      try{parseMesh(new Uint8Array(await blob.arrayBuffer()),targetFormatId);}
+      catch(error){errors.push("Mesh output could not be reparsed: "+(error instanceof Error?error.message:String(error)));}
+    }
+
+    return {
+      valid:errors.length===0,
+      errors,
+      properties:{format:shallow.detection.format?.id,size:blob.size,category:target?.category??null}
+    };
+  }
+}
+
 export class UniversalOutputValidator implements OutputValidator {
   constructor(
     private readonly formats:FormatRegistry,
@@ -283,7 +318,8 @@ export class UniversalOutputValidator implements OutputValidator {
     private readonly archive:ArchiveOutputValidator,
     private readonly spreadsheet:SpreadsheetOutputValidator,
     private readonly data:DataOutputValidator,
-    private readonly database:DatabaseOutputValidator
+    private readonly database:DatabaseOutputValidator,
+    private readonly specialist:SpecialistOutputValidator
   ) {}
 
   validate(blob:Blob,targetFormatId:string,options:Record<string,unknown>={}):Promise<ValidationResult>{
@@ -296,6 +332,9 @@ export class UniversalOutputValidator implements OutputValidator {
     if(category==="spreadsheet") return this.spreadsheet.validate(blob,targetFormatId,options);
     if(category==="data") return this.data.validate(blob,targetFormatId,options);
     if(category==="database") return this.database.validate(blob,targetFormatId,options);
+    if(["layered","raw","font","subtitle","model","vector","scientific","ebook-legacy"].includes(category??"")){
+      return this.specialist.validate(blob,targetFormatId,options);
+    }
     return Promise.resolve({valid:blob.size>0,errors:blob.size?[]:["Output is empty."],properties:{size:blob.size}});
   }
 }

@@ -42,7 +42,12 @@ export default defineConfig({
         { src: "node_modules/@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js", dest: "engines/duckdb" },
         { src: "node_modules/@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js", dest: "engines/duckdb" },
 
-        { src: "node_modules/sql.js/dist/sql-wasm.wasm", dest: "engines/sqlite" }
+        { src: "node_modules/sql.js/dist/sql-wasm.wasm", dest: "engines/sqlite" },
+
+        { src: "node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.js", dest: "engines/ffmpeg" },
+        { src: "node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.wasm", dest: "engines/ffmpeg" },
+
+        { src: "node_modules/fonteditor-core/woff2/woff2.wasm", dest: "engines/font" }
       ]
     })
   ],
