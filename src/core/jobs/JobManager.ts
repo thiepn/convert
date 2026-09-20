@@ -81,6 +81,7 @@ export class JobManager {
       const networkSnapshot=this.networkGuard.snapshot();
       let current:Blob=source;
       let finalInWorkspace=false;
+      let extraFiles:Array<{name:string;blob:Blob}>|undefined;
 
       this.emit(onUpdate,id,"PREPARING",0.12,"Preparing local conversion engine");
       for(let index=0;index<route.edges.length;index++){
@@ -114,6 +115,7 @@ export class JobManager {
         current=result.blob;
         finalInWorkspace=isLast&&Boolean(result.outputInWorkspace);
         if(result.warnings) warnings.push(...result.warnings);
+        if(isLast&&result.extraFiles?.length) extraFiles=result.extraFiles;
       }
 
       if(workspace&&!finalInWorkspace){
@@ -144,6 +146,7 @@ export class JobManager {
         formatId:targetFormatId,
         jobId:id,
         warnings:[...new Set(warnings)],
+        extraFiles,
         release:retainedWorkspace
           ? async()=>{ await retainedWorkspace.cleanup(); }
           : undefined
