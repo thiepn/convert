@@ -399,6 +399,143 @@ export const SQLITE:FormatDefinition={
   signatures:[],matcher:isSqlite,capabilities:{metadata:true,multiplePages:true},status:"production"
 };
 
+
+const textProbe=(bytes:Uint8Array,limit=16384)=>{
+  try{return new TextDecoder().decode(bytes.slice(0,Math.min(bytes.length,limit))).replace(/^\uFEFF/,"");}
+  catch{return "";}
+};
+const psdVersion=(bytes:Uint8Array,version:number)=>
+  bytes.length>=6&&ascii(bytes,0,4)==="8BPS"&&bytes[4]===0&&bytes[5]===version;
+const isCameraRaw=(bytes:Uint8Array)=>
+  (bytes.length>=12&&ascii(bytes,8,2)==="CR")
+  ||ascii(bytes,0,16)==="FUJIFILMCCD-RAW"
+  ||isIsoBmffBrand(bytes,["crx "]);
+const isSrt=(bytes:Uint8Array)=>/\d{1,2}:\d{2}:\d{2}[,.]\d{3}\s*-->\s*\d{1,2}:\d{2}:\d{2}[,.]\d{3}/.test(textProbe(bytes));
+const isVtt=(bytes:Uint8Array)=>textProbe(bytes,256).trimStart().startsWith("WEBVTT");
+const isAss=(bytes:Uint8Array)=>/\[Script Info\][\s\S]*\[Events\]/i.test(textProbe(bytes));
+const isObj=(bytes:Uint8Array)=>{
+  const text=textProbe(bytes);
+  return /(?:^|\n)\s*v\s+[+\-0-9.eE]+\s+[+\-0-9.eE]+\s+[+\-0-9.eE]+/.test(text)
+    &&/(?:^|\n)\s*f\s+\S+\s+\S+\s+\S+/.test(text);
+};
+const isAsciiStl=(bytes:Uint8Array)=>/^solid(?:\s|$)/i.test(textProbe(bytes,256).trimStart());
+const isPly=(bytes:Uint8Array)=>/^ply\s*(?:\r?\n)format\s+/i.test(textProbe(bytes,256));
+const isFb2=(bytes:Uint8Array)=>/<(?:\w+:)?FictionBook(?:\s|>)/i.test(textProbe(bytes,8192));
+const isDxf=(bytes:Uint8Array)=>/^\s*0\s*(?:\r?\n)\s*SECTION\b/i.test(textProbe(bytes,1024));
+const isFits=(bytes:Uint8Array)=>bytes.length>=9&&ascii(bytes,0,9)==="SIMPLE  =";
+const isGlb=(bytes:Uint8Array)=>bytes.length>=4&&ascii(bytes,0,4)==="glTF";
+const isMobi=(bytes:Uint8Array)=>bytes.length>=68&&ascii(bytes,60,8)==="BOOKMOBI";
+
+export const PSD:FormatDefinition={
+  id:"psd",name:"Adobe Photoshop PSD",category:"layered",extensions:["psd"],mimeTypes:["image/vnd.adobe.photoshop","image/x-photoshop"],
+  signatures:[],matcher:bytes=>psdVersion(bytes,1),capabilities:{metadata:true,layers:true,alpha:true},readOnly:true,status:"beta"
+};
+export const PSB:FormatDefinition={
+  id:"psb",name:"Adobe Photoshop PSB",category:"layered",extensions:["psb"],mimeTypes:["image/vnd.adobe.photoshop"],
+  signatures:[],matcher:bytes=>psdVersion(bytes,2),capabilities:{metadata:true,layers:true,alpha:true},readOnly:true,status:"experimental"
+};
+export const CAMERA_RAW:FormatDefinition={
+  id:"camera-raw",name:"Camera RAW (embedded preview)",category:"raw",
+  extensions:["cr2","cr3","nef","nrw","arw","sr2","dng","rw2","orf","raf","pef"],
+  mimeTypes:["image/x-canon-cr2","image/x-nikon-nef","image/x-sony-arw","image/x-adobe-dng"],
+  signatures:[],matcher:isCameraRaw,capabilities:{metadata:true,hdr:true},readOnly:true,status:"beta"
+};
+
+export const TTF:FormatDefinition={
+  id:"ttf",name:"TrueType Font",category:"font",extensions:["ttf"],mimeTypes:["font/ttf","application/x-font-ttf"],
+  signatures:[[{offset:0,bytes:[0x00,0x01,0x00,0x00]}]],capabilities:{metadata:true,vector:true},status:"production"
+};
+export const OTF:FormatDefinition={
+  id:"otf",name:"OpenType Font",category:"font",extensions:["otf"],mimeTypes:["font/otf","application/vnd.ms-opentype"],
+  signatures:[[{offset:0,bytes:[0x4f,0x54,0x54,0x4f]}]],capabilities:{metadata:true,vector:true},readOnly:true,status:"beta"
+};
+export const WOFF:FormatDefinition={
+  id:"woff",name:"WOFF Font",category:"font",extensions:["woff"],mimeTypes:["font/woff","application/font-woff"],
+  signatures:[[{offset:0,bytes:[0x77,0x4f,0x46,0x46]}]],capabilities:{metadata:true,vector:true},status:"production"
+};
+export const WOFF2:FormatDefinition={
+  id:"woff2",name:"WOFF2 Font",category:"font",extensions:["woff2"],mimeTypes:["font/woff2"],
+  signatures:[[{offset:0,bytes:[0x77,0x4f,0x46,0x32]}]],capabilities:{metadata:true,vector:true},status:"production"
+};
+export const EOT:FormatDefinition={
+  id:"eot",name:"Embedded OpenType",category:"font",extensions:["eot"],mimeTypes:["application/vnd.ms-fontobject"],
+  signatures:[],capabilities:{metadata:true,vector:true},status:"beta"
+};
+
+export const SRT:FormatDefinition={
+  id:"srt",name:"SubRip SRT",category:"subtitle",extensions:["srt"],mimeTypes:["application/x-subrip","text/plain"],
+  signatures:[],matcher:isSrt,capabilities:{metadata:false},status:"production"
+};
+export const VTT:FormatDefinition={
+  id:"vtt",name:"WebVTT",category:"subtitle",extensions:["vtt"],mimeTypes:["text/vtt"],
+  signatures:[],matcher:isVtt,capabilities:{metadata:false},status:"production"
+};
+export const ASS:FormatDefinition={
+  id:"ass",name:"ASS / SSA Subtitles",category:"subtitle",extensions:["ass","ssa"],mimeTypes:["text/x-ssa","text/x-ass"],
+  signatures:[],matcher:isAss,capabilities:{metadata:true},status:"production"
+};
+
+export const OBJ:FormatDefinition={
+  id:"obj",name:"Wavefront OBJ",category:"model",extensions:["obj"],mimeTypes:["model/obj","text/plain"],
+  signatures:[],matcher:isObj,capabilities:{metadata:false},status:"beta"
+};
+export const STL:FormatDefinition={
+  id:"stl",name:"STL Mesh",category:"model",extensions:["stl"],mimeTypes:["model/stl","application/sla"],
+  signatures:[],matcher:isAsciiStl,capabilities:{metadata:false},status:"beta"
+};
+export const PLY:FormatDefinition={
+  id:"ply",name:"PLY Mesh",category:"model",extensions:["ply"],mimeTypes:["application/octet-stream"],
+  signatures:[],matcher:isPly,capabilities:{metadata:true},status:"beta"
+};
+export const GLTF:FormatDefinition={
+  id:"gltf",name:"glTF JSON",category:"model",extensions:["gltf"],mimeTypes:["model/gltf+json"],
+  signatures:[],capabilities:{metadata:true},readOnly:true,status:"experimental"
+};
+export const GLB:FormatDefinition={
+  id:"glb",name:"glTF Binary",category:"model",extensions:["glb"],mimeTypes:["model/gltf-binary"],
+  signatures:[],matcher:isGlb,capabilities:{metadata:true},readOnly:true,status:"experimental"
+};
+
+export const FB2:FormatDefinition={
+  id:"fb2",name:"FictionBook FB2",category:"ebook-legacy",extensions:["fb2"],mimeTypes:["application/x-fictionbook+xml"],
+  signatures:[],matcher:isFb2,capabilities:{metadata:true,multiplePages:true},readOnly:true,status:"beta"
+};
+export const MOBI_KINDLE:FormatDefinition={
+  id:"mobi-kindle",name:"Mobipocket / Kindle",category:"ebook-legacy",extensions:["mobi","azw","azw3","prc"],mimeTypes:["application/x-mobipocket-ebook"],
+  signatures:[],matcher:isMobi,capabilities:{metadata:true,multiplePages:true},readOnly:true,status:"experimental"
+};
+
+export const DXF:FormatDefinition={
+  id:"dxf",name:"AutoCAD DXF",category:"vector",extensions:["dxf"],mimeTypes:["image/vnd.dxf","application/dxf"],
+  signatures:[],matcher:isDxf,capabilities:{metadata:true,vector:true},readOnly:true,status:"experimental"
+};
+export const DWG:FormatDefinition={
+  id:"dwg",name:"AutoCAD DWG",category:"vector",extensions:["dwg"],mimeTypes:["image/vnd.dwg","application/acad"],
+  signatures:[],matcher:bytes=>bytes.length>=6&&ascii(bytes,0,4)==="AC10",capabilities:{metadata:true,vector:true},readOnly:true,status:"experimental"
+};
+
+export const FITS:FormatDefinition={
+  id:"fits",name:"FITS Scientific Data",category:"scientific",extensions:["fits","fit","fts"],mimeTypes:["application/fits","image/fits"],
+  signatures:[],matcher:isFits,capabilities:{metadata:true,multiplePages:true},readOnly:true,status:"beta"
+};
+export const HDF5:FormatDefinition={
+  id:"hdf5",name:"HDF5",category:"scientific",extensions:["h5","hdf5","hdf"],mimeTypes:["application/x-hdf5"],
+  signatures:[[{offset:0,bytes:[0x89,0x48,0x44,0x46,0x0d,0x0a,0x1a,0x0a]}]],capabilities:{metadata:true},readOnly:true,status:"experimental"
+};
+export const NETCDF:FormatDefinition={
+  id:"netcdf",name:"NetCDF Classic",category:"scientific",extensions:["nc","cdf"],mimeTypes:["application/x-netcdf"],
+  signatures:[
+    [{offset:0,bytes:[0x43,0x44,0x46,0x01]}],
+    [{offset:0,bytes:[0x43,0x44,0x46,0x02]}]
+  ],capabilities:{metadata:true},readOnly:true,status:"experimental"
+};
+
+export const ASF:FormatDefinition={
+  id:"asf",name:"ASF / WMV / WMA",category:"video",extensions:["asf","wmv","wma"],mimeTypes:["video/x-ms-asf","video/x-ms-wmv","audio/x-ms-wma"],
+  signatures:[[{offset:0,bytes:[0x30,0x26,0xb2,0x75,0x8e,0x66,0xcf,0x11,0xa6,0xd9,0x00,0xaa,0x00,0x62,0xce,0x6c]}]],
+  capabilities:{metadata:true,multipleStreams:true},readOnly:true,status:"beta"
+};
+
 export const PDF:FormatDefinition={
   id:"pdf",name:"PDF",category:"pdf",extensions:["pdf"],mimeTypes:["application/pdf"],
   signatures:[[{offset:0,bytes:[0x25,0x50,0x44,0x46,0x2d]}]],
@@ -409,10 +546,12 @@ export function createDefaultFormatRegistry():FormatRegistry {
   const registry=new FormatRegistry();
   [
     JPEG,PNG,WEBP,GIF,TIFF,AVIF,HEIC,JXL,SVG,
-    MOV,MP4,WEBM_MEDIA,MKV,OGG,AAC,MP3,WAV,FLAC,MPEG_TS,AVI,FLV,PDF,
+    PSD,PSB,CAMERA_RAW,
+    MOV,MP4,WEBM_MEDIA,MKV,OGG,AAC,MP3,WAV,FLAC,MPEG_TS,AVI,FLV,ASF,PDF,
     DOCX,DOCM,DOC,ODT,RTF,HTML_DOC,MARKDOWN,TXT,LATEX,TYPST,EPUB,PPTX,PPTM,PPT,ODP,
     ZIP,SEVEN_ZIP,RAR,TAR,GZIP,BZIP2,XZ,ZSTD,TAR_GZIP,TAR_BZIP2,TAR_XZ,CPIO,
-    XLSX,XLSM,XLSB,XLS,ODS,FODS,CSV,TSV,JSONL,JSON_DATA,PARQUET,ARROW,SQLITE
+    XLSX,XLSM,XLSB,XLS,ODS,FODS,CSV,TSV,JSONL,JSON_DATA,PARQUET,ARROW,SQLITE,
+    TTF,OTF,WOFF,WOFF2,EOT,SRT,VTT,ASS,OBJ,STL,PLY,GLTF,GLB,FB2,MOBI_KINDLE,DXF,DWG,FITS,HDF5,NETCDF
   ].forEach(format=>registry.register(format));
   return registry;
 }
