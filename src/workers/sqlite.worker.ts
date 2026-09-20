@@ -1,6 +1,7 @@
 import initSqlJs from "sql.js";
 import type { Database, SqlJsStatic } from "sql.js";
 import type { DataColumnInfo, DataConversionOptions, DetailedDatabaseInspection, DetailedDataInspection } from "../core/data/types";
+import { validateLocalSelectQuery } from "../core/data/querySecurity";
 import type { SqliteWorkerRequest, SqliteWorkerResponse } from "../engines/data/sqlite-protocol";
 
 const scope=globalThis as unknown as {
@@ -144,12 +145,15 @@ function csvEscape(value:unknown,delimiter:string):string{
 }
 
 function exportFlat(db:Database,table:string,target:string,options:DataConversionOptions,maxRows:number):Blob{
-  const columns=tableColumns(db,table).map(column=>column.name);
-  const stmt=db.prepare("SELECT * FROM "+quoteIdent(table));
+  const query=options.query?.trim()
+    ? validateLocalSelectQuery(options.query)
+    : "SELECT * FROM "+quoteIdent(table);
+  const stmt=db.prepare(query);
+  const columns=stmt.getColumnNames();
   const rows:Array<Record<string,unknown>>=[];
   try{
     while(stmt.step()){
-      if(rows.length>=maxRows) throw new Error("SQLITE_EXPORT_ROW_LIMIT: Table exceeds this device's guarded export row limit.");
+      if(rows.length>=maxRows) throw new Error("SQLITE_EXPORT_ROW_LIMIT: Query result exceeds this device's guarded export row limit.");
       const raw=stmt.getAsObject();
       const row:Record<string,unknown>={};
       for(const [key,value] of Object.entries(raw)) row[key]=normalizeValue(value);
@@ -160,7 +164,7 @@ function exportFlat(db:Database,table:string,target:string,options:DataConversio
   if(target==="json-data") return new Blob([JSON.stringify(rows,null,2)],{type:"application/json;charset=utf-8"});
   if(target==="jsonl") return new Blob([rows.map(row=>JSON.stringify(row)).join("\n")+(rows.length?"\n":"")],{type:"application/x-ndjson;charset=utf-8"});
 
-  const delimiter=target==="tsv"?"\t":options.delimiter||",";
+  const delimiter=target==="tsv"?"\t":(!options.delimiter||options.delimiter==="auto"?",":options.delimiter);
   const lines:string[]=[];
   if(options.header) lines.push(columns.map(value=>csvEscape(value,delimiter)).join(delimiter));
   for(const row of rows) lines.push(columns.map(column=>csvEscape(row[column],delimiter)).join(delimiter));
