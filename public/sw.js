@@ -1,4 +1,4 @@
-const CACHE="thiepn-convert-v1-0-0";
+const CACHE="thiepn-convert-v1-0-1";
 const ROOT=new URL("./",self.location.href).href;
 const MANIFEST=new URL("manifest.webmanifest",self.location.href).href;
 const ICON=new URL("icon.svg",self.location.href).href;
