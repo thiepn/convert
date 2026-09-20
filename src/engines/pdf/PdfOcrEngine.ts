@@ -33,7 +33,7 @@ export class PdfOcrEngine {
         corePath,
         langPath,
         gzip:true,
-        logger:message=>{
+        logger:(message:any)=>{
           const value=typeof message.progress==="number"?message.progress:0;
           this.progress?.(value,String(message.status??"OCR"));
         }
