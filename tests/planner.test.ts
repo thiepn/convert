@@ -17,7 +17,8 @@ describe("ConversionPlanner",()=>{
   const engines=new EngineRegistry();
   [
     "vips-image","browser-image-proof","mediabunny","pdf-engine",
-    "pandoc-document","libreoffice-document","pdf-reconstruction","archive-engine"
+    "pandoc-document","libreoffice-document","pdf-reconstruction","archive-engine",
+    "sheetjs-spreadsheet","duckdb-data","sqlite-data"
   ].forEach(id=>engines.register(engine(id)));
   const planner=new ConversionPlanner(createConversionGraph(),createDefaultFormatRegistry(),engines);
 
@@ -82,6 +83,49 @@ describe("ConversionPlanner",()=>{
     expect(planner.availableTargets("rar")).toContain("zip");
     expect(planner.availableTargets("rar")).toContain("tar-xz");
     expect(planner.availableTargets("jpeg")).not.toContain("zip");
+  });
+
+  it("chooses SheetJS for semantic workbook conversion",()=>{
+    const route=planner.plan("xlsx","ods","semantic");
+    expect(route.edges).toHaveLength(1);
+    expect(route.edges[0].engineId).toBe("sheetjs-spreadsheet");
+  });
+
+  it("chooses LibreOffice Calc for fidelity workbook to PDF",()=>{
+    const route=planner.plan("xlsx","pdf","fidelity");
+    expect(route.edges).toHaveLength(1);
+    expect(route.edges[0].engineId).toBe("libreoffice-document");
+  });
+
+  it("strips XLSM macro payload through SheetJS before fidelity PDF",()=>{
+    const route=planner.plan("xlsm","pdf","fidelity");
+    expect(route.edges[0].engineId).toBe("sheetjs-spreadsheet");
+    expect(route.edges.at(-1)?.engineId).toBe("libreoffice-document");
+  });
+
+  it("bridges workbook and Parquet through JSON data",()=>{
+    const toParquet=planner.plan("xlsx","parquet","semantic");
+    expect(toParquet.edges[0].engineId).toBe("sheetjs-spreadsheet");
+    expect(toParquet.edges.at(-1)?.engineId).toBe("duckdb-data");
+
+    const toWorkbook=planner.plan("parquet","xlsx","semantic");
+    expect(toWorkbook.edges[0].engineId).toBe("duckdb-data");
+    expect(toWorkbook.edges.at(-1)?.engineId).toBe("sheetjs-spreadsheet");
+  });
+
+  it("bridges SQLite and workbooks through structured data",()=>{
+    const toWorkbook=planner.plan("sqlite","xlsx","semantic");
+    expect(toWorkbook.edges[0].engineId).toBe("sqlite-data");
+    expect(toWorkbook.edges.at(-1)?.engineId).toBe("sheetjs-spreadsheet");
+
+    const toSqlite=planner.plan("xlsx","sqlite","semantic");
+    expect(toSqlite.edges[0].engineId).toBe("sheetjs-spreadsheet");
+    expect(toSqlite.edges.at(-1)?.engineId).toBe("sqlite-data");
+  });
+
+  it("keeps flat data on semantic engines instead of LibreOffice when requested",()=>{
+    const route=planner.plan("csv","xlsx","semantic");
+    expect(route.edges[0].engineId).toBe("sheetjs-spreadsheet");
   });
 
   it("keeps legacy AVI unsupported without a vetted compatibility engine",()=>{
