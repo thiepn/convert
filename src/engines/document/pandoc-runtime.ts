@@ -36,7 +36,7 @@ export async function createPandocRuntime(wasmBinary:ArrayBuffer){
     wasi_snapshot_preview1:wasi.wasiImport
   });
   const exports=instance.exports as any;
-  wasi.initialize(instance);
+  wasi.initialize(instance as any);
   exports.__wasm_call_ctors();
 
   const view=()=>new DataView((exports.memory as WebAssembly.Memory).buffer);
