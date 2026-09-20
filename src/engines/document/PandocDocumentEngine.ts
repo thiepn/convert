@@ -25,6 +25,11 @@ export class PandocDocumentEngine implements ConversionEngine{
   readonly id="pandoc-document";
   readonly version="pandoc-wasm-1.1.0/pandoc-3.9";
   private workers=new Set<Worker>();
+  private pandocWasmUrl="";
+
+  async prepare():Promise<void>{
+    this.pandocWasmUrl=new URL("engines/pandoc/pandoc.wasm",document.baseURI).href;
+  }
 
   isAvailable():boolean{
     return typeof Worker!=="undefined"&&typeof WebAssembly!=="undefined";
@@ -111,7 +116,8 @@ export class PandocDocumentEngine implements ConversionEngine{
         sourceName,
         sourceFormatId:request.sourceFormatId,
         targetFormatId:request.targetFormatId,
-        options
+        options,
+        pandocWasmUrl:this.pandocWasmUrl
       } satisfies PandocWorkerRequest);
     });
   }
