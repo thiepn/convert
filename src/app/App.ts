@@ -5,6 +5,7 @@ import { EngineRegistry } from "../core/engines/EngineRegistry";
 import { createDefaultFormatRegistry } from "../core/formats/defaultFormats";
 import type { DetailedImageInspection, ImageConversionOptions } from "../core/image/types";
 import type { DetailedDocumentInspection, DocumentConversionOptions } from "../core/document/types";
+import type { ArchiveConversionOptions, DetailedArchiveInspection } from "../core/archive/types";
 import type { FileInspection } from "../core/inspection/inspectFile";
 import { inspectFile } from "../core/inspection/inspectFile";
 import { JobManager } from "../core/jobs/JobManager";
@@ -18,6 +19,7 @@ import {
   MediaOutputValidator,
   PdfOutputValidator,
   DocumentOutputValidator,
+  ArchiveOutputValidator,
   UniversalOutputValidator
 } from "../core/validation/Validator";
 import { BrowserImageEngine } from "../engines/browser-image/BrowserImageEngine";
@@ -28,8 +30,9 @@ import { DocumentInspector } from "../engines/document/DocumentInspector";
 import { PandocDocumentEngine } from "../engines/document/PandocDocumentEngine";
 import { OfficeDocumentEngine } from "../engines/document/OfficeDocumentEngine";
 import { PdfReconstructionEngine } from "../engines/document/PdfReconstructionEngine";
+import { ArchiveEngine } from "../engines/archive/ArchiveEngine";
 
-type SelectionKind="image"|"media"|"pdf"|"document"|null;
+type SelectionKind="image"|"media"|"pdf"|"document"|"archive"|"archive-build"|null;
 type ResultLease={url:string;release?:()=>Promise<void>};
 
 function element<T extends HTMLElement>(id:string):T {
@@ -85,6 +88,7 @@ export class App {
   private readonly pandocDocumentEngine=new PandocDocumentEngine();
   private readonly officeDocumentEngine=new OfficeDocumentEngine();
   private readonly pdfReconstructionEngine=new PdfReconstructionEngine(this.pdfEngine,this.pandocDocumentEngine);
+  private readonly archiveEngine=new ArchiveEngine();
   private readonly planner:ConversionPlanner;
   private readonly jobs:JobManager;
 
@@ -94,6 +98,8 @@ export class App {
   private mediaDetail:DetailedMediaInspection|null=null;
   private pdfDetail:DetailedPdfInspection|null=null;
   private documentDetail:DetailedDocumentInspection|null=null;
+  private archiveDetail:DetailedArchiveInspection|null=null;
+  private archiveAbort:AbortController|null=null;
   private kind:SelectionKind=null;
   private leases:ResultLease[]=[];
   private routeRevision=0;
@@ -106,6 +112,7 @@ export class App {
     this.engines.register(this.pandocDocumentEngine);
     this.engines.register(this.officeDocumentEngine);
     this.engines.register(this.pdfReconstructionEngine);
+    this.engines.register(this.archiveEngine);
     this.planner=new ConversionPlanner(this.graph,this.formats,this.engines);
 
     const validator=new UniversalOutputValidator(
@@ -116,7 +123,8 @@ export class App {
       }),
       new MediaOutputValidator(this.formats,blob=>this.mediaEngine.inspect(blob)),
       new PdfOutputValidator(this.formats,(blob,password)=>this.pdfEngine.inspect(blob,password)),
-      new DocumentOutputValidator(this.formats,(blob,formatId)=>this.documentInspector.inspect(blob,formatId))
+      new DocumentOutputValidator(this.formats,(blob,formatId)=>this.documentInspector.inspect(blob,formatId)),
+      new ArchiveOutputValidator(this.formats,(blob,formatId,password)=>this.archiveEngine.inspect(blob,formatId,password))
     );
     this.jobs=new JobManager(this.formats,this.engines,this.planner,validator);
   }
