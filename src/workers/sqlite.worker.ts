@@ -98,7 +98,7 @@ async function inspectDatabase(source:Blob,wasmUrl:string):Promise<DetailedDatab
     const objects=execRows(db,"SELECT name,type FROM sqlite_master WHERE type IN ('table','view') AND name NOT LIKE 'sqlite_%' ORDER BY type,name LIMIT 200");
     const tables=objects.map(object=>{
       const name=String(object.name);
-      const type=String(object.type)==="view"?"view":"table";
+      const type: "table"|"view"=String(object.type)==="view"?"view":"table";
       let rows:number|null=null;
       try{
         const value=db.exec("SELECT COUNT(*) AS c FROM "+quoteIdent(name))[0]?.values?.[0]?.[0];
