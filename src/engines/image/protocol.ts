@@ -1,8 +1,11 @@
 import type { DetailedImageInspection, ImageConversionOptions } from "../../core/image/types";
 
+type WithBase = { requestId:string; assetBase:string };
+
 export type ImageWorkerRequest =
-  | { type:"inspect"; requestId:string; source:Blob; sourceFormatId:string }
-  | { type:"convert"; requestId:string; jobId:string; source:Blob; sourceFormatId:string; targetFormatId:string; quality:number; options:ImageConversionOptions };
+  | (WithBase & { type:"ping" })
+  | (WithBase & { type:"inspect"; source:Blob; sourceFormatId:string })
+  | (WithBase & { type:"convert"; jobId:string; source:Blob; sourceFormatId:string; targetFormatId:string; quality:number; options:ImageConversionOptions });
 
 export type ImageWorkerResponse =
   | { type:"ready"; requestId:string }
