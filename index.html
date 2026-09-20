@@ -14,16 +14,16 @@
       <div>
         <div class="eyebrow">THIEPN CONVERT · LOCAL ENGINE</div>
         <h1>Convert files locally in your browser.</h1>
-        <p>Images, audio, video, PDFs, documents, presentations, e-books, and archives stay on your device. No conversion server is involved.</p>
+        <p>Images, audio, video, PDFs, documents, archives, spreadsheets, structured data, and SQLite databases stay on your device. No conversion server is involved.</p>
       </div>
       <div class="privacy-badge"><span class="privacy-dot"></span> No file uploads</div>
     </header>
 
     <section class="panel drop-panel">
       <label id="drop-zone" class="drop-zone" for="file-input">
-        <input id="file-input" type="file" multiple accept="image/*,audio/*,video/*,application/pdf,text/*,.pdf,.doc,.docx,.docm,.odt,.rtf,.html,.htm,.md,.markdown,.tex,.typ,.epub,.ppt,.pptx,.pptm,.odp,.zip,.zipx,.7z,.rar,.tar,.gz,.gzip,.tgz,.bz2,.tbz,.tbz2,.xz,.txz,.zst,.zstd,.cpio,.heic,.heif,.jxl,.tif,.tiff,.svg,.mkv,.webm,.mov,.m4a,.aac,.flac,.ogg,.opus,.ts,.m2ts,.avi,.flv">
+        <input id="file-input" type="file" multiple accept="image/*,audio/*,video/*,application/pdf,text/*,.pdf,.doc,.docx,.docm,.odt,.rtf,.html,.htm,.md,.markdown,.tex,.typ,.epub,.ppt,.pptx,.pptm,.odp,.xls,.xlsx,.xlsm,.xlsb,.ods,.fods,.csv,.tsv,.json,.jsonl,.ndjson,.parquet,.arrow,.feather,.sqlite,.sqlite3,.db,.db3,.zip,.zipx,.7z,.rar,.tar,.gz,.gzip,.tgz,.bz2,.tbz,.tbz2,.xz,.txz,.zst,.zstd,.cpio,.heic,.heif,.jxl,.tif,.tiff,.svg,.mkv,.webm,.mov,.m4a,.aac,.flac,.ogg,.opus,.ts,.m2ts,.avi,.flv">
         <strong>Drop files anywhere</strong>
-        <span>Images · Audio · Video · PDF · Documents · EPUB · ZIP · 7z · RAR · TAR</span>
+        <span>Images · Media · PDF · Office · XLSX · CSV · JSON · Parquet · SQLite · Archives</span>
       </label>
     </section>
 
@@ -259,6 +259,69 @@
         </div>
       </div>
 
+      <div id="data-controls" class="control-section hidden">
+        <div class="control-title">Spreadsheet & data options</div>
+        <div class="convert-grid phase-controls data-controls-grid">
+          <label id="data-route-wrap">
+            <span>Spreadsheet preservation</span>
+            <select id="data-route">
+              <option value="semantic" selected>Data / formulas / editability</option>
+              <option value="fidelity">Appearance / Calc rendering</option>
+            </select>
+          </label>
+
+          <label id="data-sheet-policy-wrap">
+            <span>Worksheet export</span>
+            <select id="data-sheet-policy">
+              <option value="first" selected>First sheet</option>
+              <option value="selected">Selected sheet</option>
+              <option value="all">All sheets</option>
+            </select>
+          </label>
+
+          <label id="data-sheet-select-wrap">
+            <span>Selected worksheet</span>
+            <select id="data-sheet-select"></select>
+          </label>
+
+          <label id="data-formula-wrap">
+            <span>Formulas</span>
+            <select id="data-formula-mode">
+              <option value="preserve" selected>Preserve formulas where possible</option>
+              <option value="values">Export cached/result values</option>
+            </select>
+          </label>
+
+          <label id="data-table-select-wrap">
+            <span>SQLite table</span>
+            <select id="data-table-select"></select>
+          </label>
+
+          <label>
+            <span>CSV delimiter</span>
+            <select id="data-delimiter">
+              <option value="," selected>Comma (,)</option>
+              <option value=";">Semicolon (;)</option>
+              <option value="|">Pipe (|)</option>
+              <option value="\t">Tab</option>
+            </select>
+          </label>
+        </div>
+
+        <label class="check-row">
+          <input id="data-header" type="checkbox" checked>
+          <span>First row contains / output includes column headers</span>
+        </label>
+
+        <label class="data-query-wrap">
+          <span>Optional local SQL transform</span>
+          <textarea id="data-query" rows="4" spellcheck="false" placeholder="SELECT * FROM data WHERE amount > 0 ORDER BY date"></textarea>
+          <small>Restricted to one local SELECT/WITH query over the input view named <code>data</code>. Network URLs, extensions, file readers, and mutating statements are blocked.</small>
+        </label>
+
+        <div id="data-preview" class="data-preview hidden"></div>
+      </div>
+
       <div id="archive-controls" class="control-section hidden">
         <div class="control-title">Archive tools</div>
         <div class="convert-grid phase-controls archive-controls-grid">
@@ -461,7 +524,7 @@
 
     <section class="panel compact-panel">
       <h2>Privacy model</h2>
-      <p>Conversion uses local browser APIs, WebAssembly, WebCodecs, workers, OPFS, PDF.js, qpdf, Tesseract, zip.js, and libarchive. Source files, passwords, extracted text, OCR results, and outputs are not uploaded to a conversion server.</p>
+      <p>Conversion uses local browser APIs, WebAssembly, WebCodecs, workers, OPFS, PDF.js, DuckDB, SQLite, SheetJS, qpdf, Tesseract, zip.js, and libarchive. Source files, passwords, extracted text, OCR results, and outputs are not uploaded to a conversion server.</p>
     </section>
   </main>
   <script type="module" src="/src/main.ts"></script>
