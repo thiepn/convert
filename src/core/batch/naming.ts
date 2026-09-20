@@ -16,6 +16,7 @@ function safe(value:string):string {
   return value
     .replace(/[<>:"/\\|?*\u0000-\u001f]/g,"_")
     .replace(/\s+/g," ")
+    .replace(/^[. ]+/g,"_")
     .replace(/[. ]+$/g,"")
     .slice(0,180)
     ||"output";
