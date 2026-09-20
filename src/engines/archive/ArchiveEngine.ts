@@ -101,7 +101,7 @@ export class ArchiveEngine implements ConversionEngine{
     return INPUTS.has(from)&&OUTPUTS.has(to);
   }
 
-  async estimate(source:Blob):Promise<ConversionEstimate>{
+  async estimate(source:Blob,_from:string,to:string):Promise<ConversionEstimate>{
     const memoryBytes=Math.max(256*1024*1024,source.size*3);
     return {
       temporaryBytes:memoryBytes,
@@ -109,7 +109,7 @@ export class ArchiveEngine implements ConversionEngine{
       workspaceBytes:Math.max(96*1024*1024,source.size*1.5),
       outputBytes:null,
       sourceAccess:"buffered",
-      outputAccess:"streaming",
+      outputAccess:to==="zip"?"streaming":"buffered",
       notes:[
         "Archive repacking materializes extracted entries in browser memory.",
         "ZIP output streams incrementally when an OPFS output handle is available."
