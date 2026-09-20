@@ -5,6 +5,25 @@ export class TempWorkspace {
     private readonly jobRoot: FileSystemDirectoryHandle
   ) {}
 
+  static async cleanupOrphanedJobs(): Promise<number> {
+    if (!navigator.storage?.getDirectory) return 0;
+    try {
+      const root=await navigator.storage.getDirectory();
+      const app=await root.getDirectoryHandle("thiepn-convert",{create:true});
+      const jobs=await app.getDirectoryHandle("jobs",{create:true});
+      let removed=0;
+      for await (const [name] of (jobs as any).entries()) {
+        try {
+          await jobs.removeEntry(name,{recursive:true});
+          removed++;
+        } catch {}
+      }
+      return removed;
+    } catch {
+      return 0;
+    }
+  }
+
   static async create(jobId: string): Promise<TempWorkspace | null> {
     if (!navigator.storage?.getDirectory) return null;
     try {
