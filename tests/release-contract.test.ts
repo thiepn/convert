@@ -34,7 +34,10 @@ describe("Phase 10 release contract",()=>{
     const manifest=JSON.parse(fs.readFileSync("public/manifest.webmanifest","utf8"));
     expect(manifest.id).toBe("./");
     expect(manifest.display).toBe("standalone");
-    expect(manifest.icons.length).toBeGreaterThan(0);
+    expect(manifest.icons).toEqual(expect.arrayContaining([
+      expect.objectContaining({src:"icon-192.png",sizes:"192x192",type:"image/png"}),
+      expect.objectContaining({src:"icon-512.png",sizes:"512x512",type:"image/png"})
+    ]));
     expect(manifest.file_handlers.length).toBeGreaterThan(0);
   });
 });
