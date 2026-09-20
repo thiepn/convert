@@ -4,7 +4,7 @@ A local-first universal browser file-conversion platform.
 
 ## Current status
 
-Thiepn Convert v1.0.0 is release-certified. Phase 10 — Universal UX, Hardening & Release completes the Phase 0–10 roadmap.
+Thiepn Convert v1.0.1 is the post-v1 production-hardened release. Phase 10 completed the Phase 0–10 roadmap; Maintenance Pass 1 adds deployment and real-browser certification.
 
 ### Images
 
