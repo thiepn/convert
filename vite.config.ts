@@ -3,6 +3,7 @@ import { viteStaticCopy } from "vite-plugin-static-copy";
 
 export default defineConfig({
   base: "./",
+  assetsInclude: ["**/*.wasm"],
   plugins: [
     viteStaticCopy({
       targets: [
@@ -26,7 +27,10 @@ export default defineConfig({
         { src: "node_modules/@tesseract.js-data/deu/4.0.0_best_int/deu.traineddata.gz", dest: "engines/tesseract/lang" },
         { src: "node_modules/@tesseract.js-data/fra/4.0.0_best_int/fra.traineddata.gz", dest: "engines/tesseract/lang" },
         { src: "node_modules/@tesseract.js-data/tur/4.0.0_best_int/tur.traineddata.gz", dest: "engines/tesseract/lang" },
-        { src: "node_modules/@tesseract.js-data/kor/4.0.0_best_int/kor.traineddata.gz", dest: "engines/tesseract/lang" }
+        { src: "node_modules/@tesseract.js-data/kor/4.0.0_best_int/kor.traineddata.gz", dest: "engines/tesseract/lang" },
+
+        { src: "node_modules/@matbee/libreoffice-converter/wasm/*", dest: "engines/libreoffice/wasm" },
+        { src: "node_modules/@matbee/libreoffice-converter/dist/browser.worker.js", dest: "engines/libreoffice", rename: "browser.worker.js" }
       ]
     })
   ],
