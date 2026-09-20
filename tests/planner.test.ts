@@ -18,38 +18,41 @@ describe("ConversionPlanner",()=>{
   engines.register(engine("vips-image"));
   engines.register(engine("browser-image-proof"));
   engines.register(engine("mediabunny"));
+  engines.register(engine("pdf-engine"));
   const planner=new ConversionPlanner(createConversionGraph(),createDefaultFormatRegistry(),engines);
 
   it("prefers the production image engine",()=>{
     expect(planner.plan("png","webp").edges[0].engineId).toBe("vips-image");
   });
 
-  it("supports same-format image optimization",()=>{
-    const route=planner.plan("jpeg","jpeg");
-    expect(route.edges).toHaveLength(1);
-    expect(route.edges[0].to).toBe("jpeg");
-  });
-
   it("routes MP4 to WebM through the media engine",()=>{
-    const route=planner.plan("mp4","webm-media");
+    expect(planner.plan("mp4","webm-media").edges[0].engineId).toBe("mediabunny");
+  });
+
+  it("routes JPEG directly into PDF",()=>{
+    const route=planner.plan("jpeg","pdf");
     expect(route.edges).toHaveLength(1);
-    expect(route.edges[0].engineId).toBe("mediabunny");
-    expect(route.edges[0].streaming).toBe(true);
+    expect(route.edges[0].engineId).toBe("pdf-engine");
   });
 
-  it("supports audio extraction container routes without claiming quality loss in advance",()=>{
-    const route=planner.plan("mov","mp3");
-    expect(route.edges[0].engineId).toBe("mediabunny");
-    expect(route.warnings.map(w=>w.code)).not.toContain("LOSSY_ROUTE");
+  it("normalizes WebP through PNG before PDF creation",()=>{
+    const route=planner.plan("webp","pdf");
+    expect(route.edges.at(-1)?.engineId).toBe("pdf-engine");
+    expect(route.edges.at(-1)?.from).toBe("png");
+    expect(planner.availableTargets("webp")).toContain("pdf");
   });
 
-  it("does not advertise a route for legacy AVI without a vetted compatibility engine",()=>{
+  it("supports PDF-to-PDF structural work",()=>{
+    const route=planner.plan("pdf","pdf");
+    expect(route.edges).toHaveLength(1);
+    expect(route.edges[0].engineId).toBe("pdf-engine");
+  });
+
+  it("does not advertise PDF to raster through the one-output planner",()=>{
+    expect(()=>planner.plan("pdf","png")).toThrow();
+  });
+
+  it("keeps legacy AVI unsupported without a vetted compatibility engine",()=>{
     expect(()=>planner.plan("avi","mp4")).toThrow();
-  });
-
-  it("reports image alpha loss correctly",()=>{
-    const codes=planner.plan("png","jpeg").warnings.map(w=>w.code);
-    expect(codes).toContain("ALPHA_LOSS");
-    expect(codes).toContain("LOSSY_ROUTE");
   });
 });

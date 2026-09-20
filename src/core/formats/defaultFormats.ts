@@ -163,11 +163,17 @@ export const FLV:FormatDefinition={
   capabilities:{metadata:true,multipleStreams:true},readOnly:true,status:"experimental"
 };
 
+export const PDF:FormatDefinition={
+  id:"pdf",name:"PDF",category:"pdf",extensions:["pdf"],mimeTypes:["application/pdf"],
+  signatures:[[{offset:0,bytes:[0x25,0x50,0x44,0x46,0x2d]}]],
+  capabilities:{metadata:true,multiplePages:true},status:"production"
+};
+
 export function createDefaultFormatRegistry():FormatRegistry {
   const registry=new FormatRegistry();
   [
     JPEG,PNG,WEBP,GIF,TIFF,AVIF,HEIC,JXL,SVG,
-    MOV,MP4,WEBM_MEDIA,MKV,OGG,AAC,MP3,WAV,FLAC,MPEG_TS,AVI,FLV
+    MOV,MP4,WEBM_MEDIA,MKV,OGG,AAC,MP3,WAV,FLAC,MPEG_TS,AVI,FLV,PDF
   ].forEach(format=>registry.register(format));
   return registry;
 }

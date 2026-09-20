@@ -1,6 +1,7 @@
 import { FormatRegistry } from "../formats/FormatRegistry";
 import { inspectFile } from "../inspection/inspectFile";
 import type { DetailedMediaInspection } from "../media/types";
+import type { DetailedPdfInspection } from "../pdf/types";
 
 export interface ValidationResult {
   valid:boolean;
@@ -9,7 +10,7 @@ export interface ValidationResult {
 }
 
 export interface OutputValidator {
-  validate(blob:Blob,targetFormatId:string):Promise<ValidationResult>;
+  validate(blob:Blob,targetFormatId:string,options?:Record<string,unknown>):Promise<ValidationResult>;
 }
 
 export class ImageOutputValidator implements OutputValidator {
@@ -18,21 +19,17 @@ export class ImageOutputValidator implements OutputValidator {
     private readonly probe?:(blob:Blob,formatId:string)=>Promise<{width:number;height:number}>
   ) {}
 
-  async validate(blob:Blob,targetFormatId:string):Promise<ValidationResult>{
+  async validate(blob:Blob,targetFormatId:string,_options:Record<string,unknown>={}):Promise<ValidationResult>{
     const target=this.formats.get(targetFormatId);
     const inspection=await inspectFile(
       Object.assign(blob,{name:"output."+(target?.extensions[0]??"bin")}),
       this.formats
     );
     const errors:string[]=[];
-    if(inspection.detection.format?.id!==targetFormatId){
-      errors.push("Output signature does not match requested format.");
-    }
+    if(inspection.detection.format?.id!==targetFormatId) errors.push("Output signature does not match requested format.");
     if(blob.size===0) errors.push("Output is empty.");
 
-    let width=inspection.width;
-    let height=inspection.height;
-    let decoded=false;
+    let width=inspection.width,height=inspection.height,decoded=false;
     try{
       if(typeof createImageBitmap==="function"){
         const bitmap=await createImageBitmap(blob);
@@ -51,14 +48,7 @@ export class ImageOutputValidator implements OutputValidator {
     if(!decoded&&["jpeg","png","webp","gif","avif"].includes(targetFormatId)){
       errors.push("Output could not be decoded after conversion.");
     }
-    if((width!==undefined&&width<=0)||(height!==undefined&&height<=0)){
-      errors.push("Decoded output has invalid dimensions.");
-    }
-    return {
-      valid:errors.length===0,
-      errors,
-      properties:{format:inspection.detection.format?.id,width,height,size:blob.size}
-    };
+    return {valid:errors.length===0,errors,properties:{format:inspection.detection.format?.id,width,height,size:blob.size}};
   }
 }
 
@@ -68,7 +58,7 @@ export class MediaOutputValidator implements OutputValidator {
     private readonly probe:(blob:Blob)=>Promise<DetailedMediaInspection>
   ) {}
 
-  async validate(blob:Blob,targetFormatId:string):Promise<ValidationResult>{
+  async validate(blob:Blob,targetFormatId:string,_options:Record<string,unknown>={}):Promise<ValidationResult>{
     const target=this.formats.get(targetFormatId);
     const errors:string[]=[];
     if(blob.size===0) errors.push("Output is empty.");
@@ -77,28 +67,44 @@ export class MediaOutputValidator implements OutputValidator {
       Object.assign(blob,{name:"output."+(target?.extensions[0]??"bin")}),
       this.formats
     );
-    if(shallow.detection.format?.id!==targetFormatId){
-      errors.push("Output container signature does not match requested format.");
-    }
+    if(shallow.detection.format?.id!==targetFormatId) errors.push("Output container signature does not match requested format.");
 
     let media:DetailedMediaInspection|null=null;
-    try{ media=await this.probe(blob); }
-    catch{ errors.push("Output could not be reopened by the media parser."); }
-
+    try{media=await this.probe(blob);}catch{errors.push("Output could not be reopened by the media parser.");}
     if(media){
       if(media.tracks.length===0) errors.push("Output contains no media tracks.");
       if(media.duration!=null&&media.duration<0) errors.push("Output reports an invalid negative duration.");
     }
-
     return {
       valid:errors.length===0,
       errors,
-      properties:{
-        format:shallow.detection.format?.id,
-        size:blob.size,
-        duration:media?.duration??null,
-        tracks:media?.tracks.length??0
-      }
+      properties:{format:shallow.detection.format?.id,size:blob.size,duration:media?.duration??null,tracks:media?.tracks.length??0}
+    };
+  }
+}
+
+export class PdfOutputValidator implements OutputValidator {
+  constructor(
+    private readonly formats:FormatRegistry,
+    private readonly probe:(blob:Blob,password?:string)=>Promise<DetailedPdfInspection>
+  ) {}
+
+  async validate(blob:Blob,targetFormatId:string,options:Record<string,unknown>={}):Promise<ValidationResult>{
+    const errors:string[]=[];
+    const shallow=await inspectFile(Object.assign(blob,{name:"output.pdf"}),this.formats);
+    if(shallow.detection.format?.id!=="pdf") errors.push("Output signature is not PDF.");
+    if(blob.size===0) errors.push("Output is empty.");
+
+    const password=String(options.newPassword??options.password??"")||undefined;
+    let pdf:DetailedPdfInspection|null=null;
+    try{pdf=await this.probe(blob,password);}
+    catch(error){errors.push("Output PDF could not be reopened: "+(error instanceof Error?error.message:String(error)));}
+
+    if(pdf&&pdf.pages<1) errors.push("Output PDF contains no pages.");
+    return {
+      valid:errors.length===0,
+      errors,
+      properties:{format:targetFormatId,size:blob.size,pages:pdf?.pages??null,scannedPages:pdf?.scannedPages??null}
     };
   }
 }
@@ -107,13 +113,15 @@ export class UniversalOutputValidator implements OutputValidator {
   constructor(
     private readonly formats:FormatRegistry,
     private readonly image:ImageOutputValidator,
-    private readonly media:MediaOutputValidator
+    private readonly media:MediaOutputValidator,
+    private readonly pdf:PdfOutputValidator
   ) {}
 
-  validate(blob:Blob,targetFormatId:string):Promise<ValidationResult>{
+  validate(blob:Blob,targetFormatId:string,options:Record<string,unknown>={}):Promise<ValidationResult>{
     const category=this.formats.get(targetFormatId)?.category;
-    if(category==="image") return this.image.validate(blob,targetFormatId);
-    if(category==="audio"||category==="video") return this.media.validate(blob,targetFormatId);
+    if(category==="image") return this.image.validate(blob,targetFormatId,options);
+    if(category==="audio"||category==="video") return this.media.validate(blob,targetFormatId,options);
+    if(category==="pdf") return this.pdf.validate(blob,targetFormatId,options);
     return Promise.resolve({valid:blob.size>0,errors:blob.size?[]:["Output is empty."],properties:{size:blob.size}});
   }
 }

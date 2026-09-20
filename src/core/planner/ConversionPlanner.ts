@@ -26,11 +26,22 @@ export class ConversionPlanner {
   ) {}
 
   availableTargets(sourceId:string):string[] {
-    return [...new Set(
-      this.graph.outgoing(sourceId)
-        .filter(edge=>this.engines.supports(edge.engineId,edge.from,edge.to))
-        .map(edge=>edge.to)
-    )];
+    const targets=new Set<string>();
+    const visited=new Set<string>([sourceId]);
+    const queue=[sourceId];
+
+    while(queue.length){
+      const current=queue.shift()!;
+      for(const edge of this.graph.outgoing(current)){
+        if(!this.engines.supports(edge.engineId,edge.from,edge.to)) continue;
+        targets.add(edge.to);
+        if(!visited.has(edge.to)){
+          visited.add(edge.to);
+          queue.push(edge.to);
+        }
+      }
+    }
+    return [...targets];
   }
 
   plan(sourceId:string,targetId:string):ConversionRoute {

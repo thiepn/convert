@@ -124,7 +124,7 @@ export class JobManager {
       }
 
       this.emit(onUpdate,id,"VALIDATING",0.92,"Validating output");
-      const validation=await this.validator.validate(current,targetFormatId);
+      const validation=await this.validator.validate(current,targetFormatId,options);
       if(!validation.valid) throw new Error("OUTPUT_INVALID: "+validation.errors.join(" "));
 
       const external=this.networkGuard.externalRequestsSince(networkSnapshot);

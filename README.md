@@ -4,32 +4,33 @@ A local-first universal file conversion platform for desktop and mobile browsers
 
 ## Current status
 
-Phase 2 — Production Audio & Video Engine is implemented on top of the Phase 0 core and Phase 1 image subsystem.
+Phase 3 — Production PDF Engine is implemented on top of the Phase 0 core, Phase 1 image engine, and Phase 2 media engine.
 
 ### Images
 
-JPEG, PNG, WebP, GIF, TIFF, AVIF, HEIC/HEIF input, JPEG XL, and SVG rasterization.
+JPEG, PNG, WebP, GIF, TIFF, AVIF, HEIC/HEIF input, JPEG XL, SVG rasterization, and image-to-PDF routing.
 
 ### Media
 
-MP4/M4A, MOV, MKV, WebM, Ogg, MP3, WAV, FLAC, AAC/ADTS, and MPEG-TS.
+MP4/M4A, MOV, MKV, WebM, Ogg, MP3, WAV, FLAC, AAC/ADTS, and MPEG-TS with copy-first remuxing and local WebCodecs transcoding.
 
-Media conversion uses Mediabunny with copy-first routing: compatible tracks are remuxed without quality loss, while incompatible or transformed tracks are transcoded locally through WebCodecs. Local MP3, AAC, and FLAC encoder extensions fill common browser gaps.
+### PDF
 
-Phase 2 includes:
-- detailed audio/video track inspection
-- remux-vs-transcode route preview
-- multi-track preservation
-- local audio extraction
-- trim, resolution, frame-rate, codec, and bitrate controls
-- target-size mode
-- metadata policies
-- hardware-codec preference
-- streaming OPFS output with backpressure
-- cancellation and batch processing
-- independent media output validation
+- PDF inspection and scan/text classification
+- merge, split, reorder, delete, and rotate pages
+- page rendering to PNG/JPEG/WebP
+- local text extraction
+- local searchable OCR
+- lossless structural optimization
+- web linearization
+- repair/rewrite
+- form flattening
+- AES-256 encryption and decryption
+- images to PDF
+- signature/action warnings
+- attachment/bookmark/form/annotation inspection
 
-AVI and FLV are recognized but intentionally have no production conversion route yet; see docs/media-engine.md for the compatibility-engine rationale.
+The PDF stack uses PDF.js, pdf-lib, qpdf WASM, and Tesseract.js. OCR assets and traineddata are self-hosted; no OCR CDN or cloud conversion service is used.
 
 ## Development
 
@@ -46,16 +47,16 @@ Checks:
 
 ## Privacy
 
-Conversion jobs do not upload files. Processing happens inside the browser with local workers, WebAssembly, WebCodecs, and OPFS.
+Conversion jobs do not upload files. PDF passwords, text, OCR data, rendered pages, and outputs remain local to the browser.
 
-See docs/privacy-model.md, docs/architecture.md, docs/image-engine.md, and docs/media-engine.md.
+See docs/privacy-model.md, docs/architecture.md, docs/image-engine.md, docs/media-engine.md, and docs/pdf-engine.md.
 
 ## Roadmap
 
 - Phase 0: foundation — implemented
 - Phase 1: production image engine — implemented
 - Phase 2: production audio/video engine — implemented
-- Phase 3: PDF
+- Phase 3: production PDF engine — implemented
 - Phase 4: documents and Office
 - Phase 5: archives
 - Phase 6: spreadsheets, data, and databases
