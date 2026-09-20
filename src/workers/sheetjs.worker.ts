@@ -45,12 +45,17 @@ function workbookFromJson(text:string,jsonl:boolean):XLSX.WorkBook{
   return wb;
 }
 
-async function readWorkbook(source:Blob,formatId:string):Promise<XLSX.WorkBook>{
+async function readWorkbook(
+  source:Blob,
+  formatId:string,
+  options:Partial<SpreadsheetConversionOptions>={}
+):Promise<XLSX.WorkBook>{
   if(formatId==="json-data"||formatId==="jsonl") return workbookFromJson(await source.text(),formatId==="jsonl");
   if(formatId==="csv"||formatId==="tsv"){
+    const selectedDelimiter=options.delimiter&&options.delimiter!=="auto"?options.delimiter:",";
     return XLSX.read(await source.text(),{
       type:"string",
-      FS:formatId==="tsv"?"\t":",",
+      FS:formatId==="tsv"?"\t":selectedDelimiter,
       cellDates:true,
       cellFormula:true
     } as any);
@@ -153,7 +158,7 @@ function cloneWorkbookForSheets(wb:XLSX.WorkBook,sheets:string[],formulaMode:"pr
 function flatBlob(sheet:XLSX.WorkSheet,target:string,options:SpreadsheetConversionOptions):Blob{
   if(target==="csv"||target==="tsv"){
     const text=XLSX.utils.sheet_to_csv(sheet,{
-      FS:target==="tsv"?"\t":options.delimiter||",",
+      FS:target==="tsv"?"\t":(!options.delimiter||options.delimiter==="auto"?",":options.delimiter),
       strip:false,
       blankrows:true
     });
@@ -171,7 +176,7 @@ async function convert(
   requestId:string
 ){
   send({type:"progress",requestId,progress:.12,stage:"Parsing workbook"});
-  const wb=await readWorkbook(source,sourceFormatId);
+  const wb=await readWorkbook(source,sourceFormatId,options);
   const sheets=chosenSheets(wb,options);
   if(!sheets.length) throw new Error("SPREADSHEET_EMPTY: Workbook contains no sheets.");
 
