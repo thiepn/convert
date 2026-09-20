@@ -2,7 +2,9 @@ name: Phase 9 CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - "phase-*"
   pull_request:
 
 permissions:
