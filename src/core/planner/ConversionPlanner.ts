@@ -38,6 +38,7 @@ export class ConversionPlanner {
     while(queue.length){
       const current=queue.shift()!;
       for(const edge of this.graph.outgoing(current)){
+        if(edge.rootOnly&&current!==sourceId) continue;
         if(!this.engines.supports(edge.engineId,edge.from,edge.to)) continue;
         targets.add(edge.to);
         if(!visited.has(edge.to)){
@@ -87,6 +88,7 @@ export class ConversionPlanner {
       }
 
       for(const edge of this.graph.outgoing(current.id)){
+        if(edge.rootOnly&&current.id!==sourceId) continue;
         if(!this.engines.supports(edge.engineId,edge.from,edge.to)) continue;
         const score=current.score+edgeScore(edge,preference);
         if(score>=(best.get(edge.to)??Number.POSITIVE_INFINITY)) continue;
