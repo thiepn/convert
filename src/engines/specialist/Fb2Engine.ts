@@ -1,4 +1,5 @@
 import type { ConversionEngine,ConversionEstimate,EngineConvertRequest,EngineConvertResult } from "../../core/engines/Engine";
+import { assertMemoryBackedSource } from "../../core/performance/Budget";
 
 function escapeHtml(value:string):string {
   return value.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
@@ -17,12 +18,18 @@ export class Fb2Engine implements ConversionEngine{
   canConvert(from:string,to:string):boolean{return from==="fb2"&&to==="html-doc";}
 
   async estimate(source:Blob):Promise<ConversionEstimate>{
-    return {temporaryBytes:Math.max(24*1024*1024,source.size*5),outputBytes:null,notes:["FB2 is parsed as XML and converted to semantic HTML; embedded binary images are not expanded."]};
+    const memoryBytes=Math.max(24*1024*1024,source.size*5);
+    return {
+      temporaryBytes:memoryBytes,memoryBytes,
+      workspaceBytes:Math.max(16*1024*1024,source.size),outputBytes:null,
+      sourceAccess:"buffered",outputAccess:"buffered",
+      notes:["FB2 is parsed as XML and converted to semantic HTML; embedded binary images are not expanded."]
+    };
   }
 
   async convert(request:EngineConvertRequest):Promise<EngineConvertResult>{
     if(!this.canConvert(request.sourceFormatId,request.targetFormatId)) throw new Error("FB2_ROUTE_UNSUPPORTED: FB2 first converts to semantic HTML.");
-    if(request.source.size>64*1024*1024) throw new Error("FB2_SIZE_LIMIT: FB2 document exceeds the guarded XML parsing limit.");
+    assertMemoryBackedSource(request.source.size,"FB2 XML parsing",5,128*1024*1024);
 
     request.onProgress?.(.2,"Parsing FictionBook XML");
     const xml=new DOMParser().parseFromString(await request.source.text(),"application/xml");
