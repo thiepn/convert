@@ -104,3 +104,35 @@ details{margin-top:16px;color:#929bab}summary{cursor:pointer}pre{white-space:pre
 .data-preview tr:last-child td{border-bottom:0}
 @media(max-width:760px){.data-controls-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:480px){.data-controls-grid{grid-template-columns:1fr}}
+
+
+.batch-controls-grid{grid-template-columns:1fr 1.4fr 1fr}
+.batch-package-row{align-self:end;min-height:44px}
+.control-help{display:block;color:#6f7a8b;font-size:.7rem;line-height:1.35;margin-top:6px}
+.batch-pipeline{margin-top:14px;border:1px solid #292f39;border-radius:11px;background:#0d1015;overflow:hidden}
+.batch-pipeline-heading{display:flex;justify-content:space-between;gap:14px;align-items:center;padding:10px 12px;border-bottom:1px solid #292f39}
+.batch-pipeline-heading strong{font-size:.8rem;color:#d9dfe8}
+.batch-pipeline-heading span{font-size:.72rem;color:#758091;text-align:right}
+.pipeline-steps{display:flex;gap:7px;flex-wrap:wrap;padding:10px 12px}
+.pipeline-step{display:inline-flex;align-items:center;min-height:28px;padding:0 9px;border:1px solid #303846;border-radius:999px;background:#141922;color:#aeb8c8;font-size:.72rem}
+.pipeline-arrow{color:#536073;font-size:.72rem;align-self:center}
+.batch-status-row{display:flex;justify-content:space-between;gap:14px;align-items:center;margin-top:14px}
+.batch-status-row strong,.batch-status-row span{display:block}
+.batch-status-row strong{font-size:.82rem;color:#d9dee7}
+.batch-status-row span{margin-top:3px;color:#7f8999;font-size:.72rem}
+.batch-status-row .secondary-button{margin:0}
+.batch-task-list{margin-top:10px;border:1px solid #292f39;border-radius:11px;background:#0d1015;max-height:320px;overflow:auto}
+.batch-task-row{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(110px,.75fr) 80px;gap:10px;align-items:center;padding:9px 11px;border-bottom:1px solid #232a34}
+.batch-task-row:last-child{border-bottom:0}
+.batch-task-name{min-width:0}
+.batch-task-name strong,.batch-task-name span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.batch-task-name strong{font-size:.78rem;color:#d9dfe7}
+.batch-task-name span{margin-top:2px;font-size:.69rem;color:#717d8e}
+.batch-task-stage{font-size:.7rem;color:#8b96a7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.batch-task-state{justify-self:end;border:1px solid #323a46;border-radius:999px;padding:4px 7px;font-size:.66rem;color:#aeb7c5;text-transform:uppercase;letter-spacing:.04em}
+.batch-task-state.completed{color:#91d9a9;border-color:rgba(145,217,169,.35)}
+.batch-task-state.failed{color:#e1a0a0;border-color:rgba(225,160,160,.35)}
+.batch-task-state.cancelled{color:#d7bd8b;border-color:rgba(215,189,139,.35)}
+.batch-task-state.running{color:#abc4ef;border-color:rgba(171,196,239,.35)}
+@media(max-width:760px){.batch-controls-grid{grid-template-columns:1fr 1fr}.batch-status-row{align-items:flex-start;flex-direction:column}}
+@media(max-width:480px){.batch-controls-grid{grid-template-columns:1fr}.batch-task-row{grid-template-columns:minmax(0,1fr) 68px}.batch-task-stage{grid-column:1/-1;grid-row:2}.batch-task-state{grid-column:2;grid-row:1}}
