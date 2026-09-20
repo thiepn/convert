@@ -1,61 +1,19 @@
 {
-  "phase": 2,
+  "phase": 3,
   "reviewed_on": "2026-09-20",
   "dependencies": [
-    {
-      "name": "wasm-vips",
-      "version": "0.0.18",
-      "declared_license": "MIT",
-      "distribution": ["JavaScript", "WebAssembly", "dynamic WebAssembly modules"],
-      "notes": "Preserve wasm-vips THIRD-PARTY-NOTICES.md and review bundled component licenses when changing the build."
-    },
-    {
-      "name": "@keeratita/heic-converter",
-      "version": "0.4.1",
-      "declared_license": "MIT",
-      "distribution": ["JavaScript", "WebAssembly"],
-      "notes": "HEIC/HEIF decode-only fallback."
-    },
-    {
-      "name": "mediabunny",
-      "version": "1.58.0",
-      "declared_license": "MPL-2.0",
-      "distribution": ["JavaScript"],
-      "notes": "Primary media demux/mux/conversion layer. Modifications to MPL-covered source files must remain available under MPL-2.0."
-    },
-    {
-      "name": "@mediabunny/mp3-encoder",
-      "version": "1.58.0",
-      "declared_license": "MPL-2.0",
-      "distribution": ["JavaScript", "inlined WebAssembly"],
-      "notes": "Local LAME-based MP3 encoder fallback registered only when native encoding is unavailable."
-    },
-    {
-      "name": "@mediabunny/aac-encoder",
-      "version": "1.58.0",
-      "declared_license": "MPL-2.0",
-      "distribution": ["JavaScript", "inlined WebAssembly"],
-      "notes": "Local AAC-LC encoder fallback registered only when native AAC encoding is unavailable."
-    },
-    {
-      "name": "@mediabunny/flac-encoder",
-      "version": "1.58.0",
-      "declared_license": "MPL-2.0",
-      "distribution": ["JavaScript", "inlined WebAssembly"],
-      "notes": "Local libFLAC encoder fallback."
-    },
-    {
-      "name": "fflate",
-      "version": "0.8.3",
-      "declared_license": "MIT",
-      "distribution": ["JavaScript"],
-      "notes": "Used for bounded in-memory batch result ZIP packaging."
-    }
-  ],
-  "deferred": [
-    {
-      "name": "ffmpeg.wasm compatibility core",
-      "reason": "Not shipped in Phase 2 because the current core is GPL-2.0-or-later, memory-backed, and limited for multi-gigabyte inputs. Legacy AVI/FLV compatibility remains explicitly unsupported rather than silently adding an unreviewed binary."
-    }
+    {"name":"wasm-vips","version":"0.0.18","declared_license":"MIT","notes":"Image engine; preserve third-party notices."},
+    {"name":"mediabunny","version":"1.58.0","declared_license":"MPL-2.0","notes":"Primary media engine."},
+    {"name":"pdfjs-dist","version":"6.3.289","declared_license":"Apache-2.0","notes":"PDF parsing and rendering."},
+    {"name":"pdf-lib","version":"1.17.1","declared_license":"MIT","notes":"PDF composition, pages, forms, and image embedding. Encrypted inputs are routed through qpdf first."},
+    {"name":"qpdf-run","version":"0.2.1","declared_license":"MIT","notes":"Browser wrapper. Bundles qpdf WASM; upstream qpdf is Apache-2.0."},
+    {"name":"qpdf","version":"vendored by qpdf-run","declared_license":"Apache-2.0","notes":"Structural PDF transformation and encryption engine."},
+    {"name":"tesseract.js","version":"7.0.0","declared_license":"Apache-2.0","notes":"Local OCR orchestration. Worker/core/language assets are self-hosted."},
+    {"name":"@tesseract.js-data/eng","version":"1.0.0","declared_license":"MIT"},
+    {"name":"@tesseract.js-data/deu","version":"1.0.0","declared_license":"MIT"},
+    {"name":"@tesseract.js-data/fra","version":"1.0.0","declared_license":"MIT"},
+    {"name":"@tesseract.js-data/tur","version":"1.0.0","declared_license":"MIT"},
+    {"name":"@tesseract.js-data/kor","version":"1.0.0","declared_license":"MIT"},
+    {"name":"fflate","version":"0.8.3","declared_license":"MIT","notes":"Bounded batch ZIP packaging."}
   ]
 }
