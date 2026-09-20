@@ -1,33 +1,58 @@
 export interface ConversionEdge {
-  from: string;
-  to: string;
-  engineId: string;
-  qualityLoss: number;
-  metadataLoss: string[];
-  temporaryMultiplier: number;
-  streaming: boolean;
+  from:string;
+  to:string;
+  engineId:string;
+  qualityLoss:number;
+  metadataLoss:string[];
+  temporaryMultiplier:number;
+  streaming:boolean;
+  baseCost?:number;
 }
 
 export class ConversionGraph {
-  constructor(private readonly edges: ConversionEdge[]) {}
-
-  outgoing(formatId: string): ConversionEdge[] {
-    return this.edges.filter(edge => edge.from === formatId);
-  }
-
-  all(): ConversionEdge[] {
-    return [...this.edges];
-  }
+  constructor(private readonly edges:ConversionEdge[]) {}
+  outgoing(formatId:string):ConversionEdge[] { return this.edges.filter(edge=>edge.from===formatId); }
+  all():ConversionEdge[] { return [...this.edges]; }
 }
 
-export function createPhase0Graph(): ConversionGraph {
-  const engineId = "browser-image-proof";
-  return new ConversionGraph([
-    { from: "jpeg", to: "png", engineId, qualityLoss: 0, metadataLoss: ["EXIF", "XMP", "ICC"], temporaryMultiplier: 2, streaming: false },
-    { from: "jpeg", to: "webp", engineId, qualityLoss: 0.15, metadataLoss: ["EXIF", "XMP", "ICC"], temporaryMultiplier: 2, streaming: false },
-    { from: "png", to: "jpeg", engineId, qualityLoss: 0.4, metadataLoss: ["EXIF", "XMP", "ICC", "alpha"], temporaryMultiplier: 2, streaming: false },
-    { from: "png", to: "webp", engineId, qualityLoss: 0.08, metadataLoss: ["EXIF", "XMP", "ICC"], temporaryMultiplier: 2, streaming: false },
-    { from: "webp", to: "jpeg", engineId, qualityLoss: 0.3, metadataLoss: ["EXIF", "XMP", "ICC", "animation", "alpha"], temporaryMultiplier: 2, streaming: false },
-    { from: "webp", to: "png", engineId, qualityLoss: 0, metadataLoss: ["EXIF", "XMP", "ICC", "animation"], temporaryMultiplier: 2, streaming: false }
-  ]);
+const IMAGE_INPUTS=["jpeg","png","webp","gif","tiff","avif","heic","jxl","svg"];
+const IMAGE_OUTPUTS=["jpeg","png","webp","gif","tiff","avif","jxl"];
+
+function qualityLoss(target:string):number {
+  if (target==="jpeg") return 0.12;
+  if (target==="gif") return 0.22;
+  if (target==="webp" || target==="avif" || target==="jxl") return 0.04;
+  return 0;
+}
+
+export function createConversionGraph():ConversionGraph {
+  const edges:ConversionEdge[]=[];
+  for (const from of IMAGE_INPUTS) {
+    for (const to of IMAGE_OUTPUTS) {
+      edges.push({
+        from,to,engineId:"vips-image",
+        qualityLoss:qualityLoss(to),
+        metadataLoss:from==="heic"?["EXIF","XMP","ICC"]:[],
+        temporaryMultiplier:2,
+        streaming:false,
+        baseCost:0
+      });
+    }
+  }
+
+  const fallbackPairs=[
+    ["jpeg","png"],["jpeg","webp"],["png","jpeg"],["png","webp"],
+    ["webp","jpeg"],["webp","png"]
+  ];
+  for (const [from,to] of fallbackPairs) {
+    edges.push({
+      from,to,engineId:"browser-image-proof",
+      qualityLoss:qualityLoss(to)+0.15,
+      metadataLoss:["EXIF","XMP","ICC"],
+      temporaryMultiplier:3,
+      streaming:false,
+      baseCost:500
+    });
+  }
+  return new ConversionGraph(edges);
 }
