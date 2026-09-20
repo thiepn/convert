@@ -148,7 +148,10 @@ export class App {
       new DocumentOutputValidator(this.formats,(blob,formatId)=>this.documentInspector.inspect(blob,formatId)),
       new ArchiveOutputValidator(this.formats,(blob,formatId,password)=>this.archiveEngine.inspect(blob,formatId,password)),
       new SpreadsheetOutputValidator(this.formats,(blob,formatId)=>this.spreadsheetEngine.inspect(blob,formatId)),
-      new DataOutputValidator(this.formats,(blob,formatId,options)=>this.duckDbDataEngine.inspect(blob,formatId,options)),
+      new DataOutputValidator(
+        this.formats,
+        (blob,formatId,options)=>this.duckDbDataEngine.inspect(blob,formatId,options as Partial<DataConversionOptions>)
+      ),
       new DatabaseOutputValidator(this.formats,blob=>this.sqliteEngine.inspect(blob))
     );
     this.jobs=new JobManager(this.formats,this.engines,this.planner,validator);
