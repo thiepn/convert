@@ -21,6 +21,7 @@ import { inspectFile } from "../core/inspection/inspectFile";
 import { JobManager } from "../core/jobs/JobManager";
 import { getDeviceProfile } from "../core/performance/DeviceProfile";
 import { TempWorkspace } from "../core/storage/TempWorkspace";
+import { friendlyIssueText,presentIssue } from "../core/ux/errors";
 import type { ConversionOutput } from "../core/jobs/types";
 import type { DetailedMediaInspection, MediaConversionOptions } from "../core/media/types";
 import type { DetailedPdfInspection, PdfCreateImage, PdfOcrOptions, PdfSplitRange } from "../core/pdf/types";
@@ -146,6 +147,7 @@ export class App {
   private kind:SelectionKind=null;
   private leases:ResultLease[]=[];
   private routeRevision=0;
+  private selectionRevision=0;
   private batchPackageResults=true;
 
   constructor(){
@@ -197,6 +199,7 @@ export class App {
     await TempWorkspace.cleanupOrphanedJobs();
     await this.engines.prepareAll();
     await this.renderCapabilities(await detectCapabilities());
+    this.bindFileLaunch();
   }
 
   private bindInputs(){
@@ -205,6 +208,12 @@ export class App {
 
     input.addEventListener("change",()=>{
       if(input.files?.length) void this.loadFiles([...input.files]);
+    });
+    zone.addEventListener("keydown",event=>{
+      if(event.key==="Enter"||event.key===" "){
+        event.preventDefault();
+        input.click();
+      }
     });
 
     ["dragenter","dragover"].forEach(type=>zone.addEventListener(type,event=>{
@@ -249,11 +258,71 @@ export class App {
     element<HTMLButtonElement>("archive-select-none").addEventListener("click",()=>this.setArchiveSelection(false));
     element<HTMLButtonElement>("convert-button").addEventListener("click",()=>void this.convertAll());
     element<HTMLButtonElement>("batch-resume-button").addEventListener("click",()=>void this.resumeBatch());
+    element<HTMLButtonElement>("start-over-button").addEventListener("click",()=>void this.resetSelection());
     element<HTMLButtonElement>("cancel-button").addEventListener("click",()=>{
       this.batchRunner.cancel();
       this.jobs.cancelAll();
+      this.pdfEngine.cancelActive();
       this.archiveAbort?.abort();
     });
+  }
+
+  private bindFileLaunch(){
+    const launchQueue=(globalThis as any).launchQueue;
+    if(!launchQueue?.setConsumer) return;
+    launchQueue.setConsumer(async(params:any)=>{
+      const handles=Array.isArray(params?.files)?params.files:[];
+      const files:File[]=[];
+      for(const handle of handles){
+        try{
+          const file=await handle.getFile?.();
+          if(file instanceof File) files.push(file);
+        }catch{}
+      }
+      if(files.length) await this.loadFiles(files);
+    });
+  }
+
+  private async resetSelection(){
+    this.batchRunner.cancel();
+    this.jobs.cancelAll();
+    this.pdfEngine.cancelActive();
+    this.archiveAbort?.abort();
+    await this.batchRunner.releaseSession();
+    await this.releaseResults();
+
+    this.files=[];
+    this.inspections=[];
+    this.imageDetail=null;
+    this.mediaDetail=null;
+    this.pdfDetail=null;
+    this.documentDetail=null;
+    this.archiveDetail=null;
+    this.spreadsheetDetail=null;
+    this.dataDetail=null;
+    this.databaseDetail=null;
+    this.archiveDetail=null;
+    this.kind=null;
+    this.routeRevision++;
+    this.selectionRevision++;
+
+    const input=element<HTMLInputElement>("file-input");
+    input.value="";
+    element("file-panel").classList.add("hidden");
+    element("job-panel").classList.add("hidden");
+    element("results").classList.add("hidden");
+    element("results").replaceChildren();
+    element("inspection-warnings").replaceChildren();
+    element("loss-warnings").replaceChildren();
+    element<HTMLElement>("progress-bar").style.width="0%";
+    const progress=element("job-progress-track");
+    progress.setAttribute("aria-valuenow","0");
+    progress.setAttribute("aria-valuetext","Ready");
+    element("job-progress").textContent="0%";
+    element("job-stage").textContent="Ready";
+    element<HTMLButtonElement>("convert-button").disabled=false;
+    element<HTMLButtonElement>("cancel-button").classList.add("hidden");
+    element<HTMLLabelElement>("drop-zone").focus();
   }
 
   private getKind(inspection:FileInspection):SelectionKind {
@@ -273,6 +342,7 @@ export class App {
   private async loadFiles(files:File[]){
     await this.batchRunner.releaseSession();
     await this.releaseResults();
+    const selectionRevision=++this.selectionRevision;
     this.files=files;
     this.imageDetail=null;
     this.mediaDetail=null;
@@ -283,6 +353,7 @@ export class App {
     this.dataDetail=null;
     this.databaseDetail=null;
     this.inspections=await Promise.all(files.map(file=>inspectFile(file,this.formats)));
+    if(selectionRevision!==this.selectionRevision) return;
 
     const kinds=new Set(this.inspections.map(i=>this.getKind(i)).filter(Boolean) as Exclude<SelectionKind,null>[]);
     const allKnown=this.inspections.every(item=>Boolean(item.detection.format));
@@ -391,6 +462,8 @@ export class App {
         }
       }
     }
+
+    if(selectionRevision!==this.selectionRevision) return;
 
     this.populateDataSelectors();
     if(this.kind==="database"&&this.databaseDetail?.tables.length){
@@ -955,7 +1028,7 @@ export class App {
       sub.textContent=task.outputName
         ?task.outputName
         :task.error
-          ?task.error
+          ?friendlyIssueText(task.error)
           :(task.sourceFormatId??"Inspecting");
       name.append(strong,sub);
 
@@ -1466,7 +1539,7 @@ export class App {
       this.renderWarnings("loss-warnings",[...new Set(warnings)]);
     }catch(error){
       if(revision!==this.routeRevision) return;
-      box.textContent=error instanceof Error?error.message:"No route available.";
+      box.textContent=friendlyIssueText(error);
       this.renderWarnings("loss-warnings",[]);
     }
   }
@@ -1474,7 +1547,12 @@ export class App {
   private renderWarnings(id:string,warnings:string[]){
     const container=element(id);container.replaceChildren();
     for(const text of warnings){
-      const warning=document.createElement("div");warning.className="warning";warning.textContent=text;container.append(warning);
+      const issue=presentIssue(text);
+      const warning=document.createElement("div");
+      warning.className="warning";
+      warning.textContent=issue.code?friendlyIssueText(text):text;
+      if(issue.code&&warning.textContent!==text) warning.title=text;
+      container.append(warning);
     }
   }
 
@@ -1728,7 +1806,8 @@ export class App {
 
   private async createCombinedImagePdf(){
     const button=element<HTMLButtonElement>("convert-button");
-    button.disabled=true;
+    const cancel=element<HTMLButtonElement>("cancel-button");
+    button.disabled=true;cancel.classList.remove("hidden");
     await this.releaseResults();
     element("job-panel").classList.remove("hidden");
     const normalized:Array<PdfCreateImage>=[];
@@ -1757,6 +1836,7 @@ export class App {
       this.renderWarnings("loss-warnings",[error instanceof Error?error.message:String(error)]);
     }finally{
       for(const release of releases){try{await release();}catch{}}
+      cancel.classList.add("hidden");
       button.disabled=false;
     }
   }
@@ -1764,8 +1844,9 @@ export class App {
   private async runPdfOperation(){
     const operation=element<HTMLSelectElement>("pdf-operation").value;
     const button=element<HTMLButtonElement>("convert-button");
+    const cancel=element<HTMLButtonElement>("cancel-button");
     const panel=element("job-panel");
-    button.disabled=true;panel.classList.remove("hidden");
+    button.disabled=true;cancel.classList.remove("hidden");panel.classList.remove("hidden");
     await this.releaseResults();
     element("results").classList.add("hidden");
     element("results").replaceChildren();
@@ -1911,6 +1992,7 @@ export class App {
     }catch(error){
       this.renderWarnings("loss-warnings",[error instanceof Error?error.message:String(error)]);
     }finally{
+      cancel.classList.add("hidden");
       button.disabled=false;
     }
   }
@@ -1918,9 +2000,13 @@ export class App {
   private setProgress(progress:number,stage:string){
     element("job-panel").classList.remove("hidden");
     const value=Math.max(0,Math.min(1,progress));
+    const percent=Math.round(value*100);
     element("job-stage").textContent=stage;
-    element("job-progress").textContent=Math.round(value*100)+"%";
-    element<HTMLElement>("progress-bar").style.width=Math.round(value*100)+"%";
+    element("job-progress").textContent=percent+"%";
+    element<HTMLElement>("progress-bar").style.width=percent+"%";
+    const track=element("job-progress-track");
+    track.setAttribute("aria-valuenow",String(percent));
+    track.setAttribute("aria-valuetext",stage+" · "+percent+"%");
   }
 
   private async renderResults(outputs:ConversionOutput[],failed:Array<{name:string;error:string}>){
@@ -1968,7 +2054,7 @@ export class App {
           );
         }catch(error){
           const node=document.createElement("div");node.className="warning";
-          node.textContent="ZIP package: "+(error instanceof Error?error.message:String(error));
+          node.textContent="ZIP package: "+friendlyIssueText(error);
           container.append(node);
         }
       })();
@@ -1976,7 +2062,7 @@ export class App {
 
     for(const failure of failed){
       const node=document.createElement("div");node.className="warning";
-      node.textContent=failure.name+": "+failure.error;container.append(node);
+      node.textContent=failure.name+": "+friendlyIssueText(failure.error);container.append(node);
     }
   }
 
@@ -1987,7 +2073,7 @@ export class App {
     const strong=document.createElement("strong");strong.textContent=name;
     const sub=document.createElement("span");sub.textContent=formatBytes(blob.size)+(warnings.length?" · "+warnings.length+" warning(s)":"");
     meta.append(strong,sub);
-    const link=document.createElement("a");link.className="download-link";link.href=url;link.download=name;link.textContent="Save";
+    const link=document.createElement("a");link.className="download-link";link.href=url;link.download=name;link.textContent="Save";link.setAttribute("aria-label","Save "+name);
     item.append(meta,link);container.append(item);
   }
 
@@ -2048,7 +2134,7 @@ export class App {
       &&this.sqliteEngine.isAvailable()
       &&this.subtitleEngine.isAvailable()
       &&this.meshEngine.isAvailable()
-      ?"Phase 9 ready"
+      ?"v1.0 runtime ready"
       :"One or more local engines degraded";
     element("capability-json").textContent=JSON.stringify({
       ...profile,

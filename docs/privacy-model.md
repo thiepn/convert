@@ -25,3 +25,11 @@ Cancellation/resume is intentionally session-scoped. Source File objects are not
 ## Offline
 
 The service worker caches same-origin application assets as they are used. After the required app/engine assets have been cached, supported conversions can run without network access.
+
+## Stable-release network policy
+
+The v1 production Content Security Policy restricts application connections to the same origin. Conversion workers and engine assets are self-hosted. The service worker may fetch and cache those same-origin application assets, but file contents are not sent to a conversion API.
+
+Application updates do not forcibly replace an active converter session. A newly installed service worker waits until the user activates the visible Update app control.
+
+Installed-app file handlers hand local File objects to the same conversion pipeline; they do not introduce an upload path.
