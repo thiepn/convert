@@ -204,7 +204,12 @@ export class PdfEngine implements ConversionEngine {
     password?:string,
     onProgress?:(progress:number,stage:string)=>void
   ):Promise<{blob:Blob;text:string;pages:number[]}>{
+    const epoch=this.cancelEpoch;
+    const assertActive=()=>{
+      if(epoch!==this.cancelEpoch) throw new DOMException("PDF OCR cancelled.","AbortError");
+    };
     const inspection=await this.inspect(source,password);
+    assertActive();
     const pages=options.pages==="all"
       ? inspection.pagesInfo.map(page=>page.page)
       : inspection.pagesInfo.filter(page=>page.scanned).map(page=>page.page);
@@ -216,9 +221,11 @@ export class PdfEngine implements ConversionEngine {
     await this.ocr.prepare(options.language,(progress,status)=>{
       onProgress?.((currentOcrIndex+progress)/Math.max(1,pages.length),status);
     });
+    assertActive();
 
     try{
       for(let index=0;index<pages.length;index++){
+        assertActive();
         currentOcrIndex=index;
         const page=pages[index];
         const base=index/pages.length;
@@ -231,11 +238,13 @@ export class PdfEngine implements ConversionEngine {
           password
         });
         const ocr=await this.ocr.recognize(rendered.blob,"Page "+page);
+        assertActive();
         replacements.push({page,pdf:ocr.pdf});
         texts.push(ocr.text);
         onProgress?.((index+1)/pages.length,"OCR page "+page+" complete");
       }
 
+      assertActive();
       const requestId=crypto.randomUUID();
       const blob=await this.request({
         type:"combine-pages",
