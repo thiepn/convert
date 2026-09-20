@@ -59,7 +59,10 @@ export class JobManager {
       if(sourceFormat.category==="image") assertSafeImageDimensions(inspection.width,inspection.height);
 
       this.emit(onUpdate,id,"PLANNING",0.08,"Planning safest local route");
-      const route=this.planner.plan(sourceFormat.id,targetFormatId);
+      const routePreference=options.routePreference==="semantic"||options.routePreference==="fidelity"
+        ? options.routePreference
+        : undefined;
+      const route=this.planner.plan(sourceFormat.id,targetFormatId,routePreference);
       warnings.push(...route.warnings.map(w=>w.message));
       const target=this.formats.get(targetFormatId);
       if(!target) throw new Error("FORMAT_UNSUPPORTED: Target format is unknown.");
