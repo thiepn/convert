@@ -1,5 +1,6 @@
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import type { ConversionEngine,ConversionEstimate,EngineConvertRequest,EngineConvertResult } from "../../core/engines/Engine";
+import { assertMemoryBackedSource } from "../../core/performance/Budget";
 
 const INPUTS=new Set(["avi","flv","asf"]);
 const OUTPUTS=new Set(["mp4","webm-media","mp3","wav","flac","ogg"]);
@@ -40,10 +41,15 @@ export class LegacyMediaEngine implements ConversionEngine{
   canConvert(from:string,to:string):boolean{return INPUTS.has(from)&&OUTPUTS.has(to);}
 
   async estimate(source:Blob):Promise<ConversionEstimate>{
+    const memoryBytes=Math.max(256*1024*1024,source.size*4);
     return {
-      temporaryBytes:Math.max(256*1024*1024,source.size*4),
+      temporaryBytes:memoryBytes,
+      memoryBytes,
+      workspaceBytes:Math.max(96*1024*1024,source.size*1.25),
       outputBytes:null,
-      notes:["Legacy FFmpeg compatibility is a lazy-loaded memory-backed fallback, not the default media engine."]
+      sourceAccess:"buffered",
+      outputAccess:"buffered",
+      notes:["Legacy FFmpeg compatibility uses an in-memory WASM filesystem and is not a large-file streaming route."]
     };
   }
 
@@ -67,9 +73,7 @@ export class LegacyMediaEngine implements ConversionEngine{
 
   async convert(request:EngineConvertRequest):Promise<EngineConvertResult>{
     if(!this.canConvert(request.sourceFormatId,request.targetFormatId)) throw new Error("LEGACY_MEDIA_ROUTE_UNSUPPORTED: FFmpeg compatibility route is not enabled for this pair.");
-    const mobile=typeof matchMedia==="function"&&matchMedia("(pointer: coarse)").matches;
-    const limit=mobile?96*1024*1024:256*1024*1024;
-    if(request.source.size>limit) throw new Error("LEGACY_MEDIA_MEMORY_LIMIT: Source is too large for the guarded browser FFmpeg memory filesystem on this device.");
+    assertMemoryBackedSource(request.source.size,"legacy FFmpeg transcoding",4,384*1024*1024);
 
     this.currentProgress=request.onProgress;
     request.onProgress?.(.04,"Loading legacy FFmpeg compatibility engine");
