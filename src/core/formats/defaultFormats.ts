@@ -308,6 +308,19 @@ export const CPIO:FormatDefinition={
 };
 
 
+const isJsonLines=(bytes:Uint8Array)=>{
+  try{
+    const text=new TextDecoder().decode(bytes.slice(0,Math.min(bytes.length,16384))).replace(/^\uFEFF/,"");
+    const lines=text.split(/\r?\n/).map(line=>line.trim()).filter(Boolean);
+    if(lines.length<2) return false;
+    return lines.slice(0,20).every(line=>{
+      try{
+        const value=JSON.parse(line);
+        return value!==null&&typeof value==="object";
+      }catch{return false;}
+    });
+  }catch{return false;}
+};
 const isJsonDocument=(bytes:Uint8Array)=>{
   try{
     const text=new TextDecoder().decode(bytes.slice(0,Math.min(bytes.length,8192))).replace(/^\uFEFF/,"").trimStart();
@@ -368,7 +381,7 @@ export const JSON_DATA:FormatDefinition={
 };
 export const JSONL:FormatDefinition={
   id:"jsonl",name:"JSON Lines",category:"data",extensions:["jsonl","ndjson"],mimeTypes:["application/x-ndjson","application/ndjson"],
-  signatures:[],capabilities:{metadata:false},status:"production"
+  signatures:[],matcher:isJsonLines,capabilities:{metadata:false},status:"production"
 };
 export const PARQUET:FormatDefinition={
   id:"parquet",name:"Apache Parquet",category:"data",extensions:["parquet"],mimeTypes:["application/vnd.apache.parquet","application/octet-stream"],
@@ -399,7 +412,7 @@ export function createDefaultFormatRegistry():FormatRegistry {
     MOV,MP4,WEBM_MEDIA,MKV,OGG,AAC,MP3,WAV,FLAC,MPEG_TS,AVI,FLV,PDF,
     DOCX,DOCM,DOC,ODT,RTF,HTML_DOC,MARKDOWN,TXT,LATEX,TYPST,EPUB,PPTX,PPTM,PPT,ODP,
     ZIP,SEVEN_ZIP,RAR,TAR,GZIP,BZIP2,XZ,ZSTD,TAR_GZIP,TAR_BZIP2,TAR_XZ,CPIO,
-    XLSX,XLSM,XLSB,XLS,ODS,FODS,CSV,TSV,JSON_DATA,JSONL,PARQUET,ARROW,SQLITE
+    XLSX,XLSM,XLSB,XLS,ODS,FODS,CSV,TSV,JSONL,JSON_DATA,PARQUET,ARROW,SQLITE
   ].forEach(format=>registry.register(format));
   return registry;
 }
