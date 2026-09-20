@@ -162,7 +162,7 @@ export class App {
       "pdf-image-format","pdf-image-quality","pdf-dpi","pdf-ocr-language","pdf-ocr-pages",
       "pdf-rotation","document-route","document-track-changes","document-assets",
       "document-standalone","document-toc","archive-operation","archive-compression-level",
-      "archive-preserve-paths","archive-output-password"
+      "archive-preserve-paths","archive-input-password","archive-output-password"
     ];
     for(const id of routeControls){
       element(id).addEventListener("change",()=>{
@@ -618,6 +618,43 @@ export class App {
     };
   }
 
+  private readArchiveOptions():ArchiveConversionOptions{
+    return {
+      inputPassword:element<HTMLInputElement>("archive-input-password").value||undefined,
+      outputPassword:element<HTMLInputElement>("archive-output-password").value||undefined,
+      compressionLevel:Number(element<HTMLSelectElement>("archive-compression-level").value)||0,
+      preservePaths:element<HTMLInputElement>("archive-preserve-paths").checked
+    };
+  }
+
+  private selectedArchivePaths():string[]{
+    return [...document.querySelectorAll<HTMLInputElement>("#archive-entry-list input[type=checkbox]:checked")]
+      .map(input=>input.value);
+  }
+
+  private updateArchiveOptionVisibility(){
+    if(this.kind!=="archive"&&this.kind!=="archive-build") return;
+    const operation=element<HTMLSelectElement>("archive-operation");
+    const isBuild=this.kind==="archive-build";
+
+    for(const option of [...operation.options]){
+      if(option.value==="create") option.disabled=!isBuild;
+      else option.disabled=isBuild;
+    }
+    if(isBuild&&operation.value!=="create") operation.value="create";
+    if(!isBuild&&operation.value==="create") operation.value="repack";
+
+    const extracting=operation.value==="extract-all"||operation.value==="extract-selected";
+    element("common-controls").classList.toggle("hidden",extracting);
+    element("archive-entry-list").classList.toggle(
+      "hidden",
+      isBuild||!this.archiveDetail||this.archiveDetail.entries.filter(entry=>!entry.directory).length===0
+    );
+    element<HTMLButtonElement>("archive-select-all").disabled=isBuild||!this.archiveDetail;
+    element<HTMLButtonElement>("archive-select-none").disabled=isBuild||!this.archiveDetail;
+    element<HTMLButtonElement>("archive-reinspect-button").disabled=isBuild||this.files.length!==1;
+  }
+
   private readPdfPassword():string|undefined{
     return element<HTMLInputElement>("pdf-password").value||undefined;
   }
@@ -639,6 +676,57 @@ export class App {
   private async renderRoute(){
     const revision=++this.routeRevision;
     const box=element("route-box");
+
+    if(this.kind==="archive"||this.kind==="archive-build"){
+      this.updateArchiveOptionVisibility();
+      const operation=element<HTMLSelectElement>("archive-operation").value;
+      const targetId=element<HTMLSelectElement>("target-format").value;
+      const options=this.readArchiveOptions();
+      const warnings:string[]=[];
+
+      if(this.kind==="archive-build"){
+        const target=this.formats.get(targetId)?.name??targetId;
+        box.textContent="Create "+target+" from "+this.files.length+" local file(s)";
+        if(targetId!=="zip"&&options.outputPassword){
+          warnings.push("Output encryption is currently implemented only for ZIP AES-256; the password will not be used for this target.");
+        }
+        warnings.push("Archive creation stays local. Large selections are bounded by a browser memory safety budget.");
+      }else{
+        if(operation==="extract-all"){
+          box.textContent="Extract all "+(this.archiveDetail?.files??"?")+" file(s) locally";
+          if(this.archiveDetail?.expandedSize){
+            warnings.push("Extraction materializes up to "+formatBytes(this.archiveDetail.expandedSize)+" of declared content in browser results.");
+          }
+        }else if(operation==="extract-selected"){
+          const count=this.selectedArchivePaths().length;
+          box.textContent="Extract "+count+" selected archive entr"+(count===1?"y":"ies")+" locally";
+          if(count===0) warnings.push("Select at least one archive entry.");
+        }else{
+          const sourceId=this.inspections[0]?.detection.format?.id;
+          if(sourceId&&targetId){
+            const route=this.planner.plan(sourceId,targetId);
+            box.textContent=(this.formats.get(sourceId)?.name??sourceId)+" → "+(this.formats.get(targetId)?.name??targetId)+" · extract + repack locally";
+            warnings.push(...route.warnings.map(w=>w.message));
+          }else{
+            box.textContent="Choose an archive output format.";
+          }
+          warnings.push("Repacking materializes archive entries locally before writing the new container.");
+          if(targetId!=="zip"&&options.outputPassword){
+            warnings.push("Output encryption is currently implemented only for ZIP AES-256.");
+          }
+        }
+
+        if(this.archiveDetail?.passwordRequired&&!options.inputPassword){
+          warnings.push("This archive reports encrypted data; enter its password before extraction/repacking.");
+        }
+        if(this.archiveDetail?.duplicatePaths.length){
+          warnings.push("Duplicate paths exist. Individual extraction avoids overwriting them, but repacking may require renamed entries.");
+        }
+      }
+
+      this.renderWarnings("loss-warnings",[...new Set(warnings)]);
+      return;
+    }
 
     if(this.kind==="pdf"){
       const operation=element<HTMLSelectElement>("pdf-operation").value;
