@@ -14,16 +14,16 @@
       <div>
         <div class="eyebrow">THIEPN CONVERT · LOCAL ENGINE</div>
         <h1>Convert files locally in your browser.</h1>
-        <p>Images, audio, video, and PDFs stay on your device. No conversion server is involved.</p>
+        <p>Images, audio, video, PDFs, documents, presentations, and e-books stay on your device. No conversion server is involved.</p>
       </div>
       <div class="privacy-badge"><span class="privacy-dot"></span> No file uploads</div>
     </header>
 
     <section class="panel drop-panel">
       <label id="drop-zone" class="drop-zone" for="file-input">
-        <input id="file-input" type="file" multiple accept="image/*,audio/*,video/*,application/pdf,.pdf,.heic,.heif,.jxl,.tif,.tiff,.svg,.mkv,.webm,.mov,.m4a,.aac,.flac,.ogg,.opus,.ts,.m2ts,.avi,.flv">
+        <input id="file-input" type="file" multiple accept="image/*,audio/*,video/*,application/pdf,text/*,.pdf,.doc,.docx,.docm,.odt,.rtf,.html,.htm,.md,.markdown,.tex,.typ,.epub,.ppt,.pptx,.pptm,.odp,.heic,.heif,.jxl,.tif,.tiff,.svg,.mkv,.webm,.mov,.m4a,.aac,.flac,.ogg,.opus,.ts,.m2ts,.avi,.flv">
         <strong>Drop files anywhere</strong>
-        <span>Images · Audio · Video · PDF</span>
+        <span>Images · Audio · Video · PDF · Word · PowerPoint · EPUB · Markdown · LaTeX</span>
       </label>
     </section>
 
@@ -47,7 +47,7 @@
           <span>Convert to</span>
           <select id="target-format"></select>
         </label>
-        <label>
+        <label id="metadata-control">
           <span>Metadata</span>
           <select id="metadata-policy">
             <option value="preserve" selected>Preserve</option>
@@ -195,6 +195,67 @@
               <option value="prefer-software">Prefer software</option>
             </select>
           </label>
+        </div>
+      </div>
+
+      <div id="document-controls" class="control-section hidden">
+        <div class="control-title">Document options</div>
+        <div class="convert-grid phase-controls document-controls-grid">
+          <label>
+            <span>Preservation priority</span>
+            <select id="document-route">
+              <option value="semantic" selected>Structure / editability</option>
+              <option value="fidelity">Appearance / layout fidelity</option>
+            </select>
+          </label>
+          <label>
+            <span>Tracked changes</span>
+            <select id="document-track-changes">
+              <option value="all" selected>Preserve where possible</option>
+              <option value="accept">Accept all</option>
+              <option value="reject">Reject all</option>
+            </select>
+          </label>
+          <label>
+            <span>Assets</span>
+            <select id="document-assets">
+              <option value="extract" selected>Extract sidecar assets</option>
+              <option value="embed">Embed when target supports it</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="document-checks">
+          <label class="check-row">
+            <input id="document-standalone" type="checkbox" checked>
+            <span>Create a standalone document</span>
+          </label>
+          <label class="check-row">
+            <input id="document-toc" type="checkbox">
+            <span>Generate table of contents where supported</span>
+          </label>
+        </div>
+
+        <div class="document-files-grid">
+          <label class="file-picker">
+            <span>Reference document / theme</span>
+            <input id="document-reference" type="file" accept=".docx,.odt,.pptx">
+            <small>Optional styling reference for Pandoc DOCX/ODT/PPTX output.</small>
+          </label>
+          <label class="file-picker">
+            <span>Supporting resources</span>
+            <input id="document-resources" type="file" multiple>
+            <small>Images, bibliography, CSL, CSS, and other explicitly supplied local files.</small>
+          </label>
+          <label class="file-picker">
+            <span>Fonts for fidelity mode</span>
+            <input id="document-fonts" type="file" multiple accept=".ttf,.otf,.ttc,.woff,.woff2">
+            <small>Loaded locally into LibreOffice before it starts. Fonts are never uploaded.</small>
+          </label>
+        </div>
+
+        <div id="document-engine-note" class="route-box compact-route">
+          Semantic conversion uses Pandoc WASM. Fidelity mode lazy-loads the larger LibreOffice WASM runtime only when needed.
         </div>
       </div>
 
