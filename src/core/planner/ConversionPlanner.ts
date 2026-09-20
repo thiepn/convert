@@ -27,7 +27,7 @@ export class ConversionPlanner {
   availableTargets(sourceId: string): string[] {
     return [...new Set(
       this.graph.outgoing(sourceId)
-        .filter(edge => this.engines.available(edge.engineId))
+        .filter(edge => this.engines.supports(edge.engineId, edge.from, edge.to))
         .map(edge => edge.to)
     )];
   }
@@ -54,7 +54,7 @@ export class ConversionPlanner {
       }
 
       for (const edge of this.graph.outgoing(current.id)) {
-        if (!this.engines.available(edge.engineId)) continue;
+        if (!this.engines.supports(edge.engineId, edge.from, edge.to)) continue;
         const score = current.score + edgeScore(edge);
         if (score >= (best.get(edge.to) ?? Number.POSITIVE_INFINITY)) continue;
         best.set(edge.to, score);
