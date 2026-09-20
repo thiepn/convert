@@ -20,6 +20,11 @@ describe("Phase 10 user-facing error presentation",()=>{
     expect(issue.message).toBe("useful diagnostic");
   });
 
+  it("does not treat ordinary uppercase warning words as error codes",()=>{
+    expect(presentIssue("RAW conversion extracts an embedded JPEG preview.").code).toBeNull();
+    expect(presentIssue("PSD output is flattened.").code).toBeNull();
+  });
+
   it("recognizes planner no-route wording",()=>{
     expect(presentIssue("No local conversion route is available on this browser.").code).toBe("NO_LOCAL_ROUTE");
   });
