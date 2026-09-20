@@ -11,6 +11,19 @@ function asBlob(bytes:Uint8Array,name:string,type="application/zip"){
   return Object.assign(new Blob([copy.buffer],{type}),{name});
 }
 
+function minimalWorkbook(withMacro=false,binary=false){
+  const entries:Record<string,Uint8Array>={
+    "[Content_Types].xml":strToU8("<Types/>")
+  };
+  if(binary) entries["xl/workbook.bin"]=new Uint8Array([1,2,3]);
+  else entries["xl/workbook.xml"]=strToU8('<workbook xmlns="x"><sheets/></workbook>');
+  if(withMacro) entries["xl/vbaProject.bin"]=new Uint8Array([86,66,65]);
+  return asBlob(
+    zipSync(entries),
+    binary?"book.xlsb":withMacro?"macro.xlsm":"book.xlsx"
+  );
+}
+
 function minimalDocx(withMacro=false){
   const entries:Record<string,Uint8Array>={
     "[Content_Types].xml":strToU8("<Types/>"),
@@ -31,6 +44,14 @@ function minimalDocx(withMacro=false){
 }
 
 describe("Office package inspection",()=>{
+  it("identifies XLSX, XLSM, and XLSB from package structure",async()=>{
+    const registry=createDefaultFormatRegistry();
+    expect((await inspectFile(minimalWorkbook(false,false),registry)).detection.format?.id).toBe("xlsx");
+    expect((await inspectFile(minimalWorkbook(true,false),registry)).detection.format?.id).toBe("xlsm");
+    expect((await inspectFile(minimalWorkbook(false,true),registry)).detection.format?.id).toBe("xlsb");
+  });
+
+
   it("identifies DOCX from package structure even with a generic ZIP MIME",async()=>{
     const file=minimalDocx(false);
     const inspection=await inspectFile(file,createDefaultFormatRegistry());
