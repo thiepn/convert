@@ -1068,6 +1068,7 @@ export class App {
           :engineId==="libreoffice-document"?"LibreOffice Calc WASM"
           :engineId;
         const engines=[...new Set(routes.flatMap(route=>route.edges.map(edge=>engineLabel(edge.engineId))))];
+        const usesLibreOffice=routes.some(route=>route.edges.some(edge=>edge.engineId==="libreoffice-document"));
         box.textContent=(this.files.length>1?this.files.length+" files · ":"")
           +(this.formats.get(targetId)?.name??targetId)
           +" · "+engines.join(" → ")
@@ -1096,7 +1097,7 @@ export class App {
             warnings.push("VBA macro payload is never executed and is not preserved into Phase 6 output formats.");
           }
           if((this.spreadsheetDetail?.sheets??[]).some(sheet=>sheet.formulas>0)){
-            if(routePreference==="fidelity"){
+            if(usesLibreOffice){
               warnings.push("LibreOffice Calc may recalculate formulas and update cached results during fidelity conversion.");
             }else{
               warnings.push("SheetJS preserves formula expressions where supported but does not calculate workbook formulas.");
@@ -1105,7 +1106,7 @@ export class App {
           if(element<HTMLSelectElement>("data-sheet-policy").value==="all"&&["csv","tsv","json-data"].includes(targetId)){
             warnings.push("All-sheet flat export returns the first sheet as the main output and additional sheets as sidecar files.");
           }
-          if(routePreference==="fidelity"){
+          if(usesLibreOffice){
             warnings.push("LibreOffice spreadsheet fidelity mode lazy-loads the larger Calc WASM runtime on first use.");
           }
         }else if(this.kind==="database"){
