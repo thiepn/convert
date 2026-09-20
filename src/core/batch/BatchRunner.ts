@@ -41,7 +41,11 @@ export class BatchRunner {
   ) {}
 
   hasResumable():boolean {
-    return Boolean(this.session?.tasks.some(task=>task.state==="cancelled"||task.state==="failed"||task.state==="pending"));
+    return Boolean(this.session?.tasks.some(task=>
+      task.state==="cancelled"
+      ||task.state==="pending"
+      ||(task.state==="failed"&&task.stage!=="Cannot plan")
+    ));
   }
 
   cancel():void {
@@ -91,7 +95,11 @@ export class BatchRunner {
 
     this.stopRequested=false;
     for(const task of session.tasks){
-      if(task.state==="cancelled"||task.state==="pending"||(retryFailed&&task.state==="failed")){
+      if(
+        task.state==="cancelled"
+        ||task.state==="pending"
+        ||(retryFailed&&task.state==="failed"&&task.stage!=="Cannot plan")
+      ){
         task.state="pending";
         task.progress=0;
         task.stage="Queued for resume";
@@ -276,7 +284,11 @@ export class BatchRunner {
         :count("pending")?"Queued"
         :count("cancelled")?"Batch cancelled"
         :"Batch complete",
-      resumable:tasks.some(task=>task.state==="cancelled"||task.state==="failed"||task.state==="pending"),
+      resumable:tasks.some(task=>
+        task.state==="cancelled"
+        ||task.state==="pending"
+        ||(task.state==="failed"&&task.stage!=="Cannot plan")
+      ),
       tasks
     };
   }
