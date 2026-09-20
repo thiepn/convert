@@ -5,6 +5,8 @@ import type {
   EngineConvertResult
 } from "../../core/engines/Engine";
 import type { DocumentConversionOptions } from "../../core/document/types";
+import { assertMemoryBackedSource } from "../../core/performance/Budget";
+import { getDeviceProfile,memoryBackedSourceLimit } from "../../core/performance/DeviceProfile";
 import type { PandocWorkerRequest, PandocWorkerResponse } from "./pandoc-protocol";
 
 const INPUTS=new Set(["docx","docm","odt","rtf","html-doc","markdown","txt","latex","typst","epub","pptx","pptm"]);
@@ -40,10 +42,15 @@ export class PandocDocumentEngine implements ConversionEngine{
   }
 
   async estimate(source:Blob):Promise<ConversionEstimate>{
+    const memoryBytes=Math.max(256*1024*1024,source.size*4);
     return {
-      temporaryBytes:Math.max(256*1024*1024,source.size*4),
+      temporaryBytes:memoryBytes,
+      memoryBytes,
+      workspaceBytes:Math.max(64*1024*1024,source.size*2),
       outputBytes:null,
-      notes:["Pandoc WASM is memory-backed and sandboxed; documents are size-gated before semantic conversion."]
+      sourceAccess:"buffered",
+      outputAccess:"buffered",
+      notes:["Pandoc WASM is memory-backed and sandboxed; documents are device-budgeted before semantic conversion."]
     };
   }
 
@@ -51,16 +58,13 @@ export class PandocDocumentEngine implements ConversionEngine{
     if(!this.canConvert(request.sourceFormatId,request.targetFormatId)){
       throw new Error("PANDOC_ROUTE_UNSUPPORTED: Unsupported semantic route.");
     }
-    const mobile=typeof matchMedia==="function"&&matchMedia("(pointer: coarse)").matches;
-    const limit=mobile?64*1024*1024:160*1024*1024;
-    if(request.source.size>limit){
-      throw new Error("DOCUMENT_SEMANTIC_MEMORY_LIMIT: Document is too large for the Pandoc browser sandbox on this device.");
-    }
+    const profile=getDeviceProfile();
+    assertMemoryBackedSource(request.source.size,"Pandoc semantic conversion",4,512*1024*1024,profile);
 
     const options={...defaults(),...(request.options??{})} as DocumentConversionOptions;
     const auxiliaryBytes=(options.referenceDocument?.size??0)
       +(options.resources??[]).reduce((sum,item)=>sum+item.blob.size,0);
-    const auxiliaryLimit=mobile?48*1024*1024:160*1024*1024;
+    const auxiliaryLimit=memoryBackedSourceLimit(5,256*1024*1024,profile);
     if(auxiliaryBytes>auxiliaryLimit){
       throw new Error("DOCUMENT_RESOURCE_LIMIT: Reference/resources exceed this device's semantic conversion budget.");
     }
