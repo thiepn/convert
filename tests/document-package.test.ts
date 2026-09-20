@@ -17,7 +17,7 @@ function minimalDocx(withMacro=false){
     "word/document.xml":strToU8(
       '<w:document xmlns:w="w" xmlns:m="m"><w:body>'+
       '<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Hello</w:t></w:r></w:p>'+
-      '<w:tbl/><w:ins><w:r><w:t>new</w:t></w:r></w:ins><m:oMath/>'+
+      '<w:tbl></w:tbl><w:ins><w:r><w:t>new</w:t></w:r></w:ins><m:oMath/>'+
       '<w:sectPr/></w:body></w:document>'
     ),
     "word/comments.xml":strToU8('<w:comments xmlns:w="w"><w:comment w:id="0"/></w:comments>'),
