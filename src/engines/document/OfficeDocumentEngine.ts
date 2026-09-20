@@ -18,14 +18,18 @@ const WRITER_INPUTS=new Set(["doc","docx","odt","rtf","html-doc","txt","epub"]);
 const WRITER_OUTPUTS=new Set(["pdf","docx","doc","odt","rtf","txt","html-doc"]);
 const PRESENTATION_INPUTS=new Set(["ppt","pptx","odp"]);
 const PRESENTATION_OUTPUTS=new Set(["pdf","pptx","ppt","odp","html-doc"]);
+const SPREADSHEET_INPUTS=new Set(["xls","xlsx","ods","csv"]);
+const SPREADSHEET_OUTPUTS=new Set(["pdf","xlsx","xls","ods","csv"]);
 
 const INPUT_FORMAT:Record<string,InputFormat>={
   doc:"doc",docx:"docx",odt:"odt",rtf:"rtf","html-doc":"html",txt:"txt",epub:"epub",
-  ppt:"ppt",pptx:"pptx",odp:"odp"
+  ppt:"ppt",pptx:"pptx",odp:"odp",
+  xls:"xls",xlsx:"xlsx",ods:"ods",csv:"csv"
 };
 const OUTPUT_FORMAT:Record<string,OutputFormat>={
   pdf:"pdf",docx:"docx",doc:"doc",odt:"odt",rtf:"rtf",txt:"txt","html-doc":"html",
-  pptx:"pptx",ppt:"ppt",odp:"odp"
+  pptx:"pptx",ppt:"ppt",odp:"odp",
+  xlsx:"xlsx",xls:"xls",ods:"ods",csv:"csv"
 };
 const MIME:Record<string,string>={
   pdf:"application/pdf",
@@ -37,7 +41,11 @@ const MIME:Record<string,string>={
   "html-doc":"text/html;charset=utf-8",
   pptx:"application/vnd.openxmlformats-officedocument.presentationml.presentation",
   ppt:"application/vnd.ms-powerpoint",
-  odp:"application/vnd.oasis.opendocument.presentation"
+  odp:"application/vnd.oasis.opendocument.presentation",
+  xlsx:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  xls:"application/vnd.ms-excel",
+  ods:"application/vnd.oasis.opendocument.spreadsheet",
+  csv:"text/csv;charset=utf-8"
 };
 
 function defaultOptions():DocumentConversionOptions{
@@ -79,6 +87,7 @@ export class OfficeDocumentEngine implements ConversionEngine{
   canConvert(from:string,to:string):boolean{
     if(WRITER_INPUTS.has(from)) return WRITER_OUTPUTS.has(to);
     if(PRESENTATION_INPUTS.has(from)) return PRESENTATION_OUTPUTS.has(to);
+    if(SPREADSHEET_INPUTS.has(from)) return SPREADSHEET_OUTPUTS.has(to);
     return false;
   }
 
@@ -104,20 +113,29 @@ export class OfficeDocumentEngine implements ConversionEngine{
     }
 
     const options={...defaultOptions(),...(request.options??{})} as DocumentConversionOptions;
-    const inspection=await this.inspector.inspect(request.source,request.sourceFormatId);
-    if(inspection.macros&&!["doc","ppt"].includes(request.sourceFormatId)){
-      throw new Error("DOCUMENT_MACRO_BLOCKED: Macro payload detected. Use semantic conversion, which reads document content without executing VBA.");
-    }
+    const isSpreadsheet=SPREADSHEET_INPUTS.has(request.sourceFormatId);
+    const warnings:string[]=[];
 
-    const warnings=[...inspection.warnings];
-    if(["doc","ppt"].includes(request.sourceFormatId)){
-      warnings.push("Legacy binary Office format: macros cannot be structurally ruled out; LibreOffice runs in an isolated browser worker with no external-resource fetch path.");
-    }
-    if(inspection.externalLinks){
-      warnings.push("External document relationships are preserved where possible but are not fetched.");
-    }
-    if(inspection.fonts.length){
-      warnings.push("Layout fidelity depends on font availability. Source references "+inspection.fonts.length+" distinct font name(s).");
+    if(isSpreadsheet){
+      if(request.sourceFormatId==="xls"){
+        warnings.push("Legacy XLS may contain VBA/macros that cannot be ruled out by the lightweight format detector; LibreOffice runs in an isolated local worker.");
+      }
+      warnings.push("LibreOffice fidelity mode may recalculate formulas and update cached results.");
+    }else{
+      const inspection=await this.inspector.inspect(request.source,request.sourceFormatId);
+      if(inspection.macros&&!["doc","ppt"].includes(request.sourceFormatId)){
+        throw new Error("DOCUMENT_MACRO_BLOCKED: Macro payload detected. Use semantic conversion, which reads document content without executing VBA.");
+      }
+      warnings.push(...inspection.warnings);
+      if(["doc","ppt"].includes(request.sourceFormatId)){
+        warnings.push("Legacy binary Office format: macros cannot be structurally ruled out; LibreOffice runs in an isolated browser worker with no external-resource fetch path.");
+      }
+      if(inspection.externalLinks){
+        warnings.push("External document relationships are preserved where possible but are not fetched.");
+      }
+      if(inspection.fonts.length){
+        warnings.push("Layout fidelity depends on font availability. Source references "+inspection.fonts.length+" distinct font name(s).");
+      }
     }
 
     const fontBytes=(options.fonts??[]).reduce((sum,font)=>sum+font.data.byteLength,0);
