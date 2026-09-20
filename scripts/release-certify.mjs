@@ -22,6 +22,13 @@ function exists(rel){
   const value=fs.existsSync(path.join(root,rel));
   ok("Build contains "+rel,value);
 }
+function directoryHas(rel,predicate,label){
+  const full=path.join(root,rel);
+  const value=fs.existsSync(full)
+    &&fs.statSync(full).isDirectory()
+    &&fs.readdirSync(full).some(predicate);
+  ok(label,value);
+}
 
 const pkg=JSON.parse(read("package.json")||"{}");
 ok("Package version is v1.0.0",pkg.version==="1.0.0",String(pkg.version??"missing"));
@@ -77,8 +84,22 @@ ok("Privacy model covers same-origin engine assets",/same origin|same-origin/i.t
   "dist/engines/duckdb/duckdb-mvp.wasm",
   "dist/engines/sqlite/sql-wasm.wasm",
   "dist/engines/ffmpeg/ffmpeg-core.wasm",
-  "dist/engines/font/woff2.wasm"
+  "dist/engines/font/woff2.wasm",
+  "dist/engines/tesseract/worker.min.js",
+  "dist/engines/tesseract/lang/eng.traineddata.gz",
+  "dist/engines/libreoffice/browser.worker.global.js"
 ].forEach(exists);
+
+directoryHas(
+  "dist/engines/tesseract/core",
+  name=>name.endsWith(".wasm"),
+  "Build contains Tesseract core WASM"
+);
+directoryHas(
+  "dist/engines/libreoffice/wasm",
+  name=>name.endsWith(".wasm"),
+  "Build contains LibreOffice WASM runtime"
+);
 
 for(const check of checks){
   console.log((check.condition?"PASS ":"FAIL ")+check.name+(check.detail?" — "+check.detail:""));
