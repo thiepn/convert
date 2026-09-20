@@ -1,5 +1,6 @@
 import { FormatRegistry } from "../formats/FormatRegistry";
 import { inspectFile } from "../inspection/inspectFile";
+import type { DetailedMediaInspection } from "../media/types";
 
 export interface ValidationResult {
   valid:boolean;
@@ -14,43 +15,43 @@ export interface OutputValidator {
 export class ImageOutputValidator implements OutputValidator {
   constructor(
     private readonly formats:FormatRegistry,
-    private readonly probe?: (blob:Blob,formatId:string)=>Promise<{width:number;height:number}>
+    private readonly probe?:(blob:Blob,formatId:string)=>Promise<{width:number;height:number}>
   ) {}
 
-  async validate(blob:Blob,targetFormatId:string):Promise<ValidationResult> {
+  async validate(blob:Blob,targetFormatId:string):Promise<ValidationResult>{
     const target=this.formats.get(targetFormatId);
     const inspection=await inspectFile(
       Object.assign(blob,{name:"output."+(target?.extensions[0]??"bin")}),
       this.formats
     );
     const errors:string[]=[];
-    if (inspection.detection.format?.id!==targetFormatId) {
+    if(inspection.detection.format?.id!==targetFormatId){
       errors.push("Output signature does not match requested format.");
     }
-    if (blob.size===0) errors.push("Output is empty.");
+    if(blob.size===0) errors.push("Output is empty.");
 
     let width=inspection.width;
     let height=inspection.height;
     let decoded=false;
-    try {
-      if (typeof createImageBitmap==="function") {
+    try{
+      if(typeof createImageBitmap==="function"){
         const bitmap=await createImageBitmap(blob);
-        width=bitmap.width; height=bitmap.height; decoded=Boolean(width&&height);
+        width=bitmap.width;height=bitmap.height;decoded=Boolean(width&&height);
         bitmap.close();
       }
-    } catch {}
+    }catch{}
 
-    if (!decoded && this.probe) {
-      try {
+    if(!decoded&&this.probe){
+      try{
         const result=await this.probe(blob,targetFormatId);
-        width=result.width; height=result.height; decoded=Boolean(width&&height);
-      } catch {}
+        width=result.width;height=result.height;decoded=Boolean(width&&height);
+      }catch{}
     }
 
-    if (!decoded && ["jpeg","png","webp","gif","avif"].includes(targetFormatId)) {
+    if(!decoded&&["jpeg","png","webp","gif","avif"].includes(targetFormatId)){
       errors.push("Output could not be decoded after conversion.");
     }
-    if ((width!==undefined && width<=0)||(height!==undefined && height<=0)) {
+    if((width!==undefined&&width<=0)||(height!==undefined&&height<=0)){
       errors.push("Decoded output has invalid dimensions.");
     }
     return {
@@ -58,5 +59,61 @@ export class ImageOutputValidator implements OutputValidator {
       errors,
       properties:{format:inspection.detection.format?.id,width,height,size:blob.size}
     };
+  }
+}
+
+export class MediaOutputValidator implements OutputValidator {
+  constructor(
+    private readonly formats:FormatRegistry,
+    private readonly probe:(blob:Blob)=>Promise<DetailedMediaInspection>
+  ) {}
+
+  async validate(blob:Blob,targetFormatId:string):Promise<ValidationResult>{
+    const target=this.formats.get(targetFormatId);
+    const errors:string[]=[];
+    if(blob.size===0) errors.push("Output is empty.");
+
+    const shallow=await inspectFile(
+      Object.assign(blob,{name:"output."+(target?.extensions[0]??"bin")}),
+      this.formats
+    );
+    if(shallow.detection.format?.id!==targetFormatId){
+      errors.push("Output container signature does not match requested format.");
+    }
+
+    let media:DetailedMediaInspection|null=null;
+    try{ media=await this.probe(blob); }
+    catch{ errors.push("Output could not be reopened by the media parser."); }
+
+    if(media){
+      if(media.tracks.length===0) errors.push("Output contains no media tracks.");
+      if(media.duration!=null&&media.duration<0) errors.push("Output reports an invalid negative duration.");
+    }
+
+    return {
+      valid:errors.length===0,
+      errors,
+      properties:{
+        format:shallow.detection.format?.id,
+        size:blob.size,
+        duration:media?.duration??null,
+        tracks:media?.tracks.length??0
+      }
+    };
+  }
+}
+
+export class UniversalOutputValidator implements OutputValidator {
+  constructor(
+    private readonly formats:FormatRegistry,
+    private readonly image:ImageOutputValidator,
+    private readonly media:MediaOutputValidator
+  ) {}
+
+  validate(blob:Blob,targetFormatId:string):Promise<ValidationResult>{
+    const category=this.formats.get(targetFormatId)?.category;
+    if(category==="image") return this.image.validate(blob,targetFormatId);
+    if(category==="audio"||category==="video") return this.media.validate(blob,targetFormatId);
+    return Promise.resolve({valid:blob.size>0,errors:blob.size?[]:["Output is empty."],properties:{size:blob.size}});
   }
 }

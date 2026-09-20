@@ -12,18 +12,18 @@
   <main class="shell">
     <header class="hero">
       <div>
-        <div class="eyebrow">THIEPN CONVERT · IMAGE ENGINE</div>
-        <h1>Local image conversion without uploads.</h1>
-        <p>Convert and optimize photos, graphics, animated images, and modern formats entirely in your browser.</p>
+        <div class="eyebrow">THIEPN CONVERT · LOCAL ENGINE</div>
+        <h1>Convert images, audio, and video locally.</h1>
+        <p>Files stay on your device. Compatible media tracks are remuxed without re-encoding; transcoding uses browser-native codecs where available.</p>
       </div>
-      <div class="privacy-badge"><span class="privacy-dot"></span> Files stay local</div>
+      <div class="privacy-badge"><span class="privacy-dot"></span> No file uploads</div>
     </header>
 
     <section class="panel drop-panel">
       <label id="drop-zone" class="drop-zone" for="file-input">
-        <input id="file-input" type="file" multiple accept="image/*,.heic,.heif,.jxl,.tif,.tiff,.svg">
-        <strong>Drop image files anywhere</strong>
-        <span>JPEG · PNG · WebP · GIF · TIFF · AVIF · HEIC · JXL · SVG</span>
+        <input id="file-input" type="file" multiple accept="image/*,audio/*,video/*,.heic,.heif,.jxl,.tif,.tiff,.svg,.mkv,.webm,.mov,.m4a,.aac,.flac,.ogg,.opus,.ts,.m2ts,.avi,.flv">
+        <strong>Drop images, audio, or video</strong>
+        <span>Images · MP4 · MOV · MKV · WebM · MP3 · WAV · FLAC · AAC · Ogg · MPEG-TS</span>
       </label>
     </section>
 
@@ -31,29 +31,21 @@
       <div class="section-heading">
         <div>
           <div class="eyebrow">INSPECTION</div>
-          <h2 id="file-name">Image</h2>
+          <h2 id="file-name">File</h2>
         </div>
         <span id="detection-confidence" class="chip"></span>
       </div>
 
       <div id="file-facts" class="facts"></div>
       <div id="inspection-warnings" class="warnings"></div>
+      <div id="track-list" class="track-list hidden"></div>
 
       <hr>
 
-      <div class="convert-grid phase1-controls">
+      <div class="convert-grid">
         <label>
           <span>Convert to</span>
           <select id="target-format"></select>
-        </label>
-        <label>
-          <span>Quality</span>
-          <select id="quality">
-            <option value="0.95">Maximum</option>
-            <option value="0.90">High</option>
-            <option value="0.82" selected>Balanced</option>
-            <option value="0.68">Small</option>
-          </select>
         </label>
         <label>
           <span>Metadata</span>
@@ -63,33 +55,148 @@
             <option value="strip">Strip</option>
           </select>
         </label>
-        <label>
-          <span>Resize longest edge</span>
-          <select id="max-dimension">
-            <option value="">Original</option>
-            <option value="3840">3840 px</option>
-            <option value="2560">2560 px</option>
-            <option value="1920">1920 px</option>
-            <option value="1280">1280 px</option>
-          </select>
-        </label>
-        <label>
-          <span>Target size</span>
-          <div class="input-with-unit">
-            <input id="target-size" type="number" min="0.05" step="0.1" inputmode="decimal" placeholder="Optional">
-            <span>MB</span>
-          </div>
-        </label>
-        <label>
-          <span>Transparent background fallback</span>
-          <input id="background-color" type="color" value="#ffffff">
+      </div>
+
+      <div id="image-controls" class="control-section hidden">
+        <div class="control-title">Image options</div>
+        <div class="convert-grid phase-controls">
+          <label>
+            <span>Quality</span>
+            <select id="image-quality">
+              <option value="0.95">Maximum</option>
+              <option value="0.90">High</option>
+              <option value="0.82" selected>Balanced</option>
+              <option value="0.68">Small</option>
+            </select>
+          </label>
+          <label>
+            <span>Resize longest edge</span>
+            <select id="max-dimension">
+              <option value="">Original</option>
+              <option value="3840">3840 px</option>
+              <option value="2560">2560 px</option>
+              <option value="1920">1920 px</option>
+              <option value="1280">1280 px</option>
+            </select>
+          </label>
+          <label>
+            <span>Target size</span>
+            <div class="input-with-unit">
+              <input id="image-target-size" type="number" min="0.05" step="0.1" inputmode="decimal" placeholder="Optional">
+              <span>MB</span>
+            </div>
+          </label>
+          <label>
+            <span>Transparent background</span>
+            <input id="background-color" type="color" value="#ffffff">
+          </label>
+        </div>
+        <label class="check-row">
+          <input id="lossless" type="checkbox">
+          <span>Prefer lossless encoding when supported</span>
         </label>
       </div>
 
-      <label class="check-row">
-        <input id="lossless" type="checkbox">
-        <span>Prefer lossless encoding when the target supports it</span>
-      </label>
+      <div id="media-controls" class="control-section hidden">
+        <div class="control-title">Media options</div>
+        <div class="convert-grid phase-controls media-controls-grid">
+          <label>
+            <span>Tracks</span>
+            <select id="track-policy">
+              <option value="all" selected>All compatible tracks</option>
+              <option value="primary">Primary video + audio</option>
+            </select>
+          </label>
+          <label>
+            <span>Resolution</span>
+            <select id="media-height">
+              <option value="">Original</option>
+              <option value="2160">2160p</option>
+              <option value="1440">1440p</option>
+              <option value="1080">1080p</option>
+              <option value="720">720p</option>
+              <option value="480">480p</option>
+            </select>
+          </label>
+          <label>
+            <span>Frame rate</span>
+            <select id="media-fps">
+              <option value="">Original / VFR</option>
+              <option value="60">60 fps</option>
+              <option value="50">50 fps</option>
+              <option value="30">30 fps</option>
+              <option value="25">25 fps</option>
+              <option value="24">24 fps</option>
+            </select>
+          </label>
+          <label>
+            <span>Video codec</span>
+            <select id="video-codec">
+              <option value="">Automatic / copy if possible</option>
+              <option value="avc">H.264 / AVC</option>
+              <option value="hevc">H.265 / HEVC</option>
+              <option value="vp9">VP9</option>
+              <option value="av1">AV1</option>
+              <option value="vp8">VP8</option>
+            </select>
+          </label>
+          <label>
+            <span>Audio codec</span>
+            <select id="audio-codec">
+              <option value="">Automatic / copy if possible</option>
+              <option value="aac">AAC</option>
+              <option value="opus">Opus</option>
+              <option value="mp3">MP3</option>
+              <option value="flac">FLAC</option>
+              <option value="vorbis">Vorbis</option>
+              <option value="pcm-s16">PCM 16-bit</option>
+            </select>
+          </label>
+          <label>
+            <span>Video bitrate</span>
+            <div class="input-with-unit">
+              <input id="video-bitrate" type="number" min="0.1" step="0.5" inputmode="decimal" placeholder="Auto">
+              <span>Mbps</span>
+            </div>
+          </label>
+          <label>
+            <span>Audio bitrate</span>
+            <div class="input-with-unit">
+              <input id="audio-bitrate" type="number" min="32" step="16" inputmode="numeric" placeholder="Auto">
+              <span>kbps</span>
+            </div>
+          </label>
+          <label>
+            <span>Target size</span>
+            <div class="input-with-unit">
+              <input id="media-target-size" type="number" min="0.5" step="1" inputmode="decimal" placeholder="Optional">
+              <span>MB</span>
+            </div>
+          </label>
+          <label>
+            <span>Trim start</span>
+            <div class="input-with-unit">
+              <input id="trim-start" type="number" min="0" step="0.1" inputmode="decimal" placeholder="0">
+              <span>s</span>
+            </div>
+          </label>
+          <label>
+            <span>Trim end</span>
+            <div class="input-with-unit">
+              <input id="trim-end" type="number" min="0" step="0.1" inputmode="decimal" placeholder="End">
+              <span>s</span>
+            </div>
+          </label>
+          <label>
+            <span>Hardware acceleration</span>
+            <select id="hardware-acceleration">
+              <option value="prefer-hardware" selected>Prefer hardware</option>
+              <option value="no-preference">No preference</option>
+              <option value="prefer-software">Prefer software</option>
+            </select>
+          </label>
+        </div>
+      </div>
 
       <div id="route-box" class="route-box"></div>
       <div id="loss-warnings" class="warnings"></div>
@@ -127,7 +234,7 @@
 
     <section class="panel compact-panel">
       <h2>Privacy model</h2>
-      <p>Conversion jobs do not call a conversion server. Image engines and codec modules are served from this origin and execute in local workers. Source files, filenames, metadata, previews, and generated outputs are not uploaded by the conversion engine.</p>
+      <p>Conversion uses local browser APIs, WebAssembly, WebCodecs, workers, and OPFS. Source files, media tracks, filenames, metadata, and outputs are not uploaded to a conversion server.</p>
     </section>
   </main>
   <script type="module" src="/src/main.ts"></script>

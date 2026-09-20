@@ -1,5 +1,5 @@
 {
-  "phase": 1,
+  "phase": 2,
   "reviewed_on": "2026-09-20",
   "dependencies": [
     {
@@ -14,7 +14,35 @@
       "version": "0.4.1",
       "declared_license": "MIT",
       "distribution": ["JavaScript", "WebAssembly"],
-      "notes": "HEIC/HEIF decode-only fallback. Preserve bundled decoder notices and review codec components before any encoder is added."
+      "notes": "HEIC/HEIF decode-only fallback."
+    },
+    {
+      "name": "mediabunny",
+      "version": "1.58.0",
+      "declared_license": "MPL-2.0",
+      "distribution": ["JavaScript"],
+      "notes": "Primary media demux/mux/conversion layer. Modifications to MPL-covered source files must remain available under MPL-2.0."
+    },
+    {
+      "name": "@mediabunny/mp3-encoder",
+      "version": "1.58.0",
+      "declared_license": "MPL-2.0",
+      "distribution": ["JavaScript", "inlined WebAssembly"],
+      "notes": "Local LAME-based MP3 encoder fallback registered only when native encoding is unavailable."
+    },
+    {
+      "name": "@mediabunny/aac-encoder",
+      "version": "1.58.0",
+      "declared_license": "MPL-2.0",
+      "distribution": ["JavaScript", "inlined WebAssembly"],
+      "notes": "Local AAC-LC encoder fallback registered only when native AAC encoding is unavailable."
+    },
+    {
+      "name": "@mediabunny/flac-encoder",
+      "version": "1.58.0",
+      "declared_license": "MPL-2.0",
+      "distribution": ["JavaScript", "inlined WebAssembly"],
+      "notes": "Local libFLAC encoder fallback."
     },
     {
       "name": "fflate",
@@ -22,6 +50,12 @@
       "declared_license": "MIT",
       "distribution": ["JavaScript"],
       "notes": "Used for bounded in-memory batch result ZIP packaging."
+    }
+  ],
+  "deferred": [
+    {
+      "name": "ffmpeg.wasm compatibility core",
+      "reason": "Not shipped in Phase 2 because the current core is GPL-2.0-or-later, memory-backed, and limited for multi-gigabyte inputs. Legacy AVI/FLV compatibility remains explicitly unsupported rather than silently adding an unreviewed binary."
     }
   ]
 }
