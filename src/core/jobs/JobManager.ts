@@ -4,6 +4,9 @@ import { inspectFile } from "../inspection/inspectFile";
 import { ConversionPlanner } from "../planner/ConversionPlanner";
 import { NetworkGuard } from "../security/NetworkGuard";
 import { assertSafeImageDimensions } from "../security/ResourceLimits";
+import { memoryPreflight } from "../performance/Budget";
+import { getDeviceProfile } from "../performance/DeviceProfile";
+import { estimateRouteResources } from "../performance/LargeFilePolicy";
 import { storagePreflight } from "../storage/StorageEstimator";
 import { TempWorkspace } from "../storage/TempWorkspace";
 import type { OutputValidator } from "../validation/Validator";
@@ -67,17 +70,37 @@ export class JobManager {
       const target=this.formats.get(targetFormatId);
       if(!target) throw new Error("FORMAT_UNSUPPORTED: Target format is unknown.");
 
-      let required=source.size+64*1024*1024;
+      const estimates=[];
       for(const edge of route.edges){
         const engine=this.engines.get(edge.engineId);
         if(!engine) throw new Error("ENGINE_UNAVAILABLE: "+edge.engineId);
-        const estimate=await engine.estimate(source,edge.from,edge.to);
-        required=Math.max(required,estimate.temporaryBytes);
+        estimates.push(await engine.estimate(source,edge.from,edge.to));
       }
 
-      const storage=await storagePreflight(required);
+      const profile=getDeviceProfile();
+      const resources=estimateRouteResources(source.size,route.edges,estimates,profile);
+      const memory=memoryPreflight(resources.memoryBytes,profile);
+      if(!memory.safe){
+        throw new Error(
+          "MEMORY_BUDGET_EXCEEDED: This route needs about "
+          +Math.ceil(memory.required/(1024*1024))+" MiB of guarded working memory, above this device's "
+          +Math.floor(memory.budget/(1024*1024))+" MiB budget. Use a streaming route, a smaller file, or a lower-memory option."
+        );
+      }
+
+      const storage=await storagePreflight(resources.workspaceBytes,profile.storageReserveBytes);
       if(!storage.safe){
-        throw new Error("STORAGE_INSUFFICIENT: The browser does not have enough local workspace for this job.");
+        throw new Error(
+          "STORAGE_INSUFFICIENT: The browser cannot reserve enough local workspace while keeping "
+          +Math.ceil(profile.storageReserveBytes/(1024*1024))+" MiB free."
+        );
+      }
+      if(resources.largeFileMode){
+        warnings.push(
+          resources.streamingInput
+            ?"Large-file mode: source access stays streaming/lazy where the selected engines support it."
+            :"Large-file mode: this route is memory-backed and is guarded by the device working-set budget."
+        );
       }
 
       workspace=await TempWorkspace.create(id);
