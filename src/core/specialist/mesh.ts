@@ -3,6 +3,14 @@ export interface MeshData {
   triangles:Array<[number,number,number]>;
 }
 
+const MAX_VERTICES=2_000_000;
+const MAX_TRIANGLES=1_500_000;
+
+function guardMesh(vertices:number,triangles:number){
+  if(vertices>MAX_VERTICES) throw new Error("MESH_COMPLEXITY_LIMIT: Mesh exceeds the guarded vertex limit.");
+  if(triangles>MAX_TRIANGLES) throw new Error("MESH_COMPLEXITY_LIMIT: Mesh exceeds the guarded triangle limit.");
+}
+
 function finite3(values:number[]):[number,number,number] {
   if(values.length<3||values.slice(0,3).some(value=>!Number.isFinite(value))){
     throw new Error("MESH_COORDINATE_INVALID: Non-finite vertex coordinate.");
@@ -18,6 +26,7 @@ export function parseObj(text:string):MeshData {
     if(!line||line.startsWith("#")) continue;
     if(line.startsWith("v ")){
       vertices.push(finite3(line.slice(2).trim().split(/\s+/).map(Number)));
+      guardMesh(vertices.length,triangles.length);
     }else if(line.startsWith("f ")){
       const refs=line.slice(2).trim().split(/\s+/).map(token=>{
         const value=Number(token.split("/")[0]);
@@ -26,7 +35,10 @@ export function parseObj(text:string):MeshData {
         if(index<0||index>=vertices.length) throw new Error("MESH_FACE_INVALID: OBJ face index is out of range.");
         return index;
       });
-      for(let i=1;i+1<refs.length;i++) triangles.push([refs[0],refs[i],refs[i+1]]);
+      for(let i=1;i+1<refs.length;i++){
+        triangles.push([refs[0],refs[i],refs[i+1]]);
+        guardMesh(vertices.length,triangles.length);
+      }
     }
   }
   if(!vertices.length||!triangles.length) throw new Error("MESH_PARSE_FAILED: OBJ contains no triangle geometry.");
@@ -44,6 +56,7 @@ export function parseStl(bytes:Uint8Array):MeshData {
   if(isBinaryStl(bytes)){
     const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
     const count=view.getUint32(80,true);
+    guardMesh(count*3,count);
     const vertices:Array<[number,number,number]>=[];
     const triangles:Array<[number,number,number]>=[];
     let offset=84;
@@ -62,8 +75,13 @@ export function parseStl(bytes:Uint8Array):MeshData {
   }
 
   const text=new TextDecoder().decode(bytes);
-  const values=[...text.matchAll(/\bvertex\s+([+\-0-9.eE]+)\s+([+\-0-9.eE]+)\s+([+\-0-9.eE]+)/g)]
-    .map(match=>finite3([Number(match[1]),Number(match[2]),Number(match[3])]));
+  const values:Array<[number,number,number]>= [];
+  const vertexPattern=/\bvertex\s+([+\-0-9.eE]+)\s+([+\-0-9.eE]+)\s+([+\-0-9.eE]+)/g;
+  let match:RegExpExecArray|null;
+  while((match=vertexPattern.exec(text))){
+    values.push(finite3([Number(match[1]),Number(match[2]),Number(match[3])]));
+    guardMesh(values.length,Math.floor(values.length/3));
+  }
   if(values.length<3||values.length%3!==0) throw new Error("MESH_PARSE_FAILED: ASCII STL contains invalid triangle data.");
   const triangles:Array<[number,number,number]>=[];
   for(let i=0;i<values.length;i+=3) triangles.push([i,i+1,i+2]);
@@ -94,6 +112,7 @@ export function parsePly(text:string):MeshData {
   if(!Number.isInteger(vertexCount)||vertexCount<1||!Number.isInteger(faceCount)||faceCount<1){
     throw new Error("MESH_PARSE_FAILED: PLY needs vertex and face elements.");
   }
+  guardMesh(vertexCount,faceCount);
 
   const x=vertexProperties.indexOf("x"),y=vertexProperties.indexOf("y"),z=vertexProperties.indexOf("z");
   if(x<0||y<0||z<0) throw new Error("MESH_PARSE_FAILED: PLY vertex x/y/z properties are required.");
@@ -112,7 +131,10 @@ export function parsePly(text:string):MeshData {
     if(!Number.isInteger(count)||count<3||fields.length<count+1) continue;
     const refs=fields.slice(1,count+1);
     if(refs.some(ref=>!Number.isInteger(ref)||ref<0||ref>=vertices.length)) throw new Error("MESH_FACE_INVALID: PLY face index is out of range.");
-    for(let j=1;j+1<refs.length;j++) triangles.push([refs[0],refs[j],refs[j+1]]);
+    for(let j=1;j+1<refs.length;j++){
+      triangles.push([refs[0],refs[j],refs[j+1]]);
+      guardMesh(vertices.length,triangles.length);
+    }
   }
   if(!triangles.length) throw new Error("MESH_PARSE_FAILED: PLY contains no triangle geometry.");
   return {vertices,triangles};
