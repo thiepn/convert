@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@discourse/heic": "1.0.0",
+    "@keeratita/heic-converter": "0.4.1",
     "fflate": "0.8.3",
     "wasm-vips": "0.0.18"
   },
