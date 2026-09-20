@@ -173,6 +173,7 @@ export class App {
     }
 
     element<HTMLButtonElement>("pdf-reinspect-button").addEventListener("click",()=>void this.refreshPdfInspection());
+    element<HTMLButtonElement>("archive-pack-selection-button").addEventListener("click",()=>void this.switchToArchiveBuild());
     element<HTMLButtonElement>("archive-reinspect-button").addEventListener("click",()=>void this.refreshArchiveInspection());
     element<HTMLButtonElement>("archive-select-all").addEventListener("click",()=>this.setArchiveSelection(true));
     element<HTMLButtonElement>("archive-select-none").addEventListener("click",()=>this.setArchiveSelection(false));
@@ -301,6 +302,19 @@ export class App {
     await this.renderRoute();
   }
 
+  private async switchToArchiveBuild(){
+    if(!this.files.length) return;
+    this.kind="archive-build";
+    this.archiveDetail=null;
+    element<HTMLSelectElement>("archive-operation").value="create";
+    this.renderSelectionControls();
+    this.renderFacts();
+    this.renderArchiveEntries();
+    this.populateTargets();
+    this.updateArchiveOptionVisibility();
+    await this.renderRoute();
+  }
+
   private async refreshArchiveInspection(){
     if(this.kind!=="archive"||this.files.length!==1) return;
     const warnings:string[]=[];
@@ -337,6 +351,10 @@ export class App {
     element("archive-controls").classList.toggle("hidden",this.kind!=="archive"&&this.kind!=="archive-build");
     element("metadata-control").classList.toggle("hidden",this.kind==="document"||this.kind==="archive"||this.kind==="archive-build");
     element("pdf-controls").classList.toggle("hidden",this.kind!=="pdf");
+    element("archive-pack-selection-button").classList.toggle(
+      "hidden",
+      !this.files.length||this.kind==="archive"||this.kind==="archive-build"||this.kind==="pdf"
+    );
   }
 
   private renderFacts(){
