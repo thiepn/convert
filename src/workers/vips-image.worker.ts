@@ -26,10 +26,10 @@ function parseHexColor(value: string): [number, number, number] {
   ];
 }
 
-function metadataKeep(policy: ImageConversionSettings["metadataPolicy"]): number {
-  if (policy === "preserve") return 63;
-  if (policy === "privacy") return 8;
-  return 0;
+function metadataKeep(vips: VipsModule, policy: ImageConversionSettings["metadataPolicy"]): unknown {
+  if (policy === "preserve") return vips.ForeignKeep.all;
+  if (policy === "privacy") return vips.ForeignKeep.icc;
+  return vips.ForeignKeep.none;
 }
 
 function metadataSummary(image: VipsImage): ImageMetadataSummary {
@@ -142,13 +142,14 @@ function loadImage(
 }
 
 function encodeImage(
+  vips: VipsModule,
   image: VipsImage,
   target: string,
   settings: ImageConversionSettings,
   quality: number
 ): Uint8Array {
   const Q = Math.max(1, Math.min(100, Math.round(quality)));
-  const keep = metadataKeep(settings.metadataPolicy);
+  const keep = metadataKeep(vips, settings.metadataPolicy);
 
   if (target === "jpeg") {
     return image.jpegsaveBuffer({
@@ -206,6 +207,7 @@ function toOwnedBytes(value: Uint8Array): Uint8Array {
 }
 
 function encodeTowardTarget(
+  vips: VipsModule,
   image: VipsImage,
   target: string,
   settings: ImageConversionSettings,
@@ -219,7 +221,7 @@ function encodeTowardTarget(
 
   for (let attempt = 0; attempt < 7 && low <= high; attempt += 1) {
     const q = Math.round((low + high) / 2);
-    const bytes = toOwnedBytes(encodeImage(image, target, settings, q));
+    const bytes = toOwnedBytes(encodeImage(vips, image, target, settings, q));
     if (!smallest || bytes.byteLength < smallest.bytes.byteLength) smallest = { bytes, quality: q };
 
     if (bytes.byteLength <= targetBytes) {
@@ -231,7 +233,7 @@ function encodeTowardTarget(
   }
 
   return best ?? smallest ?? {
-    bytes: toOwnedBytes(encodeImage(image, target, settings, maxQ)),
+    bytes: toOwnedBytes(encodeImage(vips, image, target, settings, maxQ)),
     quality: maxQ
   };
 }
@@ -318,7 +320,7 @@ scope.onmessage = async event => {
     let actualQuality = quality100(settings.quality);
 
     if (settings.targetBytes && settings.targetBytes > 0 && supportsTargetSize(targetFormatId, settings)) {
-      let result = encodeTowardTarget(image, targetFormatId, settings, settings.targetBytes);
+      let result = encodeTowardTarget(vips, image, targetFormatId, settings, settings.targetBytes);
       outputBytes = result.bytes;
       actualQuality = result.quality;
 
@@ -330,13 +332,13 @@ scope.onmessage = async event => {
         const reduction = Math.sqrt(settings.targetBytes / outputBytes.byteLength) * 0.92;
         if (reduction > 0.05 && reduction < 0.96) {
           image = resizeImage(image, reduction, owned);
-          result = encodeTowardTarget(image, targetFormatId, settings, settings.targetBytes);
+          result = encodeTowardTarget(vips, image, targetFormatId, settings, settings.targetBytes);
           outputBytes = result.bytes;
           actualQuality = result.quality;
         }
       }
     } else {
-      outputBytes = toOwnedBytes(encodeImage(image, targetFormatId, settings, actualQuality));
+      outputBytes = toOwnedBytes(encodeImage(vips, image, targetFormatId, settings, actualQuality));
     }
 
     send({ type: "progress", jobId, progress: 0.88, stage: "Finalizing image output" });
