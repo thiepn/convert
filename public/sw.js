@@ -1,4 +1,4 @@
-const CACHE = "thiepn-convert-phase0-v2";
+const CACHE = "thiepn-convert-phase9-v1";
 const ROOT = new URL("./", self.location.href).href;
 const MANIFEST = new URL("manifest.webmanifest", self.location.href).href;
 const CORE = [ROOT, MANIFEST];
@@ -15,6 +15,11 @@ function withIsolationHeaders(response) {
     statusText: response.statusText,
     headers
   });
+}
+
+function isEngineAsset(url) {
+  return url.pathname.includes("/engines/")
+    || /\.(?:wasm|worker\.js|worker\.mjs)$/i.test(url.pathname);
 }
 
 self.addEventListener("install", event => {
@@ -36,18 +41,42 @@ self.addEventListener("fetch", event => {
 
   event.respondWith((async () => {
     const cache = await caches.open(CACHE);
-    try {
-      const network = withIsolationHeaders(await fetch(request));
-      if (network && network.ok) await cache.put(request, network.clone());
-      return network;
-    } catch {
-      const cached = await cache.match(request);
+
+    if (isEngineAsset(url)) {
+      const cached=await cache.match(request);
       if (cached) return withIsolationHeaders(cached);
-      if (request.mode === "navigate") {
-        const shell = await cache.match(ROOT);
-        if (shell) return withIsolationHeaders(shell);
-      }
-      throw new Error("Offline resource unavailable");
+      const network=withIsolationHeaders(await fetch(request));
+      if (network && network.ok) await cache.put(request,network.clone());
+      return network;
     }
+
+    if (request.mode === "navigate") {
+      try {
+        const network=withIsolationHeaders(await fetch(request));
+        if (network && network.ok) await cache.put(ROOT,network.clone());
+        return network;
+      } catch {
+        const shell=await cache.match(ROOT);
+        if (shell) return withIsolationHeaders(shell);
+        throw new Error("Offline shell unavailable");
+      }
+    }
+
+    const cached=await cache.match(request);
+    if (cached) {
+      event.waitUntil(
+        fetch(request)
+          .then(response=>{
+            const normalized=withIsolationHeaders(response);
+            if (normalized && normalized.ok) return cache.put(request,normalized.clone());
+          })
+          .catch(()=>undefined)
+      );
+      return withIsolationHeaders(cached);
+    }
+
+    const network=withIsolationHeaders(await fetch(request));
+    if (network && network.ok) await cache.put(request,network.clone());
+    return network;
   })());
 });
