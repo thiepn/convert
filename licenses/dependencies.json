@@ -1,0 +1,27 @@
+{
+  "phase": 1,
+  "reviewed_on": "2026-09-20",
+  "dependencies": [
+    {
+      "name": "wasm-vips",
+      "version": "0.0.18",
+      "declared_license": "MIT",
+      "distribution": ["JavaScript", "WebAssembly", "dynamic WebAssembly modules"],
+      "notes": "Preserve wasm-vips THIRD-PARTY-NOTICES.md and review bundled component licenses when changing the build."
+    },
+    {
+      "name": "@keeratita/heic-converter",
+      "version": "0.4.1",
+      "declared_license": "MIT",
+      "distribution": ["JavaScript", "WebAssembly"],
+      "notes": "HEIC/HEIF decode-only fallback. Preserve bundled decoder notices and review codec components before any encoder is added."
+    },
+    {
+      "name": "fflate",
+      "version": "0.8.3",
+      "declared_license": "MIT",
+      "distribution": ["JavaScript"],
+      "notes": "Used for bounded in-memory batch result ZIP packaging."
+    }
+  ]
+}

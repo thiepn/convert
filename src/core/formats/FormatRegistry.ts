@@ -32,6 +32,7 @@ export class FormatRegistry {
     const extension = extensionOf(name);
     const binaryMatch = this.all().find(format =>
       format.signatures.some(signature => matchesSignature(bytes, signature))
+      || Boolean(format.matcher?.(bytes))
     );
 
     const mimeMatch = mime
@@ -45,7 +46,7 @@ export class FormatRegistry {
     const reasons: string[] = [];
     const warnings: string[] = [];
 
-    if (binaryMatch) reasons.push("Matched file signature");
+    if (binaryMatch) reasons.push("Matched file content");
     if (mimeMatch) reasons.push("Matched MIME hint");
     if (extensionMatch) reasons.push("Matched filename extension");
 
@@ -53,10 +54,10 @@ export class FormatRegistry {
     const confidence = binaryMatch ? 0.99 : mimeMatch ? 0.75 : extensionMatch ? 0.55 : 0;
 
     if (binaryMatch && extensionMatch && binaryMatch.id !== extensionMatch.id) {
-      warnings.push("Filename extension does not match the file signature.");
+      warnings.push("Filename extension does not match the file contents.");
     }
     if (binaryMatch && mimeMatch && binaryMatch.id !== mimeMatch.id) {
-      warnings.push("Reported MIME type does not match the file signature.");
+      warnings.push("Reported MIME type does not match the file contents.");
     }
 
     return { format, confidence, reasons, warnings };
