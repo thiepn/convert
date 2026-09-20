@@ -89,12 +89,16 @@ export class JobManager {
         );
       }
 
-      const storage=await storagePreflight(resources.workspaceBytes,profile.storageReserveBytes);
-      if(!storage.safe){
-        throw new Error(
-          "STORAGE_INSUFFICIENT: The browser cannot reserve enough local workspace while keeping "
-          +Math.ceil(profile.storageReserveBytes/(1024*1024))+" MiB free."
-        );
+      if(profile.opfs){
+        const storage=await storagePreflight(resources.workspaceBytes,profile.storageReserveBytes);
+        if(!storage.safe){
+          throw new Error(
+            "STORAGE_INSUFFICIENT: The browser cannot reserve enough local workspace while keeping "
+            +Math.ceil(profile.storageReserveBytes/(1024*1024))+" MiB free."
+          );
+        }
+      }else if(resources.largeFileMode&&resources.streamingOutput){
+        warnings.push("OPFS is unavailable, so this browser cannot use the route's file-backed streaming output path.");
       }
       if(resources.largeFileMode){
         warnings.push(
