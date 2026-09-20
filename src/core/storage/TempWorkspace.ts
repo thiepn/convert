@@ -15,17 +15,19 @@ export class TempWorkspace {
     if(!locks?.request) return null;
 
     let release:(()=>void)|null=null;
+    let acquired=false;
     let ready!:()=>void;
     const readyPromise=new Promise<void>(resolve=>{ready=resolve;});
     const hold=new Promise<void>(resolve=>{release=resolve;});
 
     void locks.request("thiepn-convert-job-"+jobId,{mode:"exclusive"},async()=>{
+      acquired=true;
       ready();
       await hold;
     }).catch(()=>ready());
 
     await readyPromise;
-    return release;
+    return acquired?release:null;
   }
 
   static async cleanupOrphanedJobs(): Promise<number> {
