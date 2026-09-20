@@ -134,5 +134,17 @@ export function createConversionGraph():ConversionGraph {
     }
   }
 
+  for(const to of ["txt","markdown","html-doc","docx","odt","rtf","latex","typst","epub"]){
+    edges.push({
+      from:"pdf",to,engineId:"pdf-reconstruction",
+      qualityLoss:.45,
+      metadataLoss:["page layout","exact pagination","fonts","floating objects","forms","annotations"],
+      temporaryMultiplier:3,
+      streaming:false,
+      baseCost:90,
+      mode:"semantic"
+    });
+  }
+
   return new ConversionGraph(edges);
 }
