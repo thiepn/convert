@@ -1201,6 +1201,12 @@ export class App {
     const documentOptions=this.kind==="document"?await this.readDocumentOptions():null;
     const spreadsheetOptions=this.kind==="spreadsheet"?this.readSpreadsheetOptions():null;
     const dataOptions=(this.kind==="data"||this.kind==="database")?this.readDataOptions():null;
+    if(spreadsheetOptions?.sheetPolicy==="all"&&["parquet","arrow","sqlite","jsonl"].includes(targetId)){
+      this.renderWarnings("loss-warnings",[
+        "This target represents one logical table. Choose First sheet or Selected sheet instead of All sheets."
+      ]);
+      return;
+    }
     if(mediaOptions){
       const validation=this.validateMediaOptions(mediaOptions);
       if(validation){this.renderWarnings("loss-warnings",[validation]);return;}
@@ -1655,6 +1661,9 @@ export class App {
       ["Semantic documents",this.pandocDocumentEngine.isAvailable()],
       ["Office fidelity",this.officeDocumentEngine.isAvailable()],
       ["Archive engine",this.archiveEngine.isAvailable()],
+      ["Spreadsheet engine",this.spreadsheetEngine.isAvailable()],
+      ["Structured data",this.duckDbDataEngine.isAvailable()],
+      ["SQLite engine",this.sqliteEngine.isAvailable()],
       ["Local OCR","English · German · French · Turkish · Korean"],
       ["WebCodecs",profile.webCodecs],
       ["H.264 decode / encode",profile.codecs.h264.decode+" / "+profile.codecs.h264.encode],
@@ -1678,7 +1687,9 @@ export class App {
       node.append(caption,strong);container.append(node);
     }
 
-    element("runtime-status").textContent=this.archiveEngine.isAvailable()?"Phase 5 ready":"Archives degraded";
+    element("runtime-status").textContent=this.duckDbDataEngine.isAvailable()&&this.sqliteEngine.isAvailable()
+      ?"Phase 6 ready"
+      :"Data engines degraded";
     element("capability-json").textContent=JSON.stringify({
       ...profile,
       imageEngine:this.imageEngine.isAvailable()?"wasm-vips":"browser fallback",
@@ -1686,7 +1697,10 @@ export class App {
       pdfEngine:this.pdfEngine.isAvailable()?"PDF.js + pdf-lib + qpdf + Tesseract":"unavailable",
       semanticDocumentEngine:this.pandocDocumentEngine.isAvailable()?"Pandoc WASM 3.9":"unavailable",
       fidelityDocumentEngine:this.officeDocumentEngine.isAvailable()?"LibreOffice WASM (lazy)":"unavailable",
-      archiveEngine:this.archiveEngine.isAvailable()?"zip.js 2.16.0 + libarchive.js 2.0.2":"unavailable"
+      archiveEngine:this.archiveEngine.isAvailable()?"zip.js 2.16.0 + libarchive.js 2.0.2":"unavailable",
+      spreadsheetEngine:this.spreadsheetEngine.isAvailable()?"SheetJS CE 0.20.3":"unavailable",
+      structuredDataEngine:this.duckDbDataEngine.isAvailable()?"DuckDB-Wasm 1.33.0":"unavailable",
+      sqliteEngine:this.sqliteEngine.isAvailable()?"sql.js 1.14.2":"unavailable"
     },null,2);
   }
 }
