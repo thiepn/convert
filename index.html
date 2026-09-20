@@ -4,30 +4,37 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="theme-color" content="#111318">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self' ws: wss:; font-src 'self'; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'self'">
+  <meta name="description" content="Private local-first file conversion. Files stay in your browser.">
+  <meta name="color-scheme" content="dark">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'self'; manifest-src 'self'">
   <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <title>Thiepn Convert</title>
 </head>
 <body>
-  <main class="shell">
+  <a class="skip-link" href="#main-content">Skip to converter</a>
+  <main id="main-content" class="shell">
     <header class="hero">
       <div>
         <div class="eyebrow">THIEPN CONVERT · LOCAL ENGINE</div>
         <h1>Convert files locally in your browser.</h1>
         <p>Images, media, PDFs, Office files, archives, data, databases, and specialist formats run through device-aware local pipelines with guarded large-file handling. No conversion server is involved.</p>
       </div>
-      <div class="privacy-badge"><span class="privacy-dot"></span> No file uploads</div>
+      <div class="hero-actions">
+        <div class="privacy-badge"><span class="privacy-dot"></span> No file uploads</div>
+        <button id="update-button" class="secondary-button update-button hidden" type="button">Update app</button>
+      </div>
     </header>
 
     <section class="panel drop-panel">
-      <label id="drop-zone" class="drop-zone" for="file-input">
+      <label id="drop-zone" class="drop-zone" for="file-input" role="button" tabindex="0" aria-describedby="drop-help">
         <input id="file-input" type="file" multiple accept="image/*,audio/*,video/*,application/pdf,text/*,.pdf,.doc,.docx,.docm,.odt,.rtf,.html,.htm,.md,.markdown,.tex,.typ,.epub,.ppt,.pptx,.pptm,.odp,.xls,.xlsx,.xlsm,.xlsb,.ods,.fods,.csv,.tsv,.json,.jsonl,.ndjson,.parquet,.arrow,.feather,.sqlite,.sqlite3,.db,.db3,.zip,.zipx,.7z,.rar,.tar,.gz,.gzip,.tgz,.bz2,.tbz,.tbz2,.xz,.txz,.zst,.zstd,.cpio,.heic,.heif,.jxl,.tif,.tiff,.svg,.mkv,.webm,.mov,.m4a,.aac,.flac,.ogg,.opus,.ts,.m2ts,.avi,.flv,.asf,.wmv,.wma,.psd,.psb,.cr2,.cr3,.nef,.nrw,.arw,.sr2,.dng,.rw2,.orf,.raf,.pef,.ttf,.otf,.woff,.woff2,.eot,.srt,.vtt,.ass,.ssa,.obj,.stl,.ply,.gltf,.glb,.fb2,.mobi,.azw,.azw3,.prc,.dxf,.dwg,.fits,.fit,.fts,.h5,.hdf5,.hdf,.nc,.cdf">
-        <strong>Drop files anywhere</strong>
-        <span>Images · Media · PDF · Office · Data · Archives · PSD · RAW · Fonts · Subtitles · 3D · Scientific</span>
+        <strong>Choose files or drop them here</strong>
+        <span id="drop-help">Images · Media · PDF · Office · Data · Archives · PSD · RAW · Fonts · Subtitles · 3D · Scientific</span>
       </label>
     </section>
 
-    <section id="file-panel" class="panel hidden">
+    <section id="file-panel" class="panel hidden" aria-labelledby="file-name">
       <div class="section-heading">
         <div>
           <div class="eyebrow">INSPECTION</div>
@@ -37,7 +44,7 @@
       </div>
 
       <div id="file-facts" class="facts"></div>
-      <div id="inspection-warnings" class="warnings"></div>
+      <div id="inspection-warnings" class="warnings" role="status" aria-live="polite"></div>
       <div id="track-list" class="track-list hidden"></div>
 
       <hr>
@@ -530,23 +537,24 @@
       </div>
 
       <div id="route-box" class="route-box"></div>
-      <div id="loss-warnings" class="warnings"></div>
+      <div id="loss-warnings" class="warnings" role="status" aria-live="polite"></div>
 
       <div class="action-row">
         <button id="archive-pack-selection-button" class="secondary-button hidden" type="button">Pack these files</button>
         <button id="convert-button" class="primary-button" type="button">Run locally</button>
         <button id="cancel-button" class="secondary-button hidden" type="button">Cancel</button>
+        <button id="start-over-button" class="secondary-button" type="button">Start over</button>
       </div>
 
-      <div id="job-panel" class="job-panel hidden">
-        <div class="progress-track"><div id="progress-bar" class="progress-bar"></div></div>
+      <div id="job-panel" class="job-panel hidden" role="status" aria-live="polite">
+        <div id="job-progress-track" class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="job-stage"><div id="progress-bar" class="progress-bar"></div></div>
         <div class="job-row">
           <span id="job-stage">Preparing</span>
           <span id="job-progress">0%</span>
         </div>
       </div>
 
-      <div id="results" class="results hidden"></div>
+      <div id="results" class="results hidden" role="region" aria-live="polite" aria-label="Conversion results"></div>
     </section>
 
     <section class="panel">
