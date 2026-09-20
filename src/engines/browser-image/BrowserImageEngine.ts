@@ -12,19 +12,45 @@ const SUPPORTED = new Set([
   "webp>jpeg", "webp>png"
 ]);
 
+const MIME_BY_FORMAT: Record<string, string> = {
+  jpeg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp"
+};
+
 export class BrowserImageEngine implements ConversionEngine {
   readonly id = "browser-image-proof";
   readonly version = "phase0";
   private workers = new Set<Worker>();
+  private encodableTargets = new Set<string>();
+  private prepared = false;
 
-  isAvailable(): boolean {
+  private baseAvailable(): boolean {
     return typeof Worker !== "undefined"
       && typeof OffscreenCanvas !== "undefined"
       && typeof createImageBitmap === "function";
   }
 
+  async prepare(): Promise<void> {
+    this.prepared = true;
+    this.encodableTargets.clear();
+    if (!this.baseAvailable()) return;
+
+    const canvas = new OffscreenCanvas(1, 1);
+    for (const [formatId, mime] of Object.entries(MIME_BY_FORMAT)) {
+      try {
+        const blob = await canvas.convertToBlob({ type: mime, quality: 0.8 });
+        if (blob.type === mime && blob.size > 0) this.encodableTargets.add(formatId);
+      } catch {}
+    }
+  }
+
+  isAvailable(): boolean {
+    return this.prepared && this.baseAvailable() && this.encodableTargets.size > 0;
+  }
+
   canConvert(from: string, to: string): boolean {
-    return SUPPORTED.has(from + ">" + to);
+    return SUPPORTED.has(from + ">" + to) && this.encodableTargets.has(to);
   }
 
   async estimate(source: Blob): Promise<ConversionEstimate> {
@@ -36,8 +62,8 @@ export class BrowserImageEngine implements ConversionEngine {
   }
 
   convert(request: EngineConvertRequest): Promise<EngineConvertResult> {
-    if (!this.isAvailable()) {
-      return Promise.reject(new Error("Browser image proof engine is unavailable on this runtime."));
+    if (!this.isAvailable() || !this.canConvert(request.sourceFormatId, request.targetFormatId)) {
+      return Promise.reject(new Error("Browser image proof engine cannot perform this route on the current runtime."));
     }
 
     const worker = new Worker(new URL("../../workers/engine.worker.ts", import.meta.url), { type: "module" });
