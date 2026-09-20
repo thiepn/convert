@@ -19,7 +19,7 @@ export class ImageOutputValidator implements OutputValidator {
     private readonly probe?:(blob:Blob,formatId:string)=>Promise<{width:number;height:number}>
   ) {}
 
-  async validate(blob:Blob,targetFormatId:string):Promise<ValidationResult>{
+  async validate(blob:Blob,targetFormatId:string,_options:Record<string,unknown>={}):Promise<ValidationResult>{
     const target=this.formats.get(targetFormatId);
     const inspection=await inspectFile(
       Object.assign(blob,{name:"output."+(target?.extensions[0]??"bin")}),
@@ -58,7 +58,7 @@ export class MediaOutputValidator implements OutputValidator {
     private readonly probe:(blob:Blob)=>Promise<DetailedMediaInspection>
   ) {}
 
-  async validate(blob:Blob,targetFormatId:string):Promise<ValidationResult>{
+  async validate(blob:Blob,targetFormatId:string,_options:Record<string,unknown>={}):Promise<ValidationResult>{
     const target=this.formats.get(targetFormatId);
     const errors:string[]=[];
     if(blob.size===0) errors.push("Output is empty.");
