@@ -30,6 +30,8 @@ const OFFICE_WRITER_INPUTS=["doc","docx","odt","rtf","html-doc","txt","epub"];
 const OFFICE_WRITER_OUTPUTS=["pdf","docx","doc","odt","rtf","txt","html-doc"];
 const OFFICE_PRESENTATION_INPUTS=["ppt","pptx","odp"];
 const OFFICE_PRESENTATION_OUTPUTS=["pdf","pptx","ppt","odp","html-doc"];
+const OFFICE_SPREADSHEET_INPUTS=["xls","xlsx","ods","csv"];
+const OFFICE_SPREADSHEET_OUTPUTS=["pdf","xlsx","xls","ods","csv"];
 const ARCHIVE_INPUTS=["zip","7z","rar","tar","gzip","bzip2","xz","zstd","tar-gzip","tar-bzip2","tar-xz","cpio"];
 const ARCHIVE_OUTPUTS=["zip","7z","tar","tar-gzip","tar-bzip2","tar-xz"];
 const SHEET_INPUTS=["xlsx","xlsm","xlsb","xls","ods","fods","csv","tsv","json-data","jsonl"];
@@ -129,6 +131,20 @@ export function createConversionGraph():ConversionGraph {
   }
   for(const from of OFFICE_PRESENTATION_INPUTS){
     for(const to of OFFICE_PRESENTATION_OUTPUTS){
+      edges.push({
+        from,to,engineId:"libreoffice-document",
+        qualityLoss:to==="pdf"||from===to?0:.015,
+        metadataLoss:[],
+        temporaryMultiplier:4,
+        streaming:false,
+        baseCost:5,
+        mode:"fidelity"
+      });
+    }
+  }
+
+  for(const from of OFFICE_SPREADSHEET_INPUTS){
+    for(const to of OFFICE_SPREADSHEET_OUTPUTS){
       edges.push({
         from,to,engineId:"libreoffice-document",
         qualityLoss:to==="pdf"||from===to?0:.015,
