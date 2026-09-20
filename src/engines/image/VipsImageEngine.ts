@@ -35,13 +35,8 @@ export class VipsImageEngine implements ConversionEngine {
       && typeof Worker !== "undefined"
       && typeof WebAssembly !== "undefined"
     );
-    if (!this.available) return;
-    try {
-      await this.ping();
-    } catch {
-      this.available = false;
-      this.resetWorker();
-    }
+    // Keep the large WASM engine lazy. The first detailed inspection/conversion
+    // initializes it inside the dedicated worker.
   }
 
   isAvailable(): boolean { return this.available; }
