@@ -400,6 +400,13 @@ export class App {
     await this.renderRoute();
   }
 
+  private isLegacyMediaSelection():boolean {
+    const legacy=new Set(["avi","flv","asf"]);
+    return this.kind==="media"
+      &&this.inspections.length>0
+      &&this.inspections.every(item=>legacy.has(item.detection.format?.id??""));
+  }
+
   private async switchToArchiveBuild(){
     if(!this.files.length) return;
     this.kind="archive-build";
@@ -442,16 +449,17 @@ export class App {
   }
 
   private renderSelectionControls(){
+    const legacyMedia=this.isLegacyMediaSelection();
     element("common-controls").classList.toggle("hidden",this.kind==="pdf");
     element("image-controls").classList.toggle("hidden",this.kind!=="image");
-    element("media-controls").classList.toggle("hidden",this.kind!=="media");
+    element("media-controls").classList.toggle("hidden",this.kind!=="media"||legacyMedia);
     element("document-controls").classList.toggle("hidden",this.kind!=="document");
     element("archive-controls").classList.toggle("hidden",this.kind!=="archive"&&this.kind!=="archive-build");
     element("data-controls").classList.toggle("hidden",this.kind!=="spreadsheet"&&this.kind!=="data"&&this.kind!=="database");
     element("metadata-control").classList.toggle(
       "hidden",
       this.kind==="document"||this.kind==="archive"||this.kind==="archive-build"
-        ||this.kind==="spreadsheet"||this.kind==="data"||this.kind==="database"||this.kind==="specialist"
+        ||this.kind==="spreadsheet"||this.kind==="data"||this.kind==="database"||this.kind==="specialist"||legacyMedia
     );
     element("pdf-controls").classList.toggle("hidden",this.kind!=="pdf");
     element("archive-pack-selection-button").classList.toggle(
@@ -834,7 +842,11 @@ export class App {
     const preferred=this.kind==="image"
       ? source==="heic"?"jpeg":source==="svg"?"webp":source==="png"?"webp":source
       : this.kind==="media"
-        ? (source==="mov"||source==="mkv"||source==="webm-media"?"mp4":source)
+        ? (source==="asf"&&this.files.every(file=>file.name.toLowerCase().endsWith(".wma"))
+          ? "mp3"
+          : source==="mov"||source==="mkv"||source==="webm-media"||source==="avi"||source==="flv"||source==="asf"
+            ? "mp4"
+            : source)
         : this.kind==="document"
           ? (["markdown","latex","typst","txt","html-doc","epub"].includes(source??"")?"docx":targets.includes("pdf")?"pdf":source)
           : this.kind==="spreadsheet"
@@ -1187,6 +1199,7 @@ export class App {
             +(this.formats.get(targetId)?.name??targetId)
             +" · FFmpeg WASM compatibility transcode · local only";
           warnings.push("Legacy AVI/FLV/ASF/WMV/WMA routes lazy-load FFmpeg WASM and are memory-backed. They do not use the primary streaming Mediabunny path.");
+          warnings.push("Advanced WebCodecs media controls are intentionally hidden for the compatibility fallback; Phase 7 uses conservative fixed transcode settings.");
         }else if(this.files.length===1){
           box.textContent="Inspecting stream-copy compatibility…";
           const mediaPlan=await this.mediaEngine.plan(this.files[0],targetId,this.readMediaOptions());
