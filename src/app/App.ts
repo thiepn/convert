@@ -1306,7 +1306,7 @@ export class App {
     if(outputs.length>1&&total<=512*1024*1024){
       void (async()=>{
         try{
-          const entries:Record<string,Uint8Array>={};
+          const entries=Object.create(null) as Record<string,Uint8Array>;
           for(const output of outputs) entries[output.name]=new Uint8Array(await output.blob.arrayBuffer());
           const zipped=zipSync(entries,{level:0});
           this.addResult(container,"converted-files.zip",new Blob([zipped],{type:"application/zip"}),["Local batch package."]);
