@@ -120,8 +120,14 @@ export class OfficeDocumentEngine implements ConversionEngine{
       warnings.push("Layout fidelity depends on font availability. Source references "+inspection.fonts.length+" distinct font name(s).");
     }
 
-    const fonts=(options.fonts??[]).map(font=>({
-      filename:font.filename,
+    const fontBytes=(options.fonts??[]).reduce((sum,font)=>sum+font.data.byteLength,0);
+    const fontLimit=mobile?64*1024*1024:192*1024*1024;
+    if(fontBytes>fontLimit){
+      throw new Error("DOCUMENT_FONT_LIMIT: Imported fonts exceed this device's fidelity-engine budget.");
+    }
+    const allowedFont=/\.(?:ttf|otf|ttc|woff2?)$/i;
+    const fonts=(options.fonts??[]).filter(font=>allowedFont.test(font.filename)).map(font=>({
+      filename:font.filename.replace(/[^A-Za-z0-9._ -]/g,"_"),
       data:new Uint8Array(font.data)
     })) satisfies FontData[];
 
