@@ -1,5 +1,6 @@
 import type { FormatDetection } from "../formats/types";
 import { FormatRegistry } from "../formats/FormatRegistry";
+import { detectPackagedDocument } from "../document/PackageInspector";
 
 export interface FileInspection {
   name: string;
@@ -56,7 +57,25 @@ export async function inspectFile(file:Blob & {name?:string}, registry:FormatReg
   const bytes = new Uint8Array(await file.slice(0, probeSize).arrayBuffer());
   const name = file.name ?? "unnamed";
   const mime = file.type ?? "";
-  const detection = registry.detect(bytes, name, mime);
+  let detection = registry.detect(bytes, name, mime);
+
+  if (bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b) {
+    const packagedId = await detectPackagedDocument(file);
+    const packagedFormat = packagedId ? registry.get(packagedId) : undefined;
+    if (packagedFormat) {
+      const warnings = [...detection.warnings];
+      if (detection.format && detection.format.id !== packagedFormat.id) {
+        warnings.push("Filename/MIME hints disagree with the document package structure.");
+      }
+      detection = {
+        format: packagedFormat,
+        confidence: 0.995,
+        reasons: ["Matched document package structure", ...detection.reasons],
+        warnings
+      };
+    }
+  }
+
   const size = dimensions(detection.format?.id, bytes);
   return { name, size:file.size, mime, detection, width:size?.width, height:size?.height };
 }
