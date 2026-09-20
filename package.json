@@ -1,6 +1,6 @@
 {
   "name": "thiepn-convert",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,9 +10,15 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@discourse/heic": "1.0.0",
+    "fflate": "0.8.3",
+    "wasm-vips": "0.0.18"
+  },
   "devDependencies": {
     "typescript": "^5.9.2",
     "vite": "^7.1.0",
+    "vite-plugin-static-copy": "4.1.1",
     "vitest": "^3.2.4"
   }
 }
