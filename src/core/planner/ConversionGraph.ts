@@ -18,20 +18,24 @@ export class ConversionGraph {
 const IMAGE_INPUTS=["jpeg","png","webp","gif","tiff","avif","heic","jxl","svg"];
 const IMAGE_OUTPUTS=["jpeg","png","webp","gif","tiff","avif","jxl"];
 
-function qualityLoss(target:string):number {
-  if (target==="jpeg") return 0.12;
-  if (target==="gif") return 0.22;
-  if (target==="webp" || target==="avif" || target==="jxl") return 0.04;
+const MEDIA_INPUTS=["mp4","mov","webm-media","mkv","ogg","mp3","wav","flac","aac","mpegts"];
+const MEDIA_OUTPUTS=["mp4","mov","webm-media","mkv","ogg","mp3","wav","flac","aac","mpegts"];
+
+function imageQualityLoss(target:string):number {
+  if(target==="jpeg") return 0.12;
+  if(target==="gif") return 0.22;
+  if(target==="webp"||target==="avif"||target==="jxl") return 0.04;
   return 0;
 }
 
 export function createConversionGraph():ConversionGraph {
   const edges:ConversionEdge[]=[];
-  for (const from of IMAGE_INPUTS) {
-    for (const to of IMAGE_OUTPUTS) {
+
+  for(const from of IMAGE_INPUTS){
+    for(const to of IMAGE_OUTPUTS){
       edges.push({
         from,to,engineId:"vips-image",
-        qualityLoss:qualityLoss(to),
+        qualityLoss:imageQualityLoss(to),
         metadataLoss:from==="heic"?["EXIF","XMP","ICC"]:[],
         temporaryMultiplier:2,
         streaming:false,
@@ -44,15 +48,29 @@ export function createConversionGraph():ConversionGraph {
     ["jpeg","png"],["jpeg","webp"],["png","jpeg"],["png","webp"],
     ["webp","jpeg"],["webp","png"]
   ];
-  for (const [from,to] of fallbackPairs) {
+  for(const [from,to] of fallbackPairs){
     edges.push({
       from,to,engineId:"browser-image-proof",
-      qualityLoss:qualityLoss(to)+0.15,
+      qualityLoss:imageQualityLoss(to)+0.15,
       metadataLoss:["EXIF","XMP","ICC"],
       temporaryMultiplier:3,
       streaming:false,
       baseCost:500
     });
   }
+
+  for(const from of MEDIA_INPUTS){
+    for(const to of MEDIA_OUTPUTS){
+      edges.push({
+        from,to,engineId:"mediabunny",
+        qualityLoss:0,
+        metadataLoss:[],
+        temporaryMultiplier:1.35,
+        streaming:true,
+        baseCost:5
+      });
+    }
+  }
+
   return new ConversionGraph(edges);
 }
