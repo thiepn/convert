@@ -200,10 +200,16 @@ export class App {
     this.mediaDetail=null;
     this.pdfDetail=null;
     this.documentDetail=null;
+    this.archiveDetail=null;
     this.inspections=await Promise.all(files.map(file=>inspectFile(file,this.formats)));
 
     const kinds=new Set(this.inspections.map(i=>this.getKind(i)).filter(Boolean) as Exclude<SelectionKind,null>[]);
-    this.kind=kinds.size===1?[...kinds][0]:null;
+    const allKnown=this.inspections.every(item=>Boolean(item.detection.format));
+    this.kind=kinds.size===1&&allKnown
+      ? [...kinds][0]
+      : files.length
+        ? "archive-build"
+        : null;
 
     element("file-panel").classList.remove("hidden");
     element("results").classList.add("hidden");
@@ -220,11 +226,20 @@ export class App {
       : known.length+"/"+files.length+" recognized";
 
     const warnings=this.inspections.flatMap(item=>item.detection.warnings.map(w=>item.name+": "+w));
-    if(known.length!==files.length) warnings.push("At least one file could not be identified.");
-    if(kinds.size>1) warnings.push("Mixed file families must be processed separately.");
-    if(kinds.size===0) warnings.push("This format has no active local conversion workflow.");
+    if(this.kind==="archive-build"){
+      warnings.push("Mixed or otherwise unsupported selections can be packed into a new local archive.");
+    }else{
+      if(known.length!==files.length) warnings.push("At least one file could not be identified.");
+      if(kinds.size>1) warnings.push("Mixed file families must be processed separately.");
+      if(kinds.size===0) warnings.push("This format has no active local conversion workflow.");
+    }
 
     this.renderSelectionControls();
+    if(this.kind==="archive-build"){
+      element<HTMLSelectElement>("archive-operation").value="create";
+    }else if(this.kind==="archive"){
+      element<HTMLSelectElement>("archive-operation").value="repack";
+    }
 
     if(files.length===1&&known.length===1){
       try{
@@ -241,11 +256,20 @@ export class App {
         }else if(this.kind==="document"){
           this.documentDetail=await this.documentInspector.inspect(files[0],known[0].detection.format!.id);
           warnings.push(...this.documentDetail.warnings);
+        }else if(this.kind==="archive"){
+          this.archiveDetail=await this.archiveEngine.inspect(
+            files[0],
+            known[0].detection.format!.id,
+            this.readArchiveOptions().inputPassword
+          );
+          warnings.push(...this.archiveDetail.warnings);
         }
       }catch(error){
         const message=error instanceof Error?error.message:String(error);
         if(this.kind==="pdf"&&/PDF_PASSWORD_REQUIRED|PDF_PASSWORD_INCORRECT/.test(message)){
           warnings.push("This PDF is password-protected. Enter the password and choose Re-inspect.");
+        }else if(this.kind==="archive"&&/ARCHIVE_PASSWORD_REQUIRED/.test(message)){
+          warnings.push("This archive requires a password before its entries can be listed.");
         }else{
           warnings.push("Detailed inspection unavailable: "+message);
         }
@@ -254,9 +278,11 @@ export class App {
 
     this.renderFacts();
     this.renderTracks();
+    this.renderArchiveEntries();
     this.renderWarnings("inspection-warnings",warnings);
     this.populateTargets();
     this.updatePdfOptionVisibility();
+    this.updateArchiveOptionVisibility();
     await this.renderRoute();
   }
 
