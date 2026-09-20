@@ -10,7 +10,7 @@ import type { OutputValidator } from "../validation/Validator";
 import type { ConversionOutput, JobSnapshot, JobState } from "./types";
 
 function extensionFor(registry:FormatRegistry,formatId:string):string {
-  return registry.get(formatId)?.extensions[0] ?? "bin";
+  return registry.get(formatId)?.extensions[0]??"bin";
 }
 function outputName(input:string,extension:string):string {
   const index=input.lastIndexOf(".");
@@ -30,9 +30,12 @@ export class JobManager {
   ) {}
 
   cancel(jobId:string):void { this.controllers.get(jobId)?.abort(); }
-  cancelAll():void { for (const controller of this.controllers.values()) controller.abort(); }
+  cancelAll():void { for(const controller of this.controllers.values()) controller.abort(); }
 
-  private emit(callback:((snapshot:JobSnapshot)=>void)|undefined,id:string,state:JobState,progress:number,stage:string) {
+  private emit(
+    callback:((snapshot:JobSnapshot)=>void)|undefined,
+    id:string,state:JobState,progress:number,stage:string
+  ){
     callback?.({id,state,progress,stage});
   }
 
@@ -40,47 +43,66 @@ export class JobManager {
     source:File,targetFormatId:string,quality:number,
     options:Record<string,unknown>={},
     onUpdate?:(snapshot:JobSnapshot)=>void
-  ):Promise<ConversionOutput> {
+  ):Promise<ConversionOutput>{
     const id=crypto.randomUUID();
     const controller=new AbortController();
     this.controllers.set(id,controller);
     let workspace:TempWorkspace|null=null;
+    let keepWorkspace=false;
     const warnings:string[]=[];
-    try {
+
+    try{
       this.emit(onUpdate,id,"INSPECTING",0.03,"Inspecting source");
       const inspection=await inspectFile(source,this.formats);
       const sourceFormat=inspection.detection.format;
-      if (!sourceFormat) throw new Error("FORMAT_UNKNOWN: File format could not be identified.");
-      if (sourceFormat.category==="image") assertSafeImageDimensions(inspection.width,inspection.height);
+      if(!sourceFormat) throw new Error("FORMAT_UNKNOWN: File format could not be identified.");
+      if(sourceFormat.category==="image") assertSafeImageDimensions(inspection.width,inspection.height);
 
       this.emit(onUpdate,id,"PLANNING",0.08,"Planning safest local route");
       const route=this.planner.plan(sourceFormat.id,targetFormatId);
       warnings.push(...route.warnings.map(w=>w.message));
       const target=this.formats.get(targetFormatId);
-      if (!target) throw new Error("FORMAT_UNSUPPORTED: Target format is unknown.");
+      if(!target) throw new Error("FORMAT_UNSUPPORTED: Target format is unknown.");
 
       let required=source.size+64*1024*1024;
-      for (const edge of route.edges) {
+      for(const edge of route.edges){
         const engine=this.engines.get(edge.engineId);
-        if (!engine) throw new Error("ENGINE_UNAVAILABLE: "+edge.engineId);
+        if(!engine) throw new Error("ENGINE_UNAVAILABLE: "+edge.engineId);
         const estimate=await engine.estimate(source,edge.from,edge.to);
         required=Math.max(required,estimate.temporaryBytes);
       }
+
       const storage=await storagePreflight(required);
-      if (!storage.safe) throw new Error("STORAGE_INSUFFICIENT: The browser does not have enough local workspace for this job.");
+      if(!storage.safe){
+        throw new Error("STORAGE_INSUFFICIENT: The browser does not have enough local workspace for this job.");
+      }
 
       workspace=await TempWorkspace.create(id);
       const networkSnapshot=this.networkGuard.snapshot();
       let current:Blob=source;
-      this.emit(onUpdate,id,"PREPARING",0.12,"Preparing local image worker");
-      for (let index=0;index<route.edges.length;index++) {
+      let finalInWorkspace=false;
+
+      this.emit(onUpdate,id,"PREPARING",0.12,"Preparing local conversion engine");
+      for(let index=0;index<route.edges.length;index++){
         const edge=route.edges[index];
         const engine=this.engines.get(edge.engineId);
         const edgeTarget=this.formats.get(edge.to);
-        if (!engine || !edgeTarget) throw new Error("ENGINE_UNAVAILABLE: Planned engine is missing.");
+        if(!engine||!edgeTarget) throw new Error("ENGINE_UNAVAILABLE: Planned engine is missing.");
+
+        const isLast=index===route.edges.length-1;
+        const outputHandle=isLast&&workspace
+          ? await workspace.getFileHandle("engine-output."+extensionFor(this.formats,edge.to))
+          : undefined;
+
         const result=await engine.convert({
-          jobId:id,source:current,sourceFormatId:edge.from,targetFormatId:edge.to,
-          targetMime:edgeTarget.mimeTypes[0] ?? "application/octet-stream",quality,options,
+          jobId:id,
+          source:current,
+          sourceFormatId:edge.from,
+          targetFormatId:edge.to,
+          targetMime:edgeTarget.mimeTypes[0]??"application/octet-stream",
+          quality,
+          options,
+          outputHandle,
           signal:controller.signal,
           onProgress:(progress,stage)=>{
             const base=index/route.edges.length;
@@ -88,29 +110,51 @@ export class JobManager {
             this.emit(onUpdate,id,"RUNNING",Math.min(0.9,scaled),stage);
           }
         });
+
         current=result.blob;
-        if (result.warnings) warnings.push(...result.warnings);
+        finalInWorkspace=isLast&&Boolean(result.outputInWorkspace);
+        if(result.warnings) warnings.push(...result.warnings);
       }
-      if (workspace) await workspace.writeBlob("output.tmp",current);
+
+      if(workspace&&!finalInWorkspace){
+        const name="final-output."+extensionFor(this.formats,targetFormatId);
+        await workspace.writeBlob(name,current);
+        current=await workspace.readBlob(name);
+        finalInWorkspace=true;
+      }
 
       this.emit(onUpdate,id,"VALIDATING",0.92,"Validating output");
       const validation=await this.validator.validate(current,targetFormatId);
-      if (!validation.valid) throw new Error("OUTPUT_INVALID: "+validation.errors.join(" "));
+      if(!validation.valid) throw new Error("OUTPUT_INVALID: "+validation.errors.join(" "));
 
       const external=this.networkGuard.externalRequestsSince(networkSnapshot);
-      if (external.length) throw new Error("NETWORK_PRIVACY_VIOLATION: External network activity was detected during conversion.");
+      if(external.length){
+        throw new Error("NETWORK_PRIVACY_VIOLATION: External network activity was detected during conversion.");
+      }
 
       this.emit(onUpdate,id,"FINALIZING",0.97,"Finalizing local output");
       const fileName=outputName(source.name,extensionFor(this.formats,targetFormatId));
       this.emit(onUpdate,id,"COMPLETED",1,"Complete");
-      return {blob:current,fileName,formatId:targetFormatId,jobId:id,warnings:[...new Set(warnings)]};
-    } catch(error) {
-      const cancelled=controller.signal.aborted || (error instanceof DOMException && error.name==="AbortError");
+
+      keepWorkspace=Boolean(workspace&&finalInWorkspace);
+      const retainedWorkspace=workspace;
+      return {
+        blob:current,
+        fileName,
+        formatId:targetFormatId,
+        jobId:id,
+        warnings:[...new Set(warnings)],
+        release:retainedWorkspace
+          ? async()=>{ await retainedWorkspace.cleanup(); }
+          : undefined
+      };
+    }catch(error){
+      const cancelled=controller.signal.aborted||(error instanceof DOMException&&error.name==="AbortError");
       this.emit(onUpdate,id,cancelled?"CANCELLED":"FAILED",1,cancelled?"Cancelled":"Failed");
       throw error;
-    } finally {
+    }finally{
       this.controllers.delete(id);
-      await workspace?.cleanup();
+      if(workspace&&!keepWorkspace) await workspace.cleanup();
     }
   }
 }
