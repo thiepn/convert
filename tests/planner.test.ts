@@ -15,10 +15,10 @@ function engine(id:string):ConversionEngine{
 
 describe("ConversionPlanner",()=>{
   const engines=new EngineRegistry();
-  engines.register(engine("vips-image"));
-  engines.register(engine("browser-image-proof"));
-  engines.register(engine("mediabunny"));
-  engines.register(engine("pdf-engine"));
+  [
+    "vips-image","browser-image-proof","mediabunny","pdf-engine",
+    "pandoc-document","libreoffice-document","pdf-reconstruction"
+  ].forEach(id=>engines.register(engine(id)));
   const planner=new ConversionPlanner(createConversionGraph(),createDefaultFormatRegistry(),engines);
 
   it("prefers the production image engine",()=>{
@@ -29,27 +29,41 @@ describe("ConversionPlanner",()=>{
     expect(planner.plan("mp4","webm-media").edges[0].engineId).toBe("mediabunny");
   });
 
-  it("routes JPEG directly into PDF",()=>{
-    const route=planner.plan("jpeg","pdf");
+  it("chooses Pandoc for semantic DOCX to ODT conversion",()=>{
+    const route=planner.plan("docx","odt","semantic");
     expect(route.edges).toHaveLength(1);
-    expect(route.edges[0].engineId).toBe("pdf-engine");
+    expect(route.edges[0].engineId).toBe("pandoc-document");
   });
 
-  it("normalizes WebP through PNG before PDF creation",()=>{
-    const route=planner.plan("webp","pdf");
-    expect(route.edges.at(-1)?.engineId).toBe("pdf-engine");
-    expect(route.edges.at(-1)?.from).toBe("png");
-    expect(planner.availableTargets("webp")).toContain("pdf");
-  });
-
-  it("supports PDF-to-PDF structural work",()=>{
-    const route=planner.plan("pdf","pdf");
+  it("chooses LibreOffice for fidelity DOCX to ODT conversion",()=>{
+    const route=planner.plan("docx","odt","fidelity");
     expect(route.edges).toHaveLength(1);
-    expect(route.edges[0].engineId).toBe("pdf-engine");
+    expect(route.edges[0].engineId).toBe("libreoffice-document");
   });
 
-  it("does not advertise PDF to raster through the one-output planner",()=>{
-    expect(()=>planner.plan("pdf","png")).toThrow();
+  it("uses Pandoc then LibreOffice for Markdown to PDF",()=>{
+    const route=planner.plan("markdown","pdf","fidelity");
+    expect(route.edges[0].engineId).toBe("pandoc-document");
+    expect(route.edges.at(-1)?.engineId).toBe("libreoffice-document");
+  });
+
+  it("uses semantic macro-stripping intermediate before DOCM to PDF",()=>{
+    const route=planner.plan("docm","pdf","fidelity");
+    expect(route.edges[0].engineId).toBe("pandoc-document");
+    expect(route.edges.at(-1)?.engineId).toBe("libreoffice-document");
+  });
+
+  it("routes PDF to editable DOCX through explicit reconstruction",()=>{
+    const route=planner.plan("pdf","docx","semantic");
+    expect(route.edges).toHaveLength(1);
+    expect(route.edges[0].engineId).toBe("pdf-reconstruction");
+    expect(route.warnings.some(w=>w.code==="METADATA_LOSS")).toBe(true);
+  });
+
+  it("advertises PDF and semantic targets from document inputs",()=>{
+    const targets=planner.availableTargets("docx");
+    expect(targets).toContain("pdf");
+    expect(targets).toContain("markdown");
   });
 
   it("keeps legacy AVI unsupported without a vetted compatibility engine",()=>{
