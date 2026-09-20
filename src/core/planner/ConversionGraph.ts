@@ -10,6 +10,7 @@ export interface ConversionEdge {
   streaming:boolean;
   baseCost?:number;
   mode?:RouteMode;
+  rootOnly?:boolean;
 }
 
 export class ConversionGraph {
@@ -142,7 +143,8 @@ export function createConversionGraph():ConversionGraph {
       temporaryMultiplier:3,
       streaming:false,
       baseCost:90,
-      mode:"semantic"
+      mode:"semantic",
+      rootOnly:true
     });
   }
 
