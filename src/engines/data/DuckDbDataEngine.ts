@@ -72,9 +72,16 @@ export class DuckDbDataEngine implements ConversionEngine{
     const profile=getDeviceProfile();
     const arrowInput=from==="arrow";
     const arrowOutput=to==="arrow";
-    const memoryBytes=arrowInput||arrowOutput
-      ?Math.max(256*1024*1024,Math.min(source.size*2,1024*1024*1024))
-      :Math.max(256*1024*1024,Math.min(source.size*.25,768*1024*1024));
+    const flatOutput=["csv","tsv","json-data","jsonl"].includes(to);
+    const materializationFactor=arrowInput||arrowOutput
+      ?2
+      :flatOutput
+        ?1.75
+        :.75;
+    const memoryBytes=Math.max(
+      256*1024*1024,
+      Math.min(source.size*materializationFactor,1536*1024*1024)
+    );
     return {
       temporaryBytes:memoryBytes,
       memoryBytes,
