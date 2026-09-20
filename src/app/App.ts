@@ -1699,7 +1699,7 @@ export class App {
       fidelityDocumentEngine:this.officeDocumentEngine.isAvailable()?"LibreOffice WASM (lazy)":"unavailable",
       archiveEngine:this.archiveEngine.isAvailable()?"zip.js 2.16.0 + libarchive.js 2.0.2":"unavailable",
       spreadsheetEngine:this.spreadsheetEngine.isAvailable()?"SheetJS CE 0.20.3":"unavailable",
-      structuredDataEngine:this.duckDbDataEngine.isAvailable()?"DuckDB-Wasm 1.33.0":"unavailable",
+      structuredDataEngine:this.duckDbDataEngine.isAvailable()?"DuckDB-Wasm 1.32.0":"unavailable",
       sqliteEngine:this.sqliteEngine.isAvailable()?"sql.js 1.14.2":"unavailable"
     },null,2);
   }
