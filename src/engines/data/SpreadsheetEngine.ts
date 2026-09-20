@@ -12,6 +12,7 @@ const OUTPUTS=new Set(["xlsx","xlsb","xls","ods","fods","csv","tsv","json-data"]
 
 function defaults():SpreadsheetConversionOptions{
   return {
+    routePreference:"semantic",
     sheetPolicy:"first",
     formulaMode:"preserve",
     delimiter:",",
