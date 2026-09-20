@@ -298,6 +298,17 @@ export class App {
       if(known.length!==files.length) warnings.push("At least one file could not be identified.");
       if(kinds.size>1) warnings.push("Mixed file families must be processed separately.");
       if(kinds.size===0) warnings.push("This format has no active local conversion workflow.");
+      if(this.kind==="specialist"&&known.length===files.length){
+        const recognitionOnly=known
+          .map(item=>item.detection.format!)
+          .filter(format=>this.planner.availableTargets(format.id).length===0);
+        if(recognitionOnly.length){
+          warnings.push(
+            "Recognized format only: "+[...new Set(recognitionOnly.map(format=>format.name))].join(", ")
+            +". Phase 7 intentionally exposes no conversion route rather than using a lossy or unverified decoder."
+          );
+        }
+      }
     }
 
     this.renderSelectionControls();
@@ -575,6 +586,16 @@ export class App {
         ["Bookmarks",this.pdfDetail?String(this.pdfDetail.outlineItems):"—"],
         ["Signatures",this.pdfDetail?String(this.pdfDetail.signatures):"—"],
         ["Producer",this.pdfDetail?.producer??"—"]
+      ];
+    }else if(this.kind==="specialist"){
+      const sourceId=first?.detection.format?.id;
+      const targets=sourceId?this.planner.availableTargets(sourceId):[];
+      facts=[
+        ["Format",first?.detection.format?.name??"Unknown"],
+        ["Size",formatBytes(total)],
+        ["Family",first?.detection.format?.category??"Specialist"],
+        ["Status",targets.length?targets.length+" local target"+(targets.length===1?"":"s"):"Recognition only"],
+        ["Safety","Local · guarded parser"]
       ];
     }else{
       facts=[
@@ -1130,7 +1151,7 @@ export class App {
             warnings.push("Flat/data targets cannot preserve workbook layout, multiple-sheet presentation, charts, or cell styling.");
           }
           if(this.spreadsheetDetail?.macros){
-            warnings.push("VBA macro payload is never executed and is not preserved into Phase 6 output formats.");
+            warnings.push("VBA macro payload is never executed and is not preserved into the current output formats.");
           }
           if((this.spreadsheetDetail?.sheets??[]).some(sheet=>sheet.formulas>0)){
             if(usesLibreOffice){
