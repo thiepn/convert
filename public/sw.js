@@ -1,40 +1,46 @@
-const CACHE = "thiepn-convert-phase9-v2";
-const ROOT = new URL("./", self.location.href).href;
-const MANIFEST = new URL("manifest.webmanifest", self.location.href).href;
-const CORE = [ROOT, MANIFEST];
+const CACHE="thiepn-convert-v1-0-0";
+const ROOT=new URL("./",self.location.href).href;
+const MANIFEST=new URL("manifest.webmanifest",self.location.href).href;
+const ICON=new URL("icon.svg",self.location.href).href;
+const CORE=[ROOT,MANIFEST,ICON];
 
-function withIsolationHeaders(response) {
-  if (!response || response.type === "opaque") return response;
-  const headers = new Headers(response.headers);
-  headers.set("Cross-Origin-Opener-Policy", "same-origin");
-  headers.set("Cross-Origin-Embedder-Policy", "require-corp");
-  headers.set("Cross-Origin-Resource-Policy", "same-origin");
-  headers.set("X-Content-Type-Options", "nosniff");
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
+function withIsolationHeaders(response){
+  if(!response||response.type==="opaque") return response;
+  const headers=new Headers(response.headers);
+  headers.set("Cross-Origin-Opener-Policy","same-origin");
+  headers.set("Cross-Origin-Embedder-Policy","require-corp");
+  headers.set("Cross-Origin-Resource-Policy","same-origin");
+  headers.set("X-Content-Type-Options","nosniff");
+  headers.set("Referrer-Policy","no-referrer");
+  return new Response(response.body,{
+    status:response.status,
+    statusText:response.statusText,
     headers
   });
 }
 
-function isEngineAsset(url) {
+function isEngineAsset(url){
   return url.pathname.includes("/engines/")
-    || /\.(?:wasm|worker\.js|worker\.mjs)$/i.test(url.pathname);
+    ||/\.(?:wasm|worker\.js|worker\.mjs)$/i.test(url.pathname);
 }
 
-self.addEventListener("install", event => {
-  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(CORE)).then(() => self.skipWaiting()));
+self.addEventListener("install",event=>{
+  event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(CORE)));
 });
 
-self.addEventListener("activate", event => {
+self.addEventListener("message",event=>{
+  if(event.data?.type==="SKIP_WAITING") self.skipWaiting();
+});
+
+self.addEventListener("activate",event=>{
   event.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key))))
-      .then(() => self.clients.claim())
+      .then(keys=>Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key))))
+      .then(()=>self.clients.claim())
   );
 });
 
-self.addEventListener("fetch", event => {
+self.addEventListener("fetch",event=>{
   const request=event.request;
   const url=new URL(request.url);
   if(request.method!=="GET"||url.origin!==self.location.origin) return;
