@@ -405,7 +405,12 @@ export class App {
     element("media-controls").classList.toggle("hidden",this.kind!=="media");
     element("document-controls").classList.toggle("hidden",this.kind!=="document");
     element("archive-controls").classList.toggle("hidden",this.kind!=="archive"&&this.kind!=="archive-build");
-    element("metadata-control").classList.toggle("hidden",this.kind==="document"||this.kind==="archive"||this.kind==="archive-build");
+    element("data-controls").classList.toggle("hidden",this.kind!=="spreadsheet"&&this.kind!=="data"&&this.kind!=="database");
+    element("metadata-control").classList.toggle(
+      "hidden",
+      this.kind==="document"||this.kind==="archive"||this.kind==="archive-build"
+        ||this.kind==="spreadsheet"||this.kind==="data"||this.kind==="database"
+    );
     element("pdf-controls").classList.toggle("hidden",this.kind!=="pdf");
     element("archive-pack-selection-button").classList.toggle(
       "hidden",
@@ -470,6 +475,40 @@ export class App {
         ["Slides",this.documentDetail?.slides!=null?String(this.documentDetail.slides):"—"],
         ["Macros",this.documentDetail?(this.documentDetail.macros?"Detected / possible":"None detected"):"—"],
         ["Expanded size",this.documentDetail?.expandedSize!=null?formatBytes(this.documentDetail.expandedSize):"—"]
+      ];
+    }else if(this.kind==="spreadsheet"){
+      const firstSheet=this.spreadsheetDetail?.sheets[0];
+      const totalFormulas=(this.spreadsheetDetail?.sheets??[]).reduce((sum,sheet)=>sum+sheet.formulas,0);
+      const totalCells=(this.spreadsheetDetail?.sheets??[]).reduce((sum,sheet)=>sum+sheet.cells,0);
+      facts=[
+        ["Format",first?.detection.format?.name??"Spreadsheet"],
+        ["Size",formatBytes(total)],
+        ["Sheets",this.spreadsheetDetail?String(this.spreadsheetDetail.sheets.length):"—"],
+        ["Cells",this.spreadsheetDetail?totalCells.toLocaleString():"—"],
+        ["Formulas",this.spreadsheetDetail?totalFormulas.toLocaleString():"—"],
+        ["First sheet",firstSheet?.name??"—"],
+        ["Used range",firstSheet?.range??"—"],
+        ["Macros",this.spreadsheetDetail?(this.spreadsheetDetail.macros?"Detected":"None detected"):"—"]
+      ];
+    }else if(this.kind==="data"){
+      facts=[
+        ["Format",first?.detection.format?.name??"Data"],
+        ["Size",formatBytes(total)],
+        ["Rows",this.dataDetail?.rows==null?"—":this.dataDetail.rows.toLocaleString()],
+        ["Columns",this.dataDetail?String(this.dataDetail.columns.length):"—"],
+        ["Engine",this.dataDetail?.engine??"—"],
+        ["Preview rows",this.dataDetail?String(this.dataDetail.preview.length):"—"]
+      ];
+    }else if(this.kind==="database"){
+      facts=[
+        ["Format","SQLite"],
+        ["Size",formatBytes(total)],
+        ["Tables / views",this.databaseDetail?String(this.databaseDetail.tables.length):"—"],
+        ["User version",this.databaseDetail?.userVersion==null?"—":String(this.databaseDetail.userVersion)],
+        ["Application ID",this.databaseDetail?.applicationId==null?"—":String(this.databaseDetail.applicationId)],
+        ["Selected rows",this.dataDetail?.rows==null?"—":this.dataDetail.rows.toLocaleString()],
+        ["Selected columns",this.dataDetail?String(this.dataDetail.columns.length):"—"],
+        ["Engine",this.databaseDetail?.engine??"—"]
       ];
     }else if(this.kind==="archive"){
       facts=[
