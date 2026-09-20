@@ -29,7 +29,9 @@ ok("Package version is v1.0.0",pkg.version==="1.0.0",String(pkg.version??"missin
 const manifest=JSON.parse(read("public/manifest.webmanifest")||"{}");
 ok("Manifest has stable app id",manifest.id==="./");
 ok("Manifest is standalone",manifest.display==="standalone");
-ok("Manifest has install icon",Array.isArray(manifest.icons)&&manifest.icons.length>0);
+const icons=Array.isArray(manifest.icons)?manifest.icons:[];
+ok("Manifest has 192px PNG icon",icons.some(icon=>icon.src==="icon-192.png"&&icon.sizes==="192x192"&&icon.type==="image/png"));
+ok("Manifest has 512px PNG icon",icons.some(icon=>icon.src==="icon-512.png"&&icon.sizes==="512x512"&&icon.type==="image/png"));
 ok("Manifest declares file handlers",Array.isArray(manifest.file_handlers)&&manifest.file_handlers.length>0);
 
 const index=read("index.html");
@@ -65,6 +67,8 @@ ok("Privacy model covers same-origin engine assets",/same origin|same-origin/i.t
   "dist/sw.js",
   "dist/manifest.webmanifest",
   "dist/icon.svg",
+  "dist/icon-192.png",
+  "dist/icon-512.png",
   "dist/engines/vips/vips.wasm",
   "dist/engines/pdfjs/pdf.worker.min.mjs",
   "dist/engines/qpdf/lib/qpdf.wasm",
