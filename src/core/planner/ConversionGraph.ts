@@ -30,6 +30,8 @@ const OFFICE_WRITER_INPUTS=["doc","docx","odt","rtf","html-doc","txt","epub"];
 const OFFICE_WRITER_OUTPUTS=["pdf","docx","doc","odt","rtf","txt","html-doc"];
 const OFFICE_PRESENTATION_INPUTS=["ppt","pptx","odp"];
 const OFFICE_PRESENTATION_OUTPUTS=["pdf","pptx","ppt","odp","html-doc"];
+const ARCHIVE_INPUTS=["zip","7z","rar","tar","gzip","bzip2","xz","zstd","tar-gzip","tar-bzip2","tar-xz","cpio"];
+const ARCHIVE_OUTPUTS=["zip","7z","tar","tar-gzip","tar-bzip2","tar-xz"];
 
 function imageQualityLoss(target:string):number {
   if(target==="jpeg") return .12;
@@ -131,6 +133,20 @@ export function createConversionGraph():ConversionGraph {
         streaming:false,
         baseCost:5,
         mode:"fidelity"
+      });
+    }
+  }
+
+  for(const from of ARCHIVE_INPUTS){
+    for(const to of ARCHIVE_OUTPUTS){
+      edges.push({
+        from,to,engineId:"archive-engine",
+        qualityLoss:0,
+        metadataLoss:["archive-specific compression metadata","unsupported special filesystem entries"],
+        temporaryMultiplier:3,
+        streaming:to==="zip",
+        baseCost:18,
+        mode:"neutral"
       });
     }
   }
