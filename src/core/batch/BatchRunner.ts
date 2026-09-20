@@ -3,6 +3,8 @@ import { inspectFile } from "../inspection/inspectFile";
 import { JobManager } from "../jobs/JobManager";
 import type { ConversionOutput,JobSnapshot } from "../jobs/types";
 import { ConversionPlanner } from "../planner/ConversionPlanner";
+import { getDeviceProfile } from "../performance/DeviceProfile";
+import { recommendedBatchParallelism } from "../performance/Budget";
 import { renderBatchName,uniqueBatchName } from "./naming";
 import type {
   BatchFailure,
@@ -172,8 +174,7 @@ export class BatchRunner {
 
   private parallelLimit(session:Session):number {
     if(session.pipeline.executionMode==="sequential") return 1;
-    const cores=typeof navigator!=="undefined"?navigator.hardwareConcurrency||2:2;
-    return Math.max(1,Math.min(4,Math.floor(cores/3)||1));
+    return recommendedBatchParallelism(getDeviceProfile());
   }
 
   private canLaunch(task:BatchTaskSnapshot,running:Map<number,Promise<void>>,session:Session):boolean {
