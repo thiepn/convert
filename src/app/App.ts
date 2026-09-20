@@ -1978,6 +1978,7 @@ export class App {
       ["Mesh conversion",this.meshEngine.isAvailable()],
       ["RAW preview extraction",this.rawPreviewEngine.isAvailable()],
       ["Scientific metadata",this.scientificMetadataEngine.isAvailable()],
+      ["Batch scheduler","Auto-safe parallel · sequential · resume"],
       ["Local OCR","English · German · French · Turkish · Korean"],
       ["WebCodecs",profile.webCodecs],
       ["H.264 decode / encode",profile.codecs.h264.decode+" / "+profile.codecs.h264.encode],
@@ -2005,7 +2006,7 @@ export class App {
       &&this.sqliteEngine.isAvailable()
       &&this.subtitleEngine.isAvailable()
       &&this.meshEngine.isAvailable()
-      ?"Phase 7 ready"
+      ?"Phase 8 ready"
       :"One or more local engines degraded";
     element("capability-json").textContent=JSON.stringify({
       ...profile,
@@ -2021,7 +2022,8 @@ export class App {
       psdEngine:this.layeredImageEngine.isAvailable()?"ag-psd 31.0.2":"unavailable",
       legacyMediaEngine:this.legacyMediaEngine.isAvailable()?"FFmpeg WASM 0.12.10 (lazy)":"unavailable",
       fontEngine:this.fontEngine.isAvailable()?"fonteditor-core 2.6.3":"unavailable",
-      specialistNativeEngines:"subtitles + meshes + RAW preview + FITS metadata + FB2"
+      specialistNativeEngines:"subtitles + meshes + RAW preview + FITS metadata + FB2",
+      batchScheduler:"capability-aware + sequential + in-session resume"
     },null,2);
   }
 }
