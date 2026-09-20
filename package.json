@@ -1,6 +1,6 @@
 {
   "name": "thiepn-convert",
-  "version": "0.10.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "release:certify": "npm test && npm run typecheck && npm run build && node --check public/sw.js && node scripts/release-certify.mjs"
   },
   "dependencies": {
     "@bjorn3/browser_wasi_shim": "0.4.2",
