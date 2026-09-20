@@ -1,5 +1,7 @@
-const CACHE = "thiepn-convert-phase0-v1";
-const CORE = ["/", "/manifest.webmanifest"];
+const CACHE = "thiepn-convert-phase0-v2";
+const ROOT = new URL("./", self.location.href).href;
+const MANIFEST = new URL("manifest.webmanifest", self.location.href).href;
+const CORE = [ROOT, MANIFEST];
 
 function withIsolationHeaders(response) {
   if (!response || response.type === "opaque") return response;
@@ -42,7 +44,7 @@ self.addEventListener("fetch", event => {
       const cached = await cache.match(request);
       if (cached) return withIsolationHeaders(cached);
       if (request.mode === "navigate") {
-        const shell = await cache.match("/");
+        const shell = await cache.match(ROOT);
         if (shell) return withIsolationHeaders(shell);
       }
       throw new Error("Offline resource unavailable");
