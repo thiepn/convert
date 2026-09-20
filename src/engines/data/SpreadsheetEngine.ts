@@ -5,6 +5,7 @@ import type {
   EngineConvertResult
 } from "../../core/engines/Engine";
 import type { DetailedSpreadsheetInspection, SpreadsheetConversionOptions } from "../../core/data/types";
+import { assertMemoryBackedSource } from "../../core/performance/Budget";
 import type { SheetJsWorkerRequest, SheetJsWorkerResponse } from "./sheetjs-protocol";
 
 const INPUTS=new Set(["xlsx","xlsm","xlsb","xls","ods","fods","csv","tsv","json-data","jsonl"]);
@@ -32,18 +33,20 @@ export class SpreadsheetEngine implements ConversionEngine{
   }
 
   async estimate(source:Blob):Promise<ConversionEstimate>{
-    const mobile=typeof matchMedia==="function"&&matchMedia("(pointer: coarse)").matches;
+    const memoryBytes=Math.max(source.size*5,192*1024*1024);
     return {
-      temporaryBytes:Math.max(source.size*5,mobile?192*1024*1024:512*1024*1024),
+      temporaryBytes:memoryBytes,
+      memoryBytes,
+      workspaceBytes:Math.max(64*1024*1024,source.size*2),
       outputBytes:null,
-      notes:["SheetJS workbook parsing is memory-backed; source files are size-gated."]
+      sourceAccess:"buffered",
+      outputAccess:"buffered",
+      notes:["SheetJS workbook parsing is memory-backed; source files are device-budgeted."]
     };
   }
 
   async inspect(source:Blob,formatId:string):Promise<DetailedSpreadsheetInspection>{
-    const mobile=typeof matchMedia==="function"&&matchMedia("(pointer: coarse)").matches;
-    const limit=mobile?64*1024*1024:192*1024*1024;
-    if(source.size>limit) throw new Error("SPREADSHEET_MEMORY_LIMIT: Workbook exceeds this device's SheetJS inspection budget.");
+    assertMemoryBackedSource(source.size,"SheetJS workbook inspection",5,256*1024*1024);
     return this.run({type:"inspect",requestId:crypto.randomUUID(),source,formatId}) as Promise<DetailedSpreadsheetInspection>;
   }
 
@@ -51,9 +54,7 @@ export class SpreadsheetEngine implements ConversionEngine{
     if(!this.canConvert(request.sourceFormatId,request.targetFormatId)){
       throw new Error("SPREADSHEET_ROUTE_UNSUPPORTED: Unsupported workbook route.");
     }
-    const mobile=typeof matchMedia==="function"&&matchMedia("(pointer: coarse)").matches;
-    const limit=mobile?64*1024*1024:192*1024*1024;
-    if(request.source.size>limit) throw new Error("SPREADSHEET_MEMORY_LIMIT: Workbook exceeds this device's semantic spreadsheet budget.");
+    assertMemoryBackedSource(request.source.size,"SheetJS workbook conversion",5,256*1024*1024);
 
     const result=await this.run({
       type:"convert",
