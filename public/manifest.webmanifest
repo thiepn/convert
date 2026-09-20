@@ -2,7 +2,8 @@
   "name": "Thiepn Convert",
   "short_name": "Convert",
   "description": "Local-first universal file conversion.",
-  "start_url": "/",
+  "start_url": ".",
+  "scope": ".",
   "display": "standalone",
   "background_color": "#111318",
   "theme_color": "#111318"
