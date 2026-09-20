@@ -39,6 +39,7 @@ describe("ConversionPlanner",()=>{
     const route=planner.plan("webp","pdf");
     expect(route.edges.at(-1)?.engineId).toBe("pdf-engine");
     expect(route.edges.at(-1)?.from).toBe("png");
+    expect(planner.availableTargets("webp")).toContain("pdf");
   });
 
   it("supports PDF-to-PDF structural work",()=>{
