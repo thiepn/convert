@@ -12,7 +12,6 @@ const licenses = resolve("public/licenses");
 
 const required = [
   "vips-es6.js",
-  "vips-es6.worker.js",
   "vips.wasm",
   "vips-heif.wasm",
   "vips-jxl.wasm",
