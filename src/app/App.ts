@@ -878,6 +878,10 @@ export class App {
       await this.runPdfOperation();
       return;
     }
+    if(this.kind==="archive"||this.kind==="archive-build"){
+      await this.runArchiveOperation();
+      return;
+    }
 
     const targetId=element<HTMLSelectElement>("target-format").value;
     if(!targetId) return;
@@ -937,6 +941,124 @@ export class App {
       for(const output of outputs) await output.release?.();
     }finally{
       button.disabled=false;cancel.classList.add("hidden");
+    }
+  }
+
+  private async runArchiveOperation(){
+    const operation=element<HTMLSelectElement>("archive-operation").value;
+    const targetId=element<HTMLSelectElement>("target-format").value;
+    const options=this.readArchiveOptions();
+    const button=element<HTMLButtonElement>("convert-button");
+    const cancel=element<HTMLButtonElement>("cancel-button");
+    const results=element("results");
+
+    button.disabled=true;
+    cancel.classList.remove("hidden");
+    results.classList.add("hidden");
+    results.replaceChildren();
+    await this.releaseResults();
+
+    const controller=new AbortController();
+    this.archiveAbort=controller;
+
+    try{
+      if(this.kind==="archive-build"){
+        if(!targetId) throw new Error("ARCHIVE_TARGET_REQUIRED: Choose an archive format.");
+        const sourceFiles=this.files.map(file=>({
+          blob:file,
+          path:(file as File & {webkitRelativePath?:string}).webkitRelativePath||file.name,
+          lastModified:file.lastModified
+        }));
+        const created=await this.archiveEngine.createFromFiles(
+          sourceFiles,
+          targetId,
+          options,
+          undefined,
+          (progress,stage)=>this.setProgress(progress,stage),
+          controller.signal
+        );
+        const password=targetId==="zip"?options.outputPassword:undefined;
+        await this.archiveEngine.inspect(created.blob,targetId,password);
+        const extension=this.formats.get(targetId)?.extensions[0]??targetId;
+        this.showBlobResults([{
+          name:"archive."+extension,
+          blob:created.blob,
+          warnings:targetId!=="zip"&&options.outputPassword
+            ? ["Output password applies only to ZIP and was ignored."]
+            : []
+        }],[]);
+        this.setProgress(1,"Archive complete");
+        return;
+      }
+
+      if(this.kind!=="archive") throw new Error("ARCHIVE_SELECTION_INVALID: No archive workflow is active.");
+      if(operation==="repack"){
+        if(!targetId) throw new Error("ARCHIVE_TARGET_REQUIRED: Choose an archive output format.");
+        const outputs:ConversionOutput[]=[];
+        const failed:Array<{name:string;error:string}>=[];
+        for(let index=0;index<this.files.length;index++){
+          controller.signal.throwIfAborted?.();
+          const file=this.files[index];
+          try{
+            const output=await this.jobs.convert(
+              file,
+              targetId,
+              .82,
+              options as unknown as Record<string,unknown>,
+              snapshot=>{
+                const overall=(index+snapshot.progress)/this.files.length;
+                this.setProgress(overall,this.files.length>1
+                  ?"Archive "+(index+1)+"/"+this.files.length+" · "+snapshot.stage
+                  :snapshot.stage);
+              }
+            );
+            outputs.push(output);
+          }catch(error){
+            if(error instanceof DOMException&&error.name==="AbortError") throw error;
+            failed.push({name:file.name,error:error instanceof Error?error.message:String(error)});
+          }
+        }
+        await this.renderResults(outputs,failed);
+        return;
+      }
+
+      if(this.files.length!==1){
+        throw new Error("ARCHIVE_EXTRACTION_SINGLE: Extract one archive at a time.");
+      }
+      const sourceFormat=this.inspections[0]?.detection.format?.id;
+      if(!sourceFormat) throw new Error("ARCHIVE_FORMAT_UNKNOWN: Archive format is unknown.");
+
+      const selected=operation==="extract-selected"?this.selectedArchivePaths():undefined;
+      if(operation==="extract-selected"&&(!selected||selected.length===0)){
+        throw new Error("ARCHIVE_SELECTION_EMPTY: Select at least one entry.");
+      }
+
+      const extracted=await this.archiveEngine.extract(
+        this.files[0],
+        sourceFormat,
+        options.inputPassword,
+        selected,
+        (progress,stage)=>this.setProgress(progress,stage),
+        controller.signal
+      );
+
+      const counts=new Map<string,number>();
+      const outputs=extracted.map(item=>{
+        const seen=(counts.get(item.path)??0)+1;
+        counts.set(item.path,seen);
+        const name=seen===1?item.path:item.path+"."+seen;
+        return {name,blob:item.blob,warnings:[] as string[]};
+      });
+      this.showBlobResults(outputs,[]);
+      this.setProgress(1,"Extraction complete");
+    }catch(error){
+      this.renderWarnings("loss-warnings",[
+        error instanceof Error?error.message:String(error)
+      ]);
+    }finally{
+      this.archiveAbort=null;
+      cancel.classList.add("hidden");
+      button.disabled=false;
     }
   }
 
