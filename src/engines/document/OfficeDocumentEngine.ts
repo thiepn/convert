@@ -65,7 +65,7 @@ export class OfficeDocumentEngine implements ConversionEngine{
 
   async prepare():Promise<void>{
     this.wasmBase=new URL("engines/libreoffice/wasm/",document.baseURI).href;
-    this.workerUrl=new URL("engines/libreoffice/browser.worker.js",document.baseURI).href;
+    this.workerUrl=new URL("engines/libreoffice/browser.worker.global.js",document.baseURI).href;
     this.available=Boolean(
       globalThis.crossOriginIsolated
       && typeof SharedArrayBuffer!=="undefined"
