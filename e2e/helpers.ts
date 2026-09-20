@@ -1,0 +1,208 @@
+import { expect,type Page } from "@playwright/test";
+import fs from "node:fs";
+import path from "node:path";
+import { PDFDocument,StandardFonts,rgb } from "pdf-lib";
+import * as XLSX from "xlsx";
+import { zipSync,strToU8 } from "fflate";
+import { writePsdBuffer } from "ag-psd";
+
+export interface Fixture {
+  name:string;
+  mimeType:string;
+  buffer:Buffer;
+}
+
+export async function openApp(page:Page,url="/"){
+  await page.goto(url,{waitUntil:"domcontentloaded"});
+  await expect(page.locator("#drop-zone")).toBeVisible({timeout:60_000});
+  await expect(page.locator("#runtime-status")).not.toHaveText(/Probing/i,{timeout:120_000});
+}
+
+export async function selectFixture(page:Page,fixture:Fixture){
+  await page.locator("#file-input").setInputFiles({
+    name:fixture.name,
+    mimeType:fixture.mimeType,
+    buffer:fixture.buffer
+  });
+  await expect(page.locator("#file-panel")).toBeVisible({timeout:120_000});
+}
+
+export async function selectFixtures(page:Page,fixtures:Fixture[]){
+  await page.locator("#file-input").setInputFiles(fixtures.map(fixture=>({
+    name:fixture.name,
+    mimeType:fixture.mimeType,
+    buffer:fixture.buffer
+  })));
+  await expect(page.locator("#file-panel")).toBeVisible({timeout:120_000});
+}
+
+export async function runTarget(page:Page,target:string){
+  await expect(page.locator(`#target-format option[value="${target}"]`)).toHaveCount(1,{timeout:120_000});
+  await page.locator("#target-format").selectOption(target);
+  await page.locator("#convert-button").click();
+  await expect(page.locator("#results")).toBeVisible({timeout:180_000});
+  await expect(page.locator("#results .result-item").first()).toBeVisible({timeout:180_000});
+}
+
+export async function resultBytes(page:Page,namePart:string):Promise<Buffer>{
+  const row=page.locator(".result-item").filter({hasText:namePart}).first();
+  await expect(row).toBeVisible({timeout:120_000});
+  const href=await row.locator("a.download-link").getAttribute("href");
+  if(!href) throw new Error("Missing result blob URL for "+namePart);
+  const values=await page.evaluate(async url=>{
+    const response=await fetch(url);
+    return Array.from(new Uint8Array(await response.arrayBuffer()));
+  },href);
+  return Buffer.from(values);
+}
+
+export async function resultText(page:Page,namePart:string):Promise<string>{
+  return (await resultBytes(page,namePart)).toString("utf8");
+}
+
+export function pngFixture():Fixture {
+  return {
+    name:"pixel.png",
+    mimeType:"image/png",
+    buffer:fs.readFileSync(path.resolve("public/icon-192.png"))
+  };
+}
+
+export function srtFixture(name="captions.srt"):Fixture {
+  return {
+    name,
+    mimeType:"application/x-subrip",
+    buffer:Buffer.from("1\n00:00:01,000 --> 00:00:03,000\nHello local conversion\n","utf8")
+  };
+}
+
+export function objFixture():Fixture {
+  return {
+    name:"triangle.obj",
+    mimeType:"model/obj",
+    buffer:Buffer.from("v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n","utf8")
+  };
+}
+
+export function fitsFixture():Fixture {
+  const card=(value:string)=>value.padEnd(80," ").slice(0,80);
+  let text=[
+    card("SIMPLE  =                    T / conforming FITS"),
+    card("BITPIX  =                    8"),
+    card("NAXIS   =                    0"),
+    card("OBJECT  = 'Maintenance smoke'"),
+    card("END")
+  ].join("");
+  text=text.padEnd(Math.ceil(text.length/2880)*2880," ");
+  return {name:"header.fits",mimeType:"application/fits",buffer:Buffer.from(text,"ascii")};
+}
+
+export function htmlFixture():Fixture {
+  return {
+    name:"document.html",
+    mimeType:"text/html",
+    buffer:Buffer.from("<!doctype html><html><body><h1>Maintenance</h1><p>Hello <strong>browser</strong>.</p></body></html>","utf8")
+  };
+}
+
+export function jsonFixture():Fixture {
+  return {
+    name:"records.json",
+    mimeType:"application/json",
+    buffer:Buffer.from(JSON.stringify([
+      {name:"alpha",amount:2},
+      {name:"beta",amount:7}
+    ]),"utf8")
+  };
+}
+
+export function zipFixture():Fixture {
+  const bytes=zipSync({"hello.txt":strToU8("hello archive\n")},{level:6});
+  return {name:"sample.zip",mimeType:"application/zip",buffer:Buffer.from(bytes)};
+}
+
+export function xlsxFixture():Fixture {
+  const workbook=XLSX.utils.book_new();
+  const sheet=XLSX.utils.json_to_sheet([
+    {name:"alpha",amount:2},
+    {name:"beta",amount:7}
+  ]);
+  XLSX.utils.book_append_sheet(workbook,sheet,"Data");
+  const bytes=XLSX.write(workbook,{type:"buffer",bookType:"xlsx"});
+  return {name:"book.xlsx",mimeType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",buffer:Buffer.from(bytes)};
+}
+
+export async function pdfFixture():Promise<Fixture>{
+  const doc=await PDFDocument.create();
+  const page=doc.addPage([300,200]);
+  const font=await doc.embedFont(StandardFonts.Helvetica);
+  page.drawText("Maintenance PDF",{x:30,y:120,size:18,font,color:rgb(0,0,0)});
+  const bytes=await doc.save();
+  return {name:"sample.pdf",mimeType:"application/pdf",buffer:Buffer.from(bytes)};
+}
+
+export function wavFixture():Fixture {
+  const sampleRate=8_000;
+  const seconds=.15;
+  const samples=Math.floor(sampleRate*seconds);
+  const dataBytes=samples*2;
+  const buffer=Buffer.alloc(44+dataBytes);
+  buffer.write("RIFF",0,"ascii");
+  buffer.writeUInt32LE(36+dataBytes,4);
+  buffer.write("WAVE",8,"ascii");
+  buffer.write("fmt ",12,"ascii");
+  buffer.writeUInt32LE(16,16);
+  buffer.writeUInt16LE(1,20);
+  buffer.writeUInt16LE(1,22);
+  buffer.writeUInt32LE(sampleRate,24);
+  buffer.writeUInt32LE(sampleRate*2,28);
+  buffer.writeUInt16LE(2,32);
+  buffer.writeUInt16LE(16,34);
+  buffer.write("data",36,"ascii");
+  buffer.writeUInt32LE(dataBytes,40);
+  for(let i=0;i<samples;i++){
+    const value=Math.round(Math.sin(2*Math.PI*440*i/sampleRate)*12_000);
+    buffer.writeInt16LE(value,44+i*2);
+  }
+  return {name:"tone.wav",mimeType:"audio/wav",buffer};
+}
+
+export function fontFixture():Fixture {
+  const fontPath=path.resolve("node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf");
+  if(!fs.existsSync(fontPath)) throw new Error("Expected PDF.js LiberationSans fixture is missing.");
+  return {name:"LiberationSans-Regular.ttf",mimeType:"font/ttf",buffer:fs.readFileSync(fontPath)};
+}
+
+export function psdFixture():Fixture {
+  const bytes=writePsdBuffer({
+    width:8,
+    height:8,
+    children:[{name:"Blank layer"}]
+  } as any,{generateThumbnail:false});
+  return {name:"blank.psd",mimeType:"image/vnd.adobe.photoshop",buffer:Buffer.from(bytes)};
+}
+
+export function addLargeJpegComment(jpeg:Buffer):Buffer {
+  if(jpeg.length<4||jpeg[0]!==0xff||jpeg[1]!==0xd8) throw new Error("Expected JPEG fixture.");
+  const comment=Buffer.alloc(2048,0x41);
+  const length=comment.length+2;
+  const segment=Buffer.alloc(4+comment.length);
+  segment[0]=0xff;segment[1]=0xfe;
+  segment.writeUInt16BE(length,2);
+  comment.copy(segment,4);
+  return Buffer.concat([jpeg.subarray(0,2),segment,jpeg.subarray(2)]);
+}
+
+export function dngWithPreview(jpeg:Buffer):Fixture {
+  const tiff=Buffer.alloc(256);
+  tiff.write("II",0,"ascii");
+  tiff.writeUInt16LE(42,2);
+  tiff.writeUInt32LE(8,4);
+  tiff.writeUInt16LE(0,8);
+  tiff.writeUInt32LE(0,10);
+  return {
+    name:"preview.dng",
+    mimeType:"image/x-adobe-dng",
+    buffer:Buffer.concat([tiff,addLargeJpegComment(jpeg)])
+  };
+}
