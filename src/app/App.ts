@@ -1400,6 +1400,14 @@ export class App {
         }else{
           box.textContent=this.files.length+" media files · copy/transcode route assessed per file · OPFS streaming output";
         }
+      }else if(this.kind==="batch"){
+        const engines=[...new Set(routes.flatMap(route=>route.edges.map(edge=>edge.engineId)))];
+        box.textContent=this.files.length+" mixed files → "
+          +(this.formats.get(targetId)?.name??targetId)
+          +" · "+engines.length+" local engine"+(engines.length===1?"":"s")
+          +" · per-file validated pipeline";
+        warnings.push("Each file is planned independently. Unsupported routes fail only that file; successful files continue.");
+        warnings.push("Capability-aware mode parallelizes only non-exclusive routes and serializes memory-heavy engines.");
       }else{
         const labels:Record<string,string>={
           "psd-layered":"PSD composite flattening",
@@ -1518,46 +1526,67 @@ export class App {
     spreadsheetOptions:(SpreadsheetConversionOptions & {query?:string})|null,
     dataOptions:DataConversionOptions|null
   ){
+    const options=(
+      imageOptions
+      ??mediaOptions
+      ??documentOptions
+      ??spreadsheetOptions
+      ??dataOptions
+      ??{}
+    ) as unknown as Record<string,unknown>;
+    const quality=this.kind==="image"
+      ?Number(element<HTMLSelectElement>("image-quality").value)
+      :.82;
+    await this.runBatchPipeline(targetId,options,quality);
+  }
+
+  private async runBatchPipeline(
+    targetId:string,
+    options:Record<string,unknown>,
+    quality:number
+  ){
     const button=element<HTMLButtonElement>("convert-button");
     const cancel=element<HTMLButtonElement>("cancel-button");
     const panel=element("job-panel");
     const results=element("results");
-    button.disabled=true;cancel.classList.remove("hidden");panel.classList.remove("hidden");
-    results.classList.add("hidden");results.replaceChildren();await this.releaseResults();
 
-    const outputs:ConversionOutput[]=[];
-    const failed:Array<{name:string;error:string}>=[];
+    const packageResults=this.files.length>1
+      &&element<HTMLInputElement>("batch-package-results").checked;
+    const pipeline=buildBatchPipeline({
+      targetFormatId:targetId,
+      quality,
+      options,
+      namingTemplate:element<HTMLInputElement>("batch-name-template").value,
+      executionMode:element<HTMLSelectElement>("batch-execution").value as BatchExecutionMode,
+      packageResults
+    });
+    this.batchPackageResults=pipeline.packageResults;
+
+    button.disabled=true;
+    cancel.classList.remove("hidden");
+    panel.classList.remove("hidden");
+    results.classList.add("hidden");
+    results.replaceChildren();
+    await this.releaseResults();
+
     try{
-      for(let index=0;index<this.files.length;index++){
-        const file=this.files[index];
-        try{
-          const options=(
-            imageOptions
-            ??mediaOptions
-            ??documentOptions
-            ??spreadsheetOptions
-            ??dataOptions
-            ??{}
-          ) as unknown as Record<string,unknown>;
-          const quality=this.kind==="image"?Number(element<HTMLSelectElement>("image-quality").value):.82;
-          const output=await this.jobs.convert(file,targetId,quality,options,snapshot=>{
-            const overall=(index+snapshot.progress)/this.files.length;
-            this.setProgress(overall,this.files.length>1
-              ?"File "+(index+1)+"/"+this.files.length+" · "+snapshot.stage
-              :snapshot.stage);
-          });
-          outputs.push(output);
-        }catch(error){
-          if(error instanceof DOMException&&error.name==="AbortError") throw error;
-          failed.push({name:file.name,error:error instanceof Error?error.message:String(error)});
-        }
+      const result=await this.batchRunner.start(
+        this.files,
+        pipeline,
+        snapshot=>this.renderBatchSnapshot(snapshot)
+      );
+      await this.renderBatchResults(result,pipeline.packageResults);
+      if(result.cancelled){
+        this.renderWarnings("loss-warnings",[
+          "Batch stopped. Completed outputs are retained in this session; choose Resume / retry remaining to continue."
+        ]);
       }
-      await this.renderResults(outputs,failed);
     }catch(error){
-      this.renderWarnings("loss-warnings",[error instanceof Error?error.message:"Conversion cancelled."]);
-      for(const output of outputs) await output.release?.();
+      this.renderWarnings("loss-warnings",[error instanceof Error?error.message:String(error)]);
     }finally{
-      button.disabled=false;cancel.classList.add("hidden");
+      button.disabled=false;
+      cancel.classList.add("hidden");
+      this.updateBatchControls();
     }
   }
 
@@ -1611,31 +1640,8 @@ export class App {
       if(this.kind!=="archive") throw new Error("ARCHIVE_SELECTION_INVALID: No archive workflow is active.");
       if(operation==="repack"){
         if(!targetId) throw new Error("ARCHIVE_TARGET_REQUIRED: Choose an archive output format.");
-        const outputs:ConversionOutput[]=[];
-        const failed:Array<{name:string;error:string}>=[];
-        for(let index=0;index<this.files.length;index++){
-          controller.signal.throwIfAborted?.();
-          const file=this.files[index];
-          try{
-            const output=await this.jobs.convert(
-              file,
-              targetId,
-              .82,
-              options as unknown as Record<string,unknown>,
-              snapshot=>{
-                const overall=(index+snapshot.progress)/this.files.length;
-                this.setProgress(overall,this.files.length>1
-                  ?"Archive "+(index+1)+"/"+this.files.length+" · "+snapshot.stage
-                  :snapshot.stage);
-              }
-            );
-            outputs.push(output);
-          }catch(error){
-            if(error instanceof DOMException&&error.name==="AbortError") throw error;
-            failed.push({name:file.name,error:error instanceof Error?error.message:String(error)});
-          }
-        }
-        await this.renderResults(outputs,failed);
+        this.archiveAbort=null;
+        await this.runBatchPipeline(targetId,options as unknown as Record<string,unknown>,.82);
         return;
       }
 
@@ -1900,21 +1906,6 @@ export class App {
   ){
     const container=element("results");container.replaceChildren();container.classList.remove("hidden");
     for(const output of outputs) this.addResult(container,output.name,output.blob,output.warnings,output.release);
-
-    const total=outputs.reduce((sum,item)=>sum+item.blob.size,0);
-    if(outputs.length>1&&total<=512*1024*1024){
-      void (async()=>{
-        try{
-          const entries=Object.create(null) as Record<string,Uint8Array>;
-          for(const output of outputs) entries[output.name]=new Uint8Array(await output.blob.arrayBuffer());
-          const zipped=zipSync(entries,{level:0});
-          this.addResult(container,"converted-files.zip",new Blob([zipped],{type:"application/zip"}),["Local batch package."]);
-        }catch(error){
-          const node=document.createElement("div");node.className="warning";
-          node.textContent="Batch ZIP: "+(error instanceof Error?error.message:String(error));container.append(node);
-        }
-      })();
-    }
 
     for(const failure of failed){
       const node=document.createElement("div");node.className="warning";
