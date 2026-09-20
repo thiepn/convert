@@ -4,7 +4,7 @@ A local-first universal browser file-conversion platform.
 
 ## Current status
 
-Phase 7 — Advanced & Legacy Format Coverage is implemented on top of the image, media, PDF, document, archive, spreadsheet, data, and database engines.
+Phase 8 — Batch Conversion & Pipelines is implemented on top of the verified Phase 7 conversion stack.
 
 ### Images
 
@@ -81,6 +81,21 @@ Phase 7 adds deliberately bounded specialist packs:
 
 PSB, Kindle/MOBI, DXF/DWG, glTF/GLB, HDF5, and NetCDF are recognized but intentionally have no conversion route until a browser-local implementation can meet the project's fidelity, security, validation, and licensing gates.
 
+### Batch conversion & pipelines
+
+Phase 8 adds a first-class batch scheduler over the existing conversion graph:
+
+- shared conversion settings across many files
+- mixed recognized-format batches when a common target exists
+- capability-aware automatic scheduling or strict sequential execution
+- per-file failure isolation
+- naming templates and collision handling
+- explicit successful-output ZIP packaging
+- cancellation with in-session resume/retry
+- visible compiled steps for resize, compression, metadata, sheet/table selection, local SQL filtering, conversion, and packaging
+
+See docs/batch-pipelines.md for execution semantics and limits.
+
 ## Development
 
 Requirements: Node.js 22 or newer.
@@ -98,7 +113,7 @@ Checks:
 
 Conversion jobs do not upload files. Spreadsheet contents, database tables, SQL text, passwords, OCR data, document resources, fonts, archive entries, and generated outputs remain local to the browser.
 
-See docs/privacy-model.md, docs/architecture.md, docs/image-engine.md, docs/media-engine.md, docs/pdf-engine.md, docs/document-engine.md, docs/archive-engine.md, docs/data-engine.md, and docs/specialist-engine.md.
+See docs/privacy-model.md, docs/architecture.md, docs/image-engine.md, docs/media-engine.md, docs/pdf-engine.md, docs/document-engine.md, docs/archive-engine.md, docs/data-engine.md, docs/specialist-engine.md, and docs/batch-pipelines.md.
 
 ## Licensing
 
@@ -114,3 +129,4 @@ Dependency/license metadata lives in licenses/dependencies.json. Notable compone
 - Phase 5: archives and compression — implemented
 - Phase 6: spreadsheets, data, and databases — implemented
 - Phase 7: advanced and legacy format coverage — implemented
+- Phase 8: batch conversion and pipelines — implemented

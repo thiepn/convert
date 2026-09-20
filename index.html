@@ -14,7 +14,7 @@
       <div>
         <div class="eyebrow">THIEPN CONVERT · LOCAL ENGINE</div>
         <h1>Convert files locally in your browser.</h1>
-        <p>Images, media, PDFs, Office files, archives, data, databases, and supported specialist/legacy formats stay on your device. No conversion server is involved.</p>
+        <p>Images, media, PDFs, Office files, archives, data, databases, and specialist formats can now run through local single-file or batch pipelines. No conversion server is involved.</p>
       </div>
       <div class="privacy-badge"><span class="privacy-dot"></span> No file uploads</div>
     </header>
@@ -323,6 +323,47 @@
         <div id="data-preview" class="data-preview hidden"></div>
       </div>
 
+      <div id="batch-controls" class="control-section hidden">
+        <div class="control-title">Batch & pipeline</div>
+        <div class="convert-grid phase-controls batch-controls-grid">
+          <label>
+            <span>Execution</span>
+            <select id="batch-execution">
+              <option value="auto" selected>Capability-aware automatic</option>
+              <option value="sequential">Sequential · lowest memory</option>
+            </select>
+          </label>
+
+          <label>
+            <span>Output naming</span>
+            <input id="batch-name-template" type="text" value="{name}-converted" spellcheck="false">
+            <small class="control-help">{name} · {format} · {ext} · {index} · {index:03} · {date}</small>
+          </label>
+
+          <label class="check-row batch-package-row">
+            <input id="batch-package-results" type="checkbox" checked>
+            <span>Create a ZIP package of successful outputs</span>
+          </label>
+        </div>
+
+        <div class="batch-pipeline">
+          <div class="batch-pipeline-heading">
+            <strong>Compiled pipeline</strong>
+            <span id="batch-pipeline-summary">Choose a target to build the pipeline.</span>
+          </div>
+          <div id="batch-pipeline-steps" class="pipeline-steps"></div>
+        </div>
+
+        <div class="batch-status-row">
+          <div>
+            <strong id="batch-status">No batch running</strong>
+            <span id="batch-status-detail">Per-file failures are isolated.</span>
+          </div>
+          <button id="batch-resume-button" class="secondary-button hidden" type="button">Resume / retry remaining</button>
+        </div>
+        <div id="batch-task-list" class="batch-task-list hidden"></div>
+      </div>
+
       <div id="archive-controls" class="control-section hidden">
         <div class="control-title">Archive tools</div>
         <div class="convert-grid phase-controls archive-controls-grid">
@@ -525,7 +566,7 @@
 
     <section class="panel compact-panel">
       <h2>Privacy model</h2>
-      <p>Conversion uses local browser APIs, WebAssembly, WebCodecs, workers, OPFS, PDF.js, DuckDB, SQLite, SheetJS, qpdf, Tesseract, zip.js, and libarchive. Source files, passwords, extracted text, OCR results, and outputs are not uploaded to a conversion server.</p>
+      <p>Conversion and batch scheduling use local browser APIs, WebAssembly, WebCodecs, workers, OPFS, PDF.js, DuckDB, SQLite, SheetJS, qpdf, Tesseract, zip.js, and libarchive. Source files, pipeline state, passwords, extracted text, OCR results, and outputs are not uploaded to a conversion server.</p>
     </section>
   </main>
   <script type="module" src="/src/main.ts"></script>

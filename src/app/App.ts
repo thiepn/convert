@@ -1,4 +1,7 @@
 import { zipSync } from "fflate";
+import type { BatchExecutionMode,BatchRunResult,BatchSnapshot } from "../core/batch/types";
+import { BatchRunner } from "../core/batch/BatchRunner";
+import { buildBatchPipeline,describePipeline } from "../core/batch/pipeline";
 import type { CapabilityProfile } from "../core/capabilities/CapabilityProfile";
 import { detectCapabilities } from "../core/capabilities/detectCapabilities";
 import { EngineRegistry } from "../core/engines/EngineRegistry";
@@ -54,7 +57,7 @@ import { LayeredImageEngine } from "../engines/specialist/LayeredImageEngine";
 import { FontEngine } from "../engines/specialist/FontEngine";
 import { LegacyMediaEngine } from "../engines/specialist/LegacyMediaEngine";
 
-type SelectionKind="image"|"media"|"pdf"|"document"|"archive"|"archive-build"|"spreadsheet"|"data"|"database"|"specialist"|null;
+type SelectionKind="image"|"media"|"pdf"|"document"|"archive"|"archive-build"|"spreadsheet"|"data"|"database"|"specialist"|"batch"|null;
 type ResultLease={url:string;release?:()=>Promise<void>};
 
 function element<T extends HTMLElement>(id:string):T {
@@ -124,6 +127,7 @@ export class App {
   private readonly legacyMediaEngine=new LegacyMediaEngine();
   private readonly planner:ConversionPlanner;
   private readonly jobs:JobManager;
+  private readonly batchRunner:BatchRunner;
 
   private files:File[]=[];
   private inspections:FileInspection[]=[];
@@ -139,6 +143,7 @@ export class App {
   private kind:SelectionKind=null;
   private leases:ResultLease[]=[];
   private routeRevision=0;
+  private batchPackageResults=true;
 
   constructor(){
     this.engines.register(this.imageEngine);
@@ -181,6 +186,7 @@ export class App {
       new SpecialistOutputValidator(this.formats)
     );
     this.jobs=new JobManager(this.formats,this.engines,this.planner,validator);
+    this.batchRunner=new BatchRunner(this.formats,this.planner,this.jobs);
   }
 
   async start():Promise<void>{
@@ -218,7 +224,8 @@ export class App {
       "document-standalone","document-toc","archive-operation","archive-compression-level",
       "archive-preserve-paths","archive-input-password","archive-output-password",
       "data-route","data-sheet-policy","data-sheet-select","data-formula-mode",
-      "data-table-select","data-delimiter","data-header","data-query"
+      "data-table-select","data-delimiter","data-header","data-query",
+      "batch-execution","batch-name-template","batch-package-results"
     ];
     for(const id of routeControls){
       element(id).addEventListener("change",()=>{
@@ -226,6 +233,7 @@ export class App {
         if(id==="archive-operation") this.updateArchiveOptionVisibility();
         if(id==="data-sheet-policy") this.updateDataOptionVisibility();
         if(id==="data-table-select") void this.refreshDatabasePreview();
+        this.updateBatchControls();
         void this.renderRoute();
       });
     }
@@ -236,7 +244,9 @@ export class App {
     element<HTMLButtonElement>("archive-select-all").addEventListener("click",()=>this.setArchiveSelection(true));
     element<HTMLButtonElement>("archive-select-none").addEventListener("click",()=>this.setArchiveSelection(false));
     element<HTMLButtonElement>("convert-button").addEventListener("click",()=>void this.convertAll());
+    element<HTMLButtonElement>("batch-resume-button").addEventListener("click",()=>void this.resumeBatch());
     element<HTMLButtonElement>("cancel-button").addEventListener("click",()=>{
+      this.batchRunner.cancel();
       this.jobs.cancelAll();
       this.archiveAbort?.abort();
     });
@@ -257,6 +267,7 @@ export class App {
   }
 
   private async loadFiles(files:File[]){
+    await this.batchRunner.releaseSession();
     await this.releaseResults();
     this.files=files;
     this.imageDetail=null;
@@ -273,9 +284,11 @@ export class App {
     const allKnown=this.inspections.every(item=>Boolean(item.detection.format));
     this.kind=kinds.size===1&&allKnown
       ? [...kinds][0]
-      : files.length
-        ? "archive-build"
-        : null;
+      : allKnown&&files.length>1
+        ? "batch"
+        : files.length
+          ? "archive-build"
+          : null;
 
     element("file-panel").classList.remove("hidden");
     element("results").classList.add("hidden");
@@ -293,10 +306,10 @@ export class App {
 
     const warnings=this.inspections.flatMap(item=>item.detection.warnings.map(w=>item.name+": "+w));
     if(this.kind==="archive-build"){
-      warnings.push("Mixed or otherwise unsupported selections can be packed into a new local archive.");
+      warnings.push("Unknown or otherwise unsupported selections can still be packed into a new local archive.");
     }else{
       if(known.length!==files.length) warnings.push("At least one file could not be identified.");
-      if(kinds.size>1) warnings.push("Mixed file families must be processed separately.");
+      if(this.kind==="batch") warnings.push("Mixed recognized formats are handled as one batch when they share a safe local target.");
       if(kinds.size===0) warnings.push("This format has no active local conversion workflow.");
       if(this.kind==="specialist"&&known.length===files.length){
         const recognitionOnly=known
@@ -382,6 +395,7 @@ export class App {
     this.updatePdfOptionVisibility();
     this.updateArchiveOptionVisibility();
     this.updateDataOptionVisibility();
+    this.updateBatchControls();
     await this.renderRoute();
   }
 
@@ -417,6 +431,7 @@ export class App {
     this.renderArchiveEntries();
     this.populateTargets();
     this.updateArchiveOptionVisibility();
+    this.updateBatchControls();
     await this.renderRoute();
   }
 
@@ -456,10 +471,11 @@ export class App {
     element("document-controls").classList.toggle("hidden",this.kind!=="document");
     element("archive-controls").classList.toggle("hidden",this.kind!=="archive"&&this.kind!=="archive-build");
     element("data-controls").classList.toggle("hidden",this.kind!=="spreadsheet"&&this.kind!=="data"&&this.kind!=="database");
+    element("batch-controls").classList.toggle("hidden",this.files.length<2);
     element("metadata-control").classList.toggle(
       "hidden",
       this.kind==="document"||this.kind==="archive"||this.kind==="archive-build"
-        ||this.kind==="spreadsheet"||this.kind==="data"||this.kind==="database"||this.kind==="specialist"||legacyMedia
+        ||this.kind==="spreadsheet"||this.kind==="data"||this.kind==="database"||this.kind==="specialist"||this.kind==="batch"||legacyMedia
     );
     element("pdf-controls").classList.toggle("hidden",this.kind!=="pdf");
     element("archive-pack-selection-button").classList.toggle(
@@ -812,6 +828,182 @@ export class App {
       header:element<HTMLInputElement>("data-header").checked,
       query:element<HTMLTextAreaElement>("data-query").value.trim()||undefined
     };
+  }
+
+  private synchronousPipelineOptions():{options:Record<string,unknown>;quality:number}{
+    if(this.kind==="image"){
+      return {
+        options:this.readImageOptions() as unknown as Record<string,unknown>,
+        quality:Number(element<HTMLSelectElement>("image-quality").value)
+      };
+    }
+    if(this.kind==="media"){
+      return {options:this.readMediaOptions() as unknown as Record<string,unknown>,quality:.82};
+    }
+    if(this.kind==="spreadsheet"){
+      return {options:this.readSpreadsheetOptions() as unknown as Record<string,unknown>,quality:.82};
+    }
+    if(this.kind==="data"||this.kind==="database"){
+      return {options:this.readDataOptions() as unknown as Record<string,unknown>,quality:.82};
+    }
+    if(this.kind==="archive"){
+      return {options:this.readArchiveOptions() as unknown as Record<string,unknown>,quality:.82};
+    }
+    if(this.kind==="document"){
+      return {
+        options:{
+          routePreference:element<HTMLSelectElement>("document-route").value,
+          trackChanges:element<HTMLSelectElement>("document-track-changes").value,
+          assets:element<HTMLSelectElement>("document-assets").value,
+          standalone:element<HTMLInputElement>("document-standalone").checked,
+          tableOfContents:element<HTMLInputElement>("document-toc").checked,
+          preserveComments:true
+        },
+        quality:.82
+      };
+    }
+    return {options:{},quality:.82};
+  }
+
+  private updateBatchControls(){
+    const operation=this.kind==="archive"?element<HTMLSelectElement>("archive-operation").value:"";
+    const active=this.files.length>1
+      &&this.kind!=="pdf"
+      &&this.kind!=="archive-build"
+      &&(this.kind!=="archive"||operation==="repack");
+    element("batch-controls").classList.toggle("hidden",!active);
+    if(!active){
+      element("batch-task-list").classList.add("hidden");
+      element<HTMLButtonElement>("batch-resume-button").classList.add("hidden");
+      return;
+    }
+
+    const targetId=element<HTMLSelectElement>("target-format").value;
+    if(!targetId){
+      element("batch-pipeline-summary").textContent="No common target is available.";
+      element("batch-pipeline-steps").replaceChildren();
+      return;
+    }
+
+    try{
+      const current=this.synchronousPipelineOptions();
+      const pipeline=buildBatchPipeline({
+        targetFormatId:targetId,
+        quality:current.quality,
+        options:current.options,
+        namingTemplate:element<HTMLInputElement>("batch-name-template").value,
+        executionMode:element<HTMLSelectElement>("batch-execution").value as BatchExecutionMode,
+        packageResults:element<HTMLInputElement>("batch-package-results").checked
+      });
+      const labels=describePipeline(pipeline);
+      element("batch-pipeline-summary").textContent=
+        pipeline.executionMode==="auto"
+          ?"Automatic local scheduling · "+labels.length+" step(s)"
+          :"Sequential local scheduling · "+labels.length+" step(s)";
+      const container=element("batch-pipeline-steps");
+      container.replaceChildren();
+      labels.forEach((label,index)=>{
+        if(index){
+          const arrow=document.createElement("span");arrow.className="pipeline-arrow";arrow.textContent="→";container.append(arrow);
+        }
+        const step=document.createElement("span");step.className="pipeline-step";step.textContent=label;container.append(step);
+      });
+    }catch(error){
+      element("batch-pipeline-summary").textContent=error instanceof Error?error.message:String(error);
+      element("batch-pipeline-steps").replaceChildren();
+    }
+  }
+
+  private renderBatchSnapshot(snapshot:BatchSnapshot){
+    this.setProgress(snapshot.progress,snapshot.stage);
+    element("batch-status").textContent=
+      snapshot.completed+"/"+snapshot.total+" complete"
+      +(snapshot.failed?" · "+snapshot.failed+" failed":"")
+      +(snapshot.cancelled?" · "+snapshot.cancelled+" cancelled":"");
+    element("batch-status-detail").textContent=
+      snapshot.running+" running · "+snapshot.pending+" queued · failures stay isolated";
+    element<HTMLButtonElement>("batch-resume-button").classList.toggle("hidden",!snapshot.resumable||snapshot.running>0);
+
+    const container=element("batch-task-list");
+    container.classList.toggle("hidden",snapshot.tasks.length===0);
+    container.replaceChildren();
+    for(const task of snapshot.tasks){
+      const row=document.createElement("div");row.className="batch-task-row";
+      const name=document.createElement("div");name.className="batch-task-name";
+      const strong=document.createElement("strong");strong.textContent=task.sourceName;
+      const sub=document.createElement("span");
+      sub.textContent=task.outputName
+        ?task.outputName
+        :task.error
+          ?task.error
+          :(task.sourceFormatId??"Inspecting");
+      name.append(strong,sub);
+
+      const stage=document.createElement("div");stage.className="batch-task-stage";
+      stage.textContent=Math.round(task.progress*100)+"% · "+task.stage;
+
+      const state=document.createElement("span");state.className="batch-task-state "+task.state;
+      state.textContent=task.state;
+      row.append(name,stage,state);container.append(row);
+    }
+  }
+
+  private async resumeBatch(){
+    if(!this.batchRunner.hasResumable()) return;
+    const button=element<HTMLButtonElement>("convert-button");
+    const cancel=element<HTMLButtonElement>("cancel-button");
+    button.disabled=true;cancel.classList.remove("hidden");
+    try{
+      const result=await this.batchRunner.resume(snapshot=>this.renderBatchSnapshot(snapshot),true);
+      await this.renderBatchResults(result,this.batchPackageResults);
+    }catch(error){
+      this.renderWarnings("loss-warnings",[error instanceof Error?error.message:String(error)]);
+    }finally{
+      button.disabled=false;cancel.classList.add("hidden");
+    }
+  }
+
+  private async renderBatchResults(result:BatchRunResult,packageResults:boolean){
+    await this.releaseResults();
+    const expanded:Array<{name:string;blob:Blob;warnings:string[]}>=[];
+
+    for(const output of result.outputs){
+      expanded.push({name:output.fileName,blob:output.blob,warnings:output.warnings});
+      const prefix=sanitizeFilename(stem(output.fileName));
+      for(const extra of output.extraFiles??[]){
+        expanded.push({
+          name:prefix+"-assets-"+sanitizeFilename(extra.name.replaceAll("/","-")),
+          blob:extra.blob,
+          warnings:[]
+        });
+      }
+    }
+
+    const failures=[...result.failures];
+    if(packageResults&&expanded.length>1){
+      try{
+        const packaged=await this.archiveEngine.createFromFiles(
+          expanded.map(item=>({blob:item.blob,path:item.name,lastModified:null})),
+          "zip",
+          {compressionLevel:6,preservePaths:false},
+          undefined,
+          (_progress,stage)=>this.setProgress(1,"Packaging results · "+stage)
+        );
+        expanded.push({
+          name:"converted-files.zip",
+          blob:packaged.blob,
+          warnings:["Local Phase 8 batch package of successful outputs."]
+        });
+      }catch(error){
+        failures.push({
+          name:"converted-files.zip",
+          error:"Batch packaging failed: "+(error instanceof Error?error.message:String(error))
+        });
+      }
+    }
+
+    this.showBlobResults(expanded,failures,false);
+    this.setProgress(1,"Batch complete");
   }
 
   private commonTargets():string[]{
@@ -1210,6 +1402,14 @@ export class App {
         }else{
           box.textContent=this.files.length+" media files · copy/transcode route assessed per file · OPFS streaming output";
         }
+      }else if(this.kind==="batch"){
+        const engines=[...new Set(routes.flatMap(route=>route.edges.map(edge=>edge.engineId)))];
+        box.textContent=this.files.length+" mixed files → "
+          +(this.formats.get(targetId)?.name??targetId)
+          +" · "+engines.length+" local engine"+(engines.length===1?"":"s")
+          +" · per-file validated pipeline";
+        warnings.push("Each file is planned independently. Unsupported routes fail only that file; successful files continue.");
+        warnings.push("Capability-aware mode parallelizes only non-exclusive routes and serializes memory-heavy engines.");
       }else{
         const labels:Record<string,string>={
           "psd-layered":"PSD composite flattening",
@@ -1328,46 +1528,71 @@ export class App {
     spreadsheetOptions:(SpreadsheetConversionOptions & {query?:string})|null,
     dataOptions:DataConversionOptions|null
   ){
+    const options=(
+      imageOptions
+      ??mediaOptions
+      ??documentOptions
+      ??spreadsheetOptions
+      ??dataOptions
+      ??{}
+    ) as unknown as Record<string,unknown>;
+    const quality=this.kind==="image"
+      ?Number(element<HTMLSelectElement>("image-quality").value)
+      :.82;
+    await this.runBatchPipeline(targetId,options,quality);
+  }
+
+  private async runBatchPipeline(
+    targetId:string,
+    options:Record<string,unknown>,
+    quality:number
+  ){
     const button=element<HTMLButtonElement>("convert-button");
     const cancel=element<HTMLButtonElement>("cancel-button");
     const panel=element("job-panel");
     const results=element("results");
-    button.disabled=true;cancel.classList.remove("hidden");panel.classList.remove("hidden");
-    results.classList.add("hidden");results.replaceChildren();await this.releaseResults();
 
-    const outputs:ConversionOutput[]=[];
-    const failed:Array<{name:string;error:string}>=[];
+    const packageResults=this.files.length>1
+      &&element<HTMLInputElement>("batch-package-results").checked;
+    const pipeline=buildBatchPipeline({
+      targetFormatId:targetId,
+      quality,
+      options,
+      namingTemplate:this.files.length>1
+        ?element<HTMLInputElement>("batch-name-template").value
+        :"{name}-converted",
+      executionMode:this.files.length>1
+        ?element<HTMLSelectElement>("batch-execution").value as BatchExecutionMode
+        :"sequential",
+      packageResults
+    });
+    this.batchPackageResults=pipeline.packageResults;
+
+    button.disabled=true;
+    cancel.classList.remove("hidden");
+    panel.classList.remove("hidden");
+    results.classList.add("hidden");
+    results.replaceChildren();
+    await this.releaseResults();
+
     try{
-      for(let index=0;index<this.files.length;index++){
-        const file=this.files[index];
-        try{
-          const options=(
-            imageOptions
-            ??mediaOptions
-            ??documentOptions
-            ??spreadsheetOptions
-            ??dataOptions
-            ??{}
-          ) as unknown as Record<string,unknown>;
-          const quality=this.kind==="image"?Number(element<HTMLSelectElement>("image-quality").value):.82;
-          const output=await this.jobs.convert(file,targetId,quality,options,snapshot=>{
-            const overall=(index+snapshot.progress)/this.files.length;
-            this.setProgress(overall,this.files.length>1
-              ?"File "+(index+1)+"/"+this.files.length+" · "+snapshot.stage
-              :snapshot.stage);
-          });
-          outputs.push(output);
-        }catch(error){
-          if(error instanceof DOMException&&error.name==="AbortError") throw error;
-          failed.push({name:file.name,error:error instanceof Error?error.message:String(error)});
-        }
+      const result=await this.batchRunner.start(
+        this.files,
+        pipeline,
+        snapshot=>this.renderBatchSnapshot(snapshot)
+      );
+      await this.renderBatchResults(result,pipeline.packageResults);
+      if(result.cancelled){
+        this.renderWarnings("loss-warnings",[
+          "Batch stopped. Completed outputs are retained in this session; choose Resume / retry remaining to continue."
+        ]);
       }
-      await this.renderResults(outputs,failed);
     }catch(error){
-      this.renderWarnings("loss-warnings",[error instanceof Error?error.message:"Conversion cancelled."]);
-      for(const output of outputs) await output.release?.();
+      this.renderWarnings("loss-warnings",[error instanceof Error?error.message:String(error)]);
     }finally{
-      button.disabled=false;cancel.classList.add("hidden");
+      button.disabled=false;
+      cancel.classList.add("hidden");
+      this.updateBatchControls();
     }
   }
 
@@ -1421,31 +1646,8 @@ export class App {
       if(this.kind!=="archive") throw new Error("ARCHIVE_SELECTION_INVALID: No archive workflow is active.");
       if(operation==="repack"){
         if(!targetId) throw new Error("ARCHIVE_TARGET_REQUIRED: Choose an archive output format.");
-        const outputs:ConversionOutput[]=[];
-        const failed:Array<{name:string;error:string}>=[];
-        for(let index=0;index<this.files.length;index++){
-          controller.signal.throwIfAborted?.();
-          const file=this.files[index];
-          try{
-            const output=await this.jobs.convert(
-              file,
-              targetId,
-              .82,
-              options as unknown as Record<string,unknown>,
-              snapshot=>{
-                const overall=(index+snapshot.progress)/this.files.length;
-                this.setProgress(overall,this.files.length>1
-                  ?"Archive "+(index+1)+"/"+this.files.length+" · "+snapshot.stage
-                  :snapshot.stage);
-              }
-            );
-            outputs.push(output);
-          }catch(error){
-            if(error instanceof DOMException&&error.name==="AbortError") throw error;
-            failed.push({name:file.name,error:error instanceof Error?error.message:String(error)});
-          }
-        }
-        await this.renderResults(outputs,failed);
+        this.archiveAbort=null;
+        await this.runBatchPipeline(targetId,options as unknown as Record<string,unknown>,.82);
         return;
       }
 
@@ -1706,22 +1908,29 @@ export class App {
 
   private showBlobResults(
     outputs:Array<{name:string;blob:Blob;warnings:string[];release?:()=>Promise<void>}>,
-    failed:Array<{name:string;error:string}>
+    failed:Array<{name:string;error:string}>,
+    autoPackage=true
   ){
     const container=element("results");container.replaceChildren();container.classList.remove("hidden");
     for(const output of outputs) this.addResult(container,output.name,output.blob,output.warnings,output.release);
 
     const total=outputs.reduce((sum,item)=>sum+item.blob.size,0);
-    if(outputs.length>1&&total<=512*1024*1024){
+    if(autoPackage&&outputs.length>1&&total<=512*1024*1024){
       void (async()=>{
         try{
           const entries=Object.create(null) as Record<string,Uint8Array>;
           for(const output of outputs) entries[output.name]=new Uint8Array(await output.blob.arrayBuffer());
           const zipped=zipSync(entries,{level:0});
-          this.addResult(container,"converted-files.zip",new Blob([zipped],{type:"application/zip"}),["Local batch package."]);
+          this.addResult(
+            container,
+            "converted-files.zip",
+            new Blob([zipped],{type:"application/zip"}),
+            ["Local convenience package."]
+          );
         }catch(error){
           const node=document.createElement("div");node.className="warning";
-          node.textContent="Batch ZIP: "+(error instanceof Error?error.message:String(error));container.append(node);
+          node.textContent="ZIP package: "+(error instanceof Error?error.message:String(error));
+          container.append(node);
         }
       })();
     }
@@ -1769,6 +1978,7 @@ export class App {
       ["Mesh conversion",this.meshEngine.isAvailable()],
       ["RAW preview extraction",this.rawPreviewEngine.isAvailable()],
       ["Scientific metadata",this.scientificMetadataEngine.isAvailable()],
+      ["Batch scheduler","Auto-safe parallel · sequential · resume"],
       ["Local OCR","English · German · French · Turkish · Korean"],
       ["WebCodecs",profile.webCodecs],
       ["H.264 decode / encode",profile.codecs.h264.decode+" / "+profile.codecs.h264.encode],
@@ -1796,7 +2006,7 @@ export class App {
       &&this.sqliteEngine.isAvailable()
       &&this.subtitleEngine.isAvailable()
       &&this.meshEngine.isAvailable()
-      ?"Phase 7 ready"
+      ?"Phase 8 ready"
       :"One or more local engines degraded";
     element("capability-json").textContent=JSON.stringify({
       ...profile,
@@ -1812,7 +2022,8 @@ export class App {
       psdEngine:this.layeredImageEngine.isAvailable()?"ag-psd 31.0.2":"unavailable",
       legacyMediaEngine:this.legacyMediaEngine.isAvailable()?"FFmpeg WASM 0.12.10 (lazy)":"unavailable",
       fontEngine:this.fontEngine.isAvailable()?"fonteditor-core 2.6.3":"unavailable",
-      specialistNativeEngines:"subtitles + meshes + RAW preview + FITS metadata + FB2"
+      specialistNativeEngines:"subtitles + meshes + RAW preview + FITS metadata + FB2",
+      batchScheduler:"capability-aware + sequential + in-session resume"
     },null,2);
   }
 }

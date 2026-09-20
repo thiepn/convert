@@ -15,6 +15,13 @@ The web application itself must be downloaded like any website. Future engine pa
 
 The job manager snapshots browser resource activity when a conversion begins and rejects a job if a new cross-origin resource request appears during the conversion.
 
+
+## Batch state
+
+Phase 8 batch queues, filenames, pipeline settings, progress, errors, and successful outputs stay local to the browser.
+
+Cancellation/resume is intentionally session-scoped. Source File objects are not serialized or uploaded for later recovery, and passwords are not persisted as part of batch configuration.
+
 ## Offline
 
 The service worker caches same-origin application assets as they are used. After the required app/engine assets have been cached, supported conversions can run without network access.
