@@ -1,4 +1,6 @@
-import { zipSync } from "fflate";
+import type { BatchExecutionMode,BatchRunResult,BatchSnapshot } from "../core/batch/types";
+import { BatchRunner } from "../core/batch/BatchRunner";
+import { buildBatchPipeline,describePipeline } from "../core/batch/pipeline";
 import type { CapabilityProfile } from "../core/capabilities/CapabilityProfile";
 import { detectCapabilities } from "../core/capabilities/detectCapabilities";
 import { EngineRegistry } from "../core/engines/EngineRegistry";
@@ -54,7 +56,7 @@ import { LayeredImageEngine } from "../engines/specialist/LayeredImageEngine";
 import { FontEngine } from "../engines/specialist/FontEngine";
 import { LegacyMediaEngine } from "../engines/specialist/LegacyMediaEngine";
 
-type SelectionKind="image"|"media"|"pdf"|"document"|"archive"|"archive-build"|"spreadsheet"|"data"|"database"|"specialist"|null;
+type SelectionKind="image"|"media"|"pdf"|"document"|"archive"|"archive-build"|"spreadsheet"|"data"|"database"|"specialist"|"batch"|null;
 type ResultLease={url:string;release?:()=>Promise<void>};
 
 function element<T extends HTMLElement>(id:string):T {
@@ -124,6 +126,7 @@ export class App {
   private readonly legacyMediaEngine=new LegacyMediaEngine();
   private readonly planner:ConversionPlanner;
   private readonly jobs:JobManager;
+  private readonly batchRunner:BatchRunner;
 
   private files:File[]=[];
   private inspections:FileInspection[]=[];
@@ -181,6 +184,7 @@ export class App {
       new SpecialistOutputValidator(this.formats)
     );
     this.jobs=new JobManager(this.formats,this.engines,this.planner,validator);
+    this.batchRunner=new BatchRunner(this.formats,this.planner,this.jobs);
   }
 
   async start():Promise<void>{
@@ -218,7 +222,8 @@ export class App {
       "document-standalone","document-toc","archive-operation","archive-compression-level",
       "archive-preserve-paths","archive-input-password","archive-output-password",
       "data-route","data-sheet-policy","data-sheet-select","data-formula-mode",
-      "data-table-select","data-delimiter","data-header","data-query"
+      "data-table-select","data-delimiter","data-header","data-query",
+      "batch-execution","batch-name-template","batch-package-results"
     ];
     for(const id of routeControls){
       element(id).addEventListener("change",()=>{
@@ -236,7 +241,9 @@ export class App {
     element<HTMLButtonElement>("archive-select-all").addEventListener("click",()=>this.setArchiveSelection(true));
     element<HTMLButtonElement>("archive-select-none").addEventListener("click",()=>this.setArchiveSelection(false));
     element<HTMLButtonElement>("convert-button").addEventListener("click",()=>void this.convertAll());
+    element<HTMLButtonElement>("batch-resume-button").addEventListener("click",()=>void this.resumeBatch());
     element<HTMLButtonElement>("cancel-button").addEventListener("click",()=>{
+      this.batchRunner.cancel();
       this.jobs.cancelAll();
       this.archiveAbort?.abort();
     });
@@ -257,6 +264,7 @@ export class App {
   }
 
   private async loadFiles(files:File[]){
+    await this.batchRunner.releaseSession();
     await this.releaseResults();
     this.files=files;
     this.imageDetail=null;
@@ -273,9 +281,11 @@ export class App {
     const allKnown=this.inspections.every(item=>Boolean(item.detection.format));
     this.kind=kinds.size===1&&allKnown
       ? [...kinds][0]
-      : files.length
-        ? "archive-build"
-        : null;
+      : allKnown&&files.length>1
+        ? "batch"
+        : files.length
+          ? "archive-build"
+          : null;
 
     element("file-panel").classList.remove("hidden");
     element("results").classList.add("hidden");
@@ -293,10 +303,10 @@ export class App {
 
     const warnings=this.inspections.flatMap(item=>item.detection.warnings.map(w=>item.name+": "+w));
     if(this.kind==="archive-build"){
-      warnings.push("Mixed or otherwise unsupported selections can be packed into a new local archive.");
+      warnings.push("Unknown or otherwise unsupported selections can still be packed into a new local archive.");
     }else{
       if(known.length!==files.length) warnings.push("At least one file could not be identified.");
-      if(kinds.size>1) warnings.push("Mixed file families must be processed separately.");
+      if(this.kind==="batch") warnings.push("Mixed recognized formats are handled as one batch when they share a safe local target.");
       if(kinds.size===0) warnings.push("This format has no active local conversion workflow.");
       if(this.kind==="specialist"&&known.length===files.length){
         const recognitionOnly=known
@@ -382,6 +392,7 @@ export class App {
     this.updatePdfOptionVisibility();
     this.updateArchiveOptionVisibility();
     this.updateDataOptionVisibility();
+    this.updateBatchControls();
     await this.renderRoute();
   }
 
@@ -456,10 +467,11 @@ export class App {
     element("document-controls").classList.toggle("hidden",this.kind!=="document");
     element("archive-controls").classList.toggle("hidden",this.kind!=="archive"&&this.kind!=="archive-build");
     element("data-controls").classList.toggle("hidden",this.kind!=="spreadsheet"&&this.kind!=="data"&&this.kind!=="database");
+    element("batch-controls").classList.toggle("hidden",this.files.length<2);
     element("metadata-control").classList.toggle(
       "hidden",
       this.kind==="document"||this.kind==="archive"||this.kind==="archive-build"
-        ||this.kind==="spreadsheet"||this.kind==="data"||this.kind==="database"||this.kind==="specialist"||legacyMedia
+        ||this.kind==="spreadsheet"||this.kind==="data"||this.kind==="database"||this.kind==="specialist"||this.kind==="batch"||legacyMedia
     );
     element("pdf-controls").classList.toggle("hidden",this.kind!=="pdf");
     element("archive-pack-selection-button").classList.toggle(
