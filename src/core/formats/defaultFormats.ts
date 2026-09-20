@@ -307,6 +307,85 @@ export const CPIO:FormatDefinition={
   signatures:[],capabilities:{metadata:true},readOnly:true,status:"beta"
 };
 
+
+const isJsonDocument=(bytes:Uint8Array)=>{
+  try{
+    const text=new TextDecoder().decode(bytes.slice(0,Math.min(bytes.length,8192))).replace(/^\uFEFF/,"").trimStart();
+    if(!(text.startsWith("{")||text.startsWith("["))) return false;
+    JSON.parse(text.length<bytes.length?"null":text);
+    return true;
+  }catch{
+    try{
+      const text=new TextDecoder().decode(bytes.slice(0,Math.min(bytes.length,8192))).replace(/^\uFEFF/,"").trimStart();
+      return text.startsWith("{")||text.startsWith("[");
+    }catch{return false;}
+  }
+};
+const isArrowFile=(bytes:Uint8Array)=>bytes.length>=6&&ascii(bytes,0,6)==="ARROW1";
+const isSqlite=(bytes:Uint8Array)=>bytes.length>=16&&ascii(bytes,0,15)==="SQLite format 3"&&bytes[15]===0;
+
+export const XLSX:FormatDefinition={
+  id:"xlsx",name:"Excel XLSX",category:"spreadsheet",extensions:["xlsx"],
+  mimeTypes:["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],
+  signatures:[],capabilities:{metadata:true,multiplePages:true,formulas:true},status:"production"
+};
+export const XLSM:FormatDefinition={
+  id:"xlsm",name:"Excel XLSM",category:"spreadsheet",extensions:["xlsm"],
+  mimeTypes:["application/vnd.ms-excel.sheet.macroEnabled.12"],
+  signatures:[],capabilities:{metadata:true,multiplePages:true,formulas:true,macros:true},readOnly:true,status:"beta"
+};
+export const XLSB:FormatDefinition={
+  id:"xlsb",name:"Excel XLSB",category:"spreadsheet",extensions:["xlsb"],
+  mimeTypes:["application/vnd.ms-excel.sheet.binary.macroEnabled.12"],
+  signatures:[],capabilities:{metadata:true,multiplePages:true,formulas:true,macros:true},status:"production"
+};
+export const XLS:FormatDefinition={
+  id:"xls",name:"Excel XLS",category:"spreadsheet",extensions:["xls"],
+  mimeTypes:["application/vnd.ms-excel"],signatures:[],
+  capabilities:{metadata:true,multiplePages:true,formulas:true,macros:true},status:"production"
+};
+export const ODS:FormatDefinition={
+  id:"ods",name:"OpenDocument Spreadsheet",category:"spreadsheet",extensions:["ods"],
+  mimeTypes:["application/vnd.oasis.opendocument.spreadsheet"],signatures:[],
+  capabilities:{metadata:true,multiplePages:true,formulas:true},status:"production"
+};
+export const FODS:FormatDefinition={
+  id:"fods",name:"Flat OpenDocument Spreadsheet",category:"spreadsheet",extensions:["fods"],
+  mimeTypes:["application/vnd.oasis.opendocument.spreadsheet-flat-xml"],signatures:[],
+  capabilities:{metadata:true,multiplePages:true,formulas:true},status:"production"
+};
+export const CSV:FormatDefinition={
+  id:"csv",name:"CSV",category:"data",extensions:["csv"],mimeTypes:["text/csv","application/csv"],
+  signatures:[],capabilities:{metadata:false},status:"production"
+};
+export const TSV:FormatDefinition={
+  id:"tsv",name:"TSV",category:"data",extensions:["tsv","tab"],mimeTypes:["text/tab-separated-values"],
+  signatures:[],capabilities:{metadata:false},status:"production"
+};
+export const JSON_DATA:FormatDefinition={
+  id:"json-data",name:"JSON",category:"data",extensions:["json"],mimeTypes:["application/json","text/json"],
+  signatures:[],matcher:isJsonDocument,capabilities:{metadata:false},status:"production"
+};
+export const JSONL:FormatDefinition={
+  id:"jsonl",name:"JSON Lines",category:"data",extensions:["jsonl","ndjson"],mimeTypes:["application/x-ndjson","application/ndjson"],
+  signatures:[],capabilities:{metadata:false},status:"production"
+};
+export const PARQUET:FormatDefinition={
+  id:"parquet",name:"Apache Parquet",category:"data",extensions:["parquet"],mimeTypes:["application/vnd.apache.parquet","application/octet-stream"],
+  signatures:[[{offset:0,bytes:[0x50,0x41,0x52,0x31]}]],capabilities:{metadata:true},status:"production"
+};
+export const ARROW:FormatDefinition={
+  id:"arrow",name:"Apache Arrow IPC",category:"data",extensions:["arrow","feather","ipc"],
+  mimeTypes:["application/vnd.apache.arrow.file","application/vnd.apache.arrow.stream","application/octet-stream"],
+  signatures:[[{offset:0,bytes:[0x41,0x52,0x52,0x4f,0x57,0x31]}]],matcher:isArrowFile,
+  capabilities:{metadata:true},status:"production"
+};
+export const SQLITE:FormatDefinition={
+  id:"sqlite",name:"SQLite Database",category:"database",extensions:["sqlite","sqlite3","db","db3"],
+  mimeTypes:["application/vnd.sqlite3","application/x-sqlite3","application/octet-stream"],
+  signatures:[],matcher:isSqlite,capabilities:{metadata:true,multiplePages:true},status:"production"
+};
+
 export const PDF:FormatDefinition={
   id:"pdf",name:"PDF",category:"pdf",extensions:["pdf"],mimeTypes:["application/pdf"],
   signatures:[[{offset:0,bytes:[0x25,0x50,0x44,0x46,0x2d]}]],
@@ -319,7 +398,8 @@ export function createDefaultFormatRegistry():FormatRegistry {
     JPEG,PNG,WEBP,GIF,TIFF,AVIF,HEIC,JXL,SVG,
     MOV,MP4,WEBM_MEDIA,MKV,OGG,AAC,MP3,WAV,FLAC,MPEG_TS,AVI,FLV,PDF,
     DOCX,DOCM,DOC,ODT,RTF,HTML_DOC,MARKDOWN,TXT,LATEX,TYPST,EPUB,PPTX,PPTM,PPT,ODP,
-    ZIP,SEVEN_ZIP,RAR,TAR,GZIP,BZIP2,XZ,ZSTD,TAR_GZIP,TAR_BZIP2,TAR_XZ,CPIO
+    ZIP,SEVEN_ZIP,RAR,TAR,GZIP,BZIP2,XZ,ZSTD,TAR_GZIP,TAR_BZIP2,TAR_XZ,CPIO,
+    XLSX,XLSM,XLSB,XLS,ODS,FODS,CSV,TSV,JSON_DATA,JSONL,PARQUET,ARROW,SQLITE
   ].forEach(format=>registry.register(format));
   return registry;
 }
