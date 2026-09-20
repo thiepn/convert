@@ -8,6 +8,7 @@ const wasmPath = require.resolve("wasm-vips/vips.wasm");
 const libDir = dirname(wasmPath);
 const packageRoot = dirname(libDir);
 const destination = resolve("public/engines/vips");
+const licenses = resolve("public/licenses");
 
 const required = [
   "vips-es6.js",
@@ -20,6 +21,7 @@ const required = [
 
 await rm(destination, { recursive: true, force: true });
 await mkdir(destination, { recursive: true });
+await mkdir(licenses, { recursive: true });
 
 for (const file of required) {
   const source = join(libDir, file);
@@ -43,4 +45,12 @@ for (const file of ["THIRD-PARTY-NOTICES.md", "LICENSE", "versions.json"]) {
   }
 }
 
-console.log("Prepared wasm-vips browser assets in public/engines/vips");
+try {
+  const libheifEntry = require.resolve("libheif-js");
+  const libheifRoot = dirname(libheifEntry);
+  await copyFile(join(libheifRoot, "LICENSE"), join(licenses, "libheif-js-LICENSE.txt"));
+} catch {
+  console.warn("libheif-js license file could not be copied automatically.");
+}
+
+console.log("Prepared pinned local image-engine assets.");
