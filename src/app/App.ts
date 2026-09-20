@@ -298,6 +298,19 @@ export class App {
             this.readArchiveOptions().inputPassword
           );
           warnings.push(...this.archiveDetail.warnings);
+        }else if(this.kind==="spreadsheet"){
+          this.spreadsheetDetail=await this.spreadsheetEngine.inspect(files[0],known[0].detection.format!.id);
+          warnings.push(...this.spreadsheetDetail.warnings);
+        }else if(this.kind==="data"){
+          this.dataDetail=await this.duckDbDataEngine.inspect(
+            files[0],
+            known[0].detection.format!.id,
+            this.readDataOptions()
+          );
+          warnings.push(...this.dataDetail.warnings);
+        }else if(this.kind==="database"){
+          this.databaseDetail=await this.sqliteEngine.inspect(files[0]);
+          warnings.push(...this.databaseDetail.warnings);
         }
       }catch(error){
         const message=error instanceof Error?error.message:String(error);
@@ -311,13 +324,22 @@ export class App {
       }
     }
 
+    this.populateDataSelectors();
+    if(this.kind==="database"&&this.databaseDetail?.tables.length){
+      const selected=this.databaseDetail.tables[0].name;
+      element<HTMLSelectElement>("data-table-select").value=selected;
+      this.dataDetail=await this.sqliteEngine.preview(this.files[0],selected).catch(()=>null);
+    }
+
     this.renderFacts();
     this.renderTracks();
     this.renderArchiveEntries();
+    this.renderDataPreview();
     this.renderWarnings("inspection-warnings",warnings);
     this.populateTargets();
     this.updatePdfOptionVisibility();
     this.updateArchiveOptionVisibility();
+    this.updateDataOptionVisibility();
     await this.renderRoute();
   }
 
