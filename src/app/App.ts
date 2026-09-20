@@ -404,11 +404,16 @@ export class App {
     const source=this.inspections[0]?.detection.format?.id;
     const preferred=this.kind==="image"
       ? source==="heic"?"jpeg":source==="svg"?"webp":source==="png"?"webp":source
-      : source==="mov"||source==="mkv"||source==="webm-media"?"mp4":source;
+      : this.kind==="media"
+        ? (source==="mov"||source==="mkv"||source==="webm-media"?"mp4":source)
+        : this.kind==="document"
+          ? (["markdown","latex","typst","txt","html-doc","epub"].includes(source??"")?"docx":targets.includes("pdf")?"pdf":source)
+          : source;
 
     if(preferred&&targets.includes(preferred)) select.value=preferred;
     else if(this.kind==="media"&&targets.includes("mp4")) select.value="mp4";
     else if(this.kind==="image"&&targets.includes("webp")) select.value="webp";
+    else if(this.kind==="document"&&targets.includes("docx")) select.value="docx";
 
     element<HTMLButtonElement>("convert-button").disabled=targets.length===0;
   }
@@ -446,6 +451,29 @@ export class App {
       targetBytes:targetMb?Math.round(targetMb*1024*1024):undefined,
       extractAudio:this.formats.get(targetId)?.category==="audio",
       hardwareAcceleration:element<HTMLSelectElement>("hardware-acceleration").value as MediaConversionOptions["hardwareAcceleration"]
+    };
+  }
+
+  private async readDocumentOptions():Promise<DocumentConversionOptions>{
+    const reference=element<HTMLInputElement>("document-reference").files?.[0];
+    const resources=[...(element<HTMLInputElement>("document-resources").files??[])].map(file=>({name:file.name,blob:file}));
+    const fontFiles=[...(element<HTMLInputElement>("document-fonts").files??[])];
+    const fonts=await Promise.all(fontFiles.map(async file=>({
+      filename:file.name,
+      data:await file.arrayBuffer()
+    })));
+
+    return {
+      routePreference:element<HTMLSelectElement>("document-route").value as DocumentConversionOptions["routePreference"],
+      trackChanges:element<HTMLSelectElement>("document-track-changes").value as DocumentConversionOptions["trackChanges"],
+      assets:element<HTMLSelectElement>("document-assets").value as DocumentConversionOptions["assets"],
+      standalone:element<HTMLInputElement>("document-standalone").checked,
+      tableOfContents:element<HTMLInputElement>("document-toc").checked,
+      preserveComments:true,
+      referenceDocument:reference,
+      referenceDocumentName:reference?.name,
+      resources,
+      fonts
     };
   }
 
@@ -513,10 +541,39 @@ export class App {
 
     try{
       const uniqueSources=[...new Set(this.inspections.map(i=>i.detection.format!.id))];
-      const routes=uniqueSources.map(source=>this.planner.plan(source,targetId));
+      const documentPreference=this.kind==="document"
+        ? element<HTMLSelectElement>("document-route").value as "semantic"|"fidelity"
+        : undefined;
+      const routes=uniqueSources.map(source=>this.planner.plan(source,targetId,documentPreference));
       const warnings=[...new Set(routes.flatMap(route=>route.warnings.map(w=>w.message)))];
 
-      if(this.kind==="image"){
+      if(this.kind==="document"){
+        const engines=[...new Set(routes.flatMap(route=>route.edges.map(edge=>
+          edge.engineId==="pandoc-document"?"Pandoc WASM"
+          :edge.engineId==="libreoffice-document"?"LibreOffice WASM"
+          :edge.engineId==="pdf-reconstruction"?"PDF text reconstruction"
+          :edge.engineId
+        )))];
+        box.textContent=(this.files.length>1?this.files.length+" documents · ":"")
+          +(this.formats.get(targetId)?.name??targetId)
+          +" · "+engines.join(" → ")
+          +" · "+(documentPreference==="semantic"?"structure/editability priority":"appearance/layout priority");
+        if(documentPreference==="fidelity"){
+          warnings.push("LibreOffice fidelity mode lazy-loads a large local WASM runtime on first use.");
+        }
+        if(this.documentDetail?.macros){
+          warnings.push("Macro payload is present or cannot be ruled out. VBA is never executed; macro-enabled packaged files use semantic conversion only.");
+        }
+        if(this.documentDetail?.externalLinks){
+          warnings.push("External links/resources are not fetched during conversion.");
+        }
+        if(this.documentDetail?.fonts.length&&documentPreference==="fidelity"){
+          warnings.push("Layout fidelity depends on matching fonts; add local font files if substitutions change pagination.");
+        }
+        if(["markdown","txt"].includes(targetId)){
+          warnings.push("The target cannot preserve page layout, floating objects, headers/footers, or presentation positioning.");
+        }
+      }else if(this.kind==="image"){
         box.textContent=(this.files.length>1?this.files.length+" files · ":"")
           +"→ "+(this.formats.get(targetId)?.name??targetId)
           +" · "+[...new Set(routes.flatMap(r=>r.edges.map(e=>
