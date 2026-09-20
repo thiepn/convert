@@ -4,6 +4,11 @@ import type { DetailedMediaInspection } from "../media/types";
 import type { DetailedPdfInspection } from "../pdf/types";
 import type { DetailedDocumentInspection } from "../document/types";
 import type { DetailedArchiveInspection } from "../archive/types";
+import type {
+  DetailedSpreadsheetInspection,
+  DetailedDataInspection,
+  DetailedDatabaseInspection
+} from "../data/types";
 
 export interface ValidationResult {
   valid:boolean;
@@ -188,6 +193,86 @@ export class ArchiveOutputValidator implements OutputValidator {
   }
 }
 
+
+export class SpreadsheetOutputValidator implements OutputValidator {
+  constructor(
+    private readonly formats:FormatRegistry,
+    private readonly probe:(blob:Blob,formatId:string)=>Promise<DetailedSpreadsheetInspection>
+  ) {}
+
+  async validate(blob:Blob,targetFormatId:string,_options:Record<string,unknown>={}):Promise<ValidationResult>{
+    const target=this.formats.get(targetFormatId);
+    const errors:string[]=[];
+    if(blob.size===0) errors.push("Output is empty.");
+    const shallow=await inspectFile(
+      Object.assign(blob,{name:"output."+(target?.extensions[0]??"bin")}),
+      this.formats
+    );
+    if(shallow.detection.format?.id!==targetFormatId){
+      errors.push("Output workbook format does not match requested target.");
+    }
+    let workbook:DetailedSpreadsheetInspection|null=null;
+    try{workbook=await this.probe(blob,targetFormatId);}
+    catch(error){errors.push("Output workbook could not be reopened: "+(error instanceof Error?error.message:String(error)));}
+    if(workbook&&workbook.sheets.length===0) errors.push("Output workbook contains no worksheets.");
+    return {
+      valid:errors.length===0,
+      errors,
+      properties:{format:shallow.detection.format?.id,size:blob.size,sheets:workbook?.sheets.length??null}
+    };
+  }
+}
+
+export class DataOutputValidator implements OutputValidator {
+  constructor(
+    private readonly formats:FormatRegistry,
+    private readonly probe:(blob:Blob,formatId:string,options?:Record<string,unknown>)=>Promise<DetailedDataInspection>
+  ) {}
+
+  async validate(blob:Blob,targetFormatId:string,options:Record<string,unknown>={}):Promise<ValidationResult>{
+    const target=this.formats.get(targetFormatId);
+    const errors:string[]=[];
+    if(blob.size===0) errors.push("Output is empty.");
+    const shallow=await inspectFile(
+      Object.assign(blob,{name:"output."+(target?.extensions[0]??"bin")}),
+      this.formats
+    );
+    if(shallow.detection.format?.id!==targetFormatId){
+      errors.push("Output data format does not match requested target.");
+    }
+    let data:DetailedDataInspection|null=null;
+    try{data=await this.probe(blob,targetFormatId,options);}
+    catch(error){errors.push("Output data could not be reopened: "+(error instanceof Error?error.message:String(error)));}
+    return {
+      valid:errors.length===0,
+      errors,
+      properties:{format:shallow.detection.format?.id,size:blob.size,rows:data?.rows??null,columns:data?.columns.length??null}
+    };
+  }
+}
+
+export class DatabaseOutputValidator implements OutputValidator {
+  constructor(
+    private readonly formats:FormatRegistry,
+    private readonly probe:(blob:Blob)=>Promise<DetailedDatabaseInspection>
+  ) {}
+
+  async validate(blob:Blob,targetFormatId:string,_options:Record<string,unknown>={}):Promise<ValidationResult>{
+    const errors:string[]=[];
+    if(blob.size===0) errors.push("Output is empty.");
+    const shallow=await inspectFile(Object.assign(blob,{name:"output.sqlite"}),this.formats);
+    if(shallow.detection.format?.id!=="sqlite") errors.push("Output signature is not SQLite.");
+    let database:DetailedDatabaseInspection|null=null;
+    try{database=await this.probe(blob);}
+    catch(error){errors.push("Output SQLite database could not be reopened: "+(error instanceof Error?error.message:String(error)));}
+    return {
+      valid:errors.length===0,
+      errors,
+      properties:{format:targetFormatId,size:blob.size,tables:database?.tables.length??null}
+    };
+  }
+}
+
 export class UniversalOutputValidator implements OutputValidator {
   constructor(
     private readonly formats:FormatRegistry,
@@ -195,7 +280,10 @@ export class UniversalOutputValidator implements OutputValidator {
     private readonly media:MediaOutputValidator,
     private readonly pdf:PdfOutputValidator,
     private readonly document:DocumentOutputValidator,
-    private readonly archive:ArchiveOutputValidator
+    private readonly archive:ArchiveOutputValidator,
+    private readonly spreadsheet:SpreadsheetOutputValidator,
+    private readonly data:DataOutputValidator,
+    private readonly database:DatabaseOutputValidator
   ) {}
 
   validate(blob:Blob,targetFormatId:string,options:Record<string,unknown>={}):Promise<ValidationResult>{
@@ -205,6 +293,9 @@ export class UniversalOutputValidator implements OutputValidator {
     if(category==="pdf") return this.pdf.validate(blob,targetFormatId,options);
     if(category==="document") return this.document.validate(blob,targetFormatId,options);
     if(category==="archive") return this.archive.validate(blob,targetFormatId,options);
+    if(category==="spreadsheet") return this.spreadsheet.validate(blob,targetFormatId,options);
+    if(category==="data") return this.data.validate(blob,targetFormatId,options);
+    if(category==="database") return this.database.validate(blob,targetFormatId,options);
     return Promise.resolve({valid:blob.size>0,errors:blob.size?[]:["Output is empty."],properties:{size:blob.size}});
   }
 }
