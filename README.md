@@ -4,7 +4,7 @@ A local-first universal browser file-conversion platform.
 
 ## Current status
 
-Phase 8 — Batch Conversion & Pipelines is implemented on top of the verified Phase 7 conversion stack.
+Phase 9 — Mobile, Performance & Large Files is implemented on top of the verified Phase 8 batch/pipeline stack.
 
 ### Images
 
@@ -96,6 +96,23 @@ Phase 8 adds a first-class batch scheduler over the existing conversion graph:
 
 See docs/batch-pipelines.md for execution semantics and limits.
 
+### Mobile, performance & large files
+
+Phase 9 adds a centralized device profile and route-aware memory/storage preflight:
+
+- device-scaled RAM, image, archive, and batch budgets
+- proper distinction between buffered, streaming, and bounded-slice inputs
+- multi-gigabyte primary-media input support when storage/output constraints allow it
+- chunked camera-RAW embedded-preview scanning
+- OPFS-streamed Phase 8 batch ZIP packaging
+- orphaned-workspace cleanup
+- device-scaled libvips threads/cache and batch concurrency
+- bounded DOM rendering for very large batch/archive lists
+- cache-first large WASM engine assets
+- safe-area-aware, denser mobile UI with sticky actions
+
+See docs/mobile-performance-large-files.md for exact behavior and remaining memory-backed boundaries.
+
 ## Development
 
 Requirements: Node.js 22 or newer.
@@ -113,7 +130,7 @@ Checks:
 
 Conversion jobs do not upload files. Spreadsheet contents, database tables, SQL text, passwords, OCR data, document resources, fonts, archive entries, and generated outputs remain local to the browser.
 
-See docs/privacy-model.md, docs/architecture.md, docs/image-engine.md, docs/media-engine.md, docs/pdf-engine.md, docs/document-engine.md, docs/archive-engine.md, docs/data-engine.md, docs/specialist-engine.md, and docs/batch-pipelines.md.
+See docs/privacy-model.md, docs/architecture.md, docs/image-engine.md, docs/media-engine.md, docs/pdf-engine.md, docs/document-engine.md, docs/archive-engine.md, docs/data-engine.md, docs/specialist-engine.md, docs/batch-pipelines.md, and docs/mobile-performance-large-files.md.
 
 ## Licensing
 
@@ -130,3 +147,4 @@ Dependency/license metadata lives in licenses/dependencies.json. Notable compone
 - Phase 6: spreadsheets, data, and databases — implemented
 - Phase 7: advanced and legacy format coverage — implemented
 - Phase 8: batch conversion and pipelines — implemented
+- Phase 9: mobile, performance, and large files — implemented
