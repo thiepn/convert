@@ -4,52 +4,48 @@ A local-first universal file conversion platform for desktop and mobile browsers
 
 ## Current status
 
-Phase 0 is implemented. The repository currently focuses on the conversion architecture rather than broad format coverage.
+Phase 1 — Production Image Engine is implemented on top of the Phase 0 conversion architecture.
 
-Implemented foundation:
+Current image support:
+- JPEG
+- PNG
+- WebP
+- GIF
+- TIFF
+- AVIF
+- HEIC / HEIF input
+- JPEG XL
+- SVG input / rasterization
 
-- runtime capability detection
-- magic-byte-first format inspection
-- format registry
-- engine registry
-- conversion graph and loss-aware route planner
-- cancellable worker-isolated conversion engine contract
-- OPFS transactional temporary workspaces
-- storage and decoded-image safety preflight
-- independent output validation
-- external-network conversion guard
-- offline service worker
-- COOP/COEP deployment configuration
-- minimal diagnostics and conversion UI
-- real local JPEG / PNG / WebP proof conversions
-- automated unit tests and CI
+The primary path is wasm-vips in a dedicated worker. Real HEIC input uses a separate local HEVC decoder before entering the libvips pipeline. The Phase 0 browser canvas engine remains as a degraded JPEG/PNG/WebP fallback.
 
-The browser image engine in Phase 0 is intentionally a proof engine. It uses browser canvas APIs and strips metadata. Phase 1 replaces it with the production image architecture.
+Phase 1 includes content-based detection, detailed image inspection, same-format optimization, resize presets, metadata policies, transparency handling, animation/multipage awareness, lossless preference, target-size search, batch conversion, local ZIP packaging, worker recycling, resource guards, and independent output validation.
 
 ## Development
 
 Requirements: Node.js 22 or newer.
 
-npm install
-npm run dev
+    npm install
+    npm run dev
 
 Checks:
 
-npm test
-npm run typecheck
-npm run build
+    npm test
+    npm run typecheck
+    npm run build
 
 ## Privacy
 
-Conversion jobs do not upload files. Processing happens inside the browser. Application and engine assets may be downloaded from this site's own origin and cached for offline use.
+Conversion jobs do not upload files. Processing happens inside the browser. Application and engine assets are downloaded from this site's own origin and cached for offline use.
 
-See docs/privacy-model.md and docs/architecture.md.
+See docs/privacy-model.md, docs/architecture.md, and docs/image-engine.md.
 
 ## Roadmap
 
-Phase 1: production image engine
-Phase 2: audio and video
-Phase 3: PDF
-Phase 4: documents and Office
-Phase 5: archives
-Phase 6: spreadsheets, data, and databases
+- Phase 0: foundation — implemented
+- Phase 1: production image engine — implemented
+- Phase 2: audio and video
+- Phase 3: PDF
+- Phase 4: documents and Office
+- Phase 5: archives
+- Phase 6: spreadsheets, data, and databases
