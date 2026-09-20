@@ -100,7 +100,8 @@ async function convertDocument(request:Extract<PandocWorkerRequest,{type:"conver
   }
 
   if(request.options.referenceDocument&&["docx","odt","pptx"].includes(request.targetFormatId)){
-    const referenceName=request.options.referenceDocumentName||("reference."+EXTENSION[request.targetFormatId]);
+    const rawReferenceName=request.options.referenceDocumentName||("reference."+EXTENSION[request.targetFormatId]);
+    const referenceName=rawReferenceName.replace(/^[/\\]+/,"").replace(/\.\.(?:[/\\]|$)/g,"_");
     files[referenceName]=request.options.referenceDocument;
     options["reference-doc"]=referenceName;
   }
