@@ -21,6 +21,7 @@ import {
   assertExtractionBudget,
   normalizeArchivePath
 } from "../../core/archive/security";
+import { getDeviceProfile } from "../../core/performance/DeviceProfile";
 import type {
   ArchiveConversionOptions,
   ArchiveEntryInfo,
@@ -101,9 +102,14 @@ export class ArchiveEngine implements ConversionEngine{
   }
 
   async estimate(source:Blob):Promise<ConversionEstimate>{
+    const memoryBytes=Math.max(256*1024*1024,source.size*3);
     return {
-      temporaryBytes:Math.max(256*1024*1024,source.size*3),
+      temporaryBytes:memoryBytes,
+      memoryBytes,
+      workspaceBytes:Math.max(96*1024*1024,source.size*1.5),
       outputBytes:null,
+      sourceAccess:"buffered",
+      outputAccess:"streaming",
       notes:[
         "Archive repacking materializes extracted entries in browser memory.",
         "ZIP output streams incrementally when an OPFS output handle is available."
@@ -158,10 +164,16 @@ export class ArchiveEngine implements ConversionEngine{
       path:normalizeArchivePath(item.path)
     })));
     const total=normalized.reduce((sum,item)=>sum+item.blob.size,0);
-    const mobile=typeof matchMedia==="function"&&matchMedia("(pointer: coarse)").matches;
-    const maxTotal=mobile?256*1024*1024:1024*1024*1024;
+    const profile=getDeviceProfile();
+    const streamingZip=targetFormatId==="zip"&&Boolean(outputHandle);
+    const maxTotal=streamingZip
+      ?Math.max(profile.maxArchiveExpandedBytes,8*1024*1024*1024)
+      :profile.maxArchiveExpandedBytes;
     if(total>maxTotal){
-      throw new Error("ARCHIVE_CREATE_BUDGET: Selected files exceed the browser archive-creation memory budget.");
+      throw new Error(
+        "ARCHIVE_CREATE_BUDGET: Selected files exceed this device's "
+        +(streamingZip?"streaming archive":"memory-backed archive")+" budget."
+      );
     }
 
     const merged={...defaultOptions(),...options};
