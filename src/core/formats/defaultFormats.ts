@@ -241,6 +241,72 @@ export const ODP:FormatDefinition={
   signatures:[],capabilities:{metadata:true,multiplePages:true},status:"production"
 };
 
+
+const isTar=(bytes:Uint8Array)=>bytes.length>=262&&ascii(bytes,257,5)==="ustar";
+
+export const ZIP:FormatDefinition={
+  id:"zip",name:"ZIP",category:"archive",extensions:["zip","zipx"],mimeTypes:["application/zip","application/x-zip-compressed"],
+  signatures:[
+    [{offset:0,bytes:[0x50,0x4b,0x03,0x04]}],
+    [{offset:0,bytes:[0x50,0x4b,0x05,0x06]}],
+    [{offset:0,bytes:[0x50,0x4b,0x07,0x08]}]
+  ],
+  capabilities:{metadata:true},status:"production"
+};
+export const SEVEN_ZIP:FormatDefinition={
+  id:"7z",name:"7-Zip",category:"archive",extensions:["7z"],mimeTypes:["application/x-7z-compressed"],
+  signatures:[[{offset:0,bytes:[0x37,0x7a,0xbc,0xaf,0x27,0x1c]}]],
+  capabilities:{metadata:true},status:"production"
+};
+export const RAR:FormatDefinition={
+  id:"rar",name:"RAR",category:"archive",extensions:["rar"],mimeTypes:["application/vnd.rar","application/x-rar-compressed"],
+  signatures:[
+    [{offset:0,bytes:[0x52,0x61,0x72,0x21,0x1a,0x07,0x00]}],
+    [{offset:0,bytes:[0x52,0x61,0x72,0x21,0x1a,0x07,0x01,0x00]}]
+  ],
+  capabilities:{metadata:true},readOnly:true,status:"production"
+};
+export const TAR:FormatDefinition={
+  id:"tar",name:"TAR",category:"archive",extensions:["tar"],mimeTypes:["application/x-tar"],
+  signatures:[],matcher:isTar,capabilities:{metadata:true},status:"production"
+};
+export const GZIP:FormatDefinition={
+  id:"gzip",name:"GZIP",category:"archive",extensions:["gz","gzip"],mimeTypes:["application/gzip","application/x-gzip"],
+  signatures:[[{offset:0,bytes:[0x1f,0x8b]}]],
+  capabilities:{metadata:true},status:"production"
+};
+export const BZIP2:FormatDefinition={
+  id:"bzip2",name:"BZIP2",category:"archive",extensions:["bz2","bzip2"],mimeTypes:["application/x-bzip2"],
+  signatures:[[{offset:0,bytes:[0x42,0x5a,0x68]}]],
+  capabilities:{metadata:true},status:"production"
+};
+export const XZ:FormatDefinition={
+  id:"xz",name:"XZ",category:"archive",extensions:["xz"],mimeTypes:["application/x-xz"],
+  signatures:[[{offset:0,bytes:[0xfd,0x37,0x7a,0x58,0x5a,0x00]}]],
+  capabilities:{metadata:true},status:"production"
+};
+export const ZSTD:FormatDefinition={
+  id:"zstd",name:"Zstandard",category:"archive",extensions:["zst","zstd"],mimeTypes:["application/zstd","application/x-zstd"],
+  signatures:[[{offset:0,bytes:[0x28,0xb5,0x2f,0xfd]}]],
+  capabilities:{metadata:true},status:"beta"
+};
+export const TAR_GZIP:FormatDefinition={
+  id:"tar-gzip",name:"TAR.GZ",category:"archive",extensions:["tgz"],mimeTypes:["application/gzip"],
+  signatures:[],capabilities:{metadata:true},status:"production"
+};
+export const TAR_BZIP2:FormatDefinition={
+  id:"tar-bzip2",name:"TAR.BZ2",category:"archive",extensions:["tbz","tbz2"],mimeTypes:["application/x-bzip2"],
+  signatures:[],capabilities:{metadata:true},status:"production"
+};
+export const TAR_XZ:FormatDefinition={
+  id:"tar-xz",name:"TAR.XZ",category:"archive",extensions:["txz"],mimeTypes:["application/x-xz"],
+  signatures:[],capabilities:{metadata:true},status:"production"
+};
+export const CPIO:FormatDefinition={
+  id:"cpio",name:"CPIO",category:"archive",extensions:["cpio"],mimeTypes:["application/x-cpio"],
+  signatures:[],capabilities:{metadata:true},readOnly:true,status:"beta"
+};
+
 export const PDF:FormatDefinition={
   id:"pdf",name:"PDF",category:"pdf",extensions:["pdf"],mimeTypes:["application/pdf"],
   signatures:[[{offset:0,bytes:[0x25,0x50,0x44,0x46,0x2d]}]],
@@ -252,7 +318,8 @@ export function createDefaultFormatRegistry():FormatRegistry {
   [
     JPEG,PNG,WEBP,GIF,TIFF,AVIF,HEIC,JXL,SVG,
     MOV,MP4,WEBM_MEDIA,MKV,OGG,AAC,MP3,WAV,FLAC,MPEG_TS,AVI,FLV,PDF,
-    DOCX,DOCM,DOC,ODT,RTF,HTML_DOC,MARKDOWN,TXT,LATEX,TYPST,EPUB,PPTX,PPTM,PPT,ODP
+    DOCX,DOCM,DOC,ODT,RTF,HTML_DOC,MARKDOWN,TXT,LATEX,TYPST,EPUB,PPTX,PPTM,PPT,ODP,
+    ZIP,SEVEN_ZIP,RAR,TAR,GZIP,BZIP2,XZ,ZSTD,TAR_GZIP,TAR_BZIP2,TAR_XZ,CPIO
   ].forEach(format=>registry.register(format));
   return registry;
 }
