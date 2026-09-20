@@ -1,6 +1,6 @@
 {
   "phase": 10,
-  "reviewed_on": "2026-09-20",
+  "reviewed_on": "2026-09-21",
   "dependencies": [
     {
       "name": "wasm-vips",
@@ -139,6 +139,12 @@
       "version": "0.12.10",
       "declared_license": "GPL-2.0-or-later",
       "notes": "Single-thread FFmpeg WASM core for AVI/FLV/ASF/WMV/WMA fallback transcoding. Distribution must satisfy GPL obligations."
+    },
+    {
+      "name": "@playwright/test",
+      "version": "1.63.0",
+      "license": "Apache-2.0",
+      "role": "development/browser production smoke testing"
     }
   ]
 }
