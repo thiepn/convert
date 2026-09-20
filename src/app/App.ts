@@ -4,6 +4,7 @@ import { detectCapabilities } from "../core/capabilities/detectCapabilities";
 import { EngineRegistry } from "../core/engines/EngineRegistry";
 import { createDefaultFormatRegistry } from "../core/formats/defaultFormats";
 import type { DetailedImageInspection, ImageConversionOptions } from "../core/image/types";
+import type { DetailedDocumentInspection, DocumentConversionOptions } from "../core/document/types";
 import type { FileInspection } from "../core/inspection/inspectFile";
 import { inspectFile } from "../core/inspection/inspectFile";
 import { JobManager } from "../core/jobs/JobManager";
@@ -16,14 +17,19 @@ import {
   ImageOutputValidator,
   MediaOutputValidator,
   PdfOutputValidator,
+  DocumentOutputValidator,
   UniversalOutputValidator
 } from "../core/validation/Validator";
 import { BrowserImageEngine } from "../engines/browser-image/BrowserImageEngine";
 import { VipsImageEngine } from "../engines/image/VipsImageEngine";
 import { MediaEngine } from "../engines/media/MediaEngine";
 import { PdfEngine } from "../engines/pdf/PdfEngine";
+import { DocumentInspector } from "../engines/document/DocumentInspector";
+import { PandocDocumentEngine } from "../engines/document/PandocDocumentEngine";
+import { OfficeDocumentEngine } from "../engines/document/OfficeDocumentEngine";
+import { PdfReconstructionEngine } from "../engines/document/PdfReconstructionEngine";
 
-type SelectionKind="image"|"media"|"pdf"|null;
+type SelectionKind="image"|"media"|"pdf"|"document"|null;
 type ResultLease={url:string;release?:()=>Promise<void>};
 
 function element<T extends HTMLElement>(id:string):T {
@@ -75,6 +81,10 @@ export class App {
   private readonly imageEngine=new VipsImageEngine();
   private readonly mediaEngine=new MediaEngine();
   private readonly pdfEngine=new PdfEngine();
+  private readonly documentInspector=new DocumentInspector();
+  private readonly pandocDocumentEngine=new PandocDocumentEngine();
+  private readonly officeDocumentEngine=new OfficeDocumentEngine();
+  private readonly pdfReconstructionEngine=new PdfReconstructionEngine(this.pdfEngine,this.pandocDocumentEngine);
   private readonly planner:ConversionPlanner;
   private readonly jobs:JobManager;
 
@@ -83,6 +93,7 @@ export class App {
   private imageDetail:DetailedImageInspection|null=null;
   private mediaDetail:DetailedMediaInspection|null=null;
   private pdfDetail:DetailedPdfInspection|null=null;
+  private documentDetail:DetailedDocumentInspection|null=null;
   private kind:SelectionKind=null;
   private leases:ResultLease[]=[];
   private routeRevision=0;
@@ -92,6 +103,9 @@ export class App {
     this.engines.register(new BrowserImageEngine());
     this.engines.register(this.mediaEngine);
     this.engines.register(this.pdfEngine);
+    this.engines.register(this.pandocDocumentEngine);
+    this.engines.register(this.officeDocumentEngine);
+    this.engines.register(this.pdfReconstructionEngine);
     this.planner=new ConversionPlanner(this.graph,this.formats,this.engines);
 
     const validator=new UniversalOutputValidator(
@@ -101,7 +115,8 @@ export class App {
         return {width:detail.width,height:detail.height};
       }),
       new MediaOutputValidator(this.formats,blob=>this.mediaEngine.inspect(blob)),
-      new PdfOutputValidator(this.formats,(blob,password)=>this.pdfEngine.inspect(blob,password))
+      new PdfOutputValidator(this.formats,(blob,password)=>this.pdfEngine.inspect(blob,password)),
+      new DocumentOutputValidator(this.formats,(blob,formatId)=>this.documentInspector.inspect(blob,formatId))
     );
     this.jobs=new JobManager(this.formats,this.engines,this.planner,validator);
   }
@@ -137,7 +152,8 @@ export class App {
       "audio-codec","video-bitrate","audio-bitrate","media-target-size","trim-start","trim-end",
       "hardware-acceleration","pdf-operation","pdf-pages","pdf-split-groups","pdf-order",
       "pdf-image-format","pdf-image-quality","pdf-dpi","pdf-ocr-language","pdf-ocr-pages",
-      "pdf-rotation"
+      "pdf-rotation","document-route","document-track-changes","document-assets",
+      "document-standalone","document-toc"
     ];
     for(const id of routeControls){
       element(id).addEventListener("change",()=>{
@@ -156,6 +172,7 @@ export class App {
     if(category==="image") return "image";
     if(category==="audio"||category==="video") return "media";
     if(category==="pdf") return "pdf";
+    if(category==="document") return "document";
     return null;
   }
 
@@ -165,6 +182,7 @@ export class App {
     this.imageDetail=null;
     this.mediaDetail=null;
     this.pdfDetail=null;
+    this.documentDetail=null;
     this.inspections=await Promise.all(files.map(file=>inspectFile(file,this.formats)));
 
     const kinds=new Set(this.inspections.map(i=>this.getKind(i)).filter(Boolean) as Exclude<SelectionKind,null>[]);
@@ -203,6 +221,9 @@ export class App {
           const password=this.readPdfPassword();
           this.pdfDetail=await this.pdfEngine.inspect(files[0],password);
           warnings.push(...this.pdfDetail.warnings);
+        }else if(this.kind==="document"){
+          this.documentDetail=await this.documentInspector.inspect(files[0],known[0].detection.format!.id);
+          warnings.push(...this.documentDetail.warnings);
         }
       }catch(error){
         const message=error instanceof Error?error.message:String(error);
@@ -241,6 +262,8 @@ export class App {
     element("common-controls").classList.toggle("hidden",this.kind==="pdf");
     element("image-controls").classList.toggle("hidden",this.kind!=="image");
     element("media-controls").classList.toggle("hidden",this.kind!=="media");
+    element("document-controls").classList.toggle("hidden",this.kind!=="document");
+    element("metadata-control").classList.toggle("hidden",this.kind==="document");
     element("pdf-controls").classList.toggle("hidden",this.kind!=="pdf");
   }
 
