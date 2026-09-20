@@ -135,7 +135,8 @@ async function loadImage(vips:any,source:Blob,sourceFormatId:string,preserveAnim
 }
 
 function safeLimits(inspect:DetailedImageInspection) {
-  const nav=navigator as any;\n  const mobile=(nav.maxTouchPoints ?? 0)>0 && (nav.hardwareConcurrency ?? 8)<=8;
+  const nav=navigator as any;
+  const mobile=(nav.maxTouchPoints ?? 0)>0 && (nav.hardwareConcurrency ?? 8)<=8;
   const maxPixels=mobile ? 80_000_000 : 200_000_000;
   const totalPixels=inspect.width*inspect.height*inspect.frames;
   if (!Number.isSafeInteger(totalPixels) || totalPixels>maxPixels) throw new Error("IMAGE_DIMENSIONS_UNSAFE: Decoded pixel count exceeds this device's safety limit.");
