@@ -8,6 +8,8 @@ import type {
 } from "../../core/engines/Engine";
 import type { DataColumnInfo, DataConversionOptions, DetailedDataInspection } from "../../core/data/types";
 import { validateLocalSelectQuery } from "../../core/data/querySecurity";
+import { assertMemoryBackedSource } from "../../core/performance/Budget";
+import { getDeviceProfile } from "../../core/performance/DeviceProfile";
 
 const INPUTS=new Set(["csv","tsv","json-data","jsonl","parquet","arrow"]);
 const OUTPUTS=new Set(["csv","tsv","json-data","jsonl","parquet","arrow"]);
@@ -66,11 +68,28 @@ export class DuckDbDataEngine implements ConversionEngine{
     return INPUTS.has(from)&&OUTPUTS.has(to);
   }
 
-  async estimate(source:Blob):Promise<ConversionEstimate>{
+  async estimate(source:Blob,from:string,to:string):Promise<ConversionEstimate>{
+    const profile=getDeviceProfile();
+    const arrowInput=from==="arrow";
+    const arrowOutput=to==="arrow";
+    const memoryBytes=arrowInput||arrowOutput
+      ?Math.max(256*1024*1024,Math.min(source.size*2,1024*1024*1024))
+      :Math.max(256*1024*1024,Math.min(source.size*.25,768*1024*1024));
     return {
-      temporaryBytes:Math.max(256*1024*1024,Math.min(source.size*2,1024*1024*1024)),
+      temporaryBytes:memoryBytes,
+      memoryBytes,
+      workspaceBytes:Math.max(96*1024*1024,Math.ceil(source.size*1.25)),
       outputBytes:null,
-      notes:["CSV/JSON/Parquet inputs use DuckDB's browser file reader; Arrow IPC parsing is memory-backed."]
+      sourceAccess:arrowInput?"buffered":"streaming",
+      outputAccess:"buffered",
+      notes:[
+        arrowInput
+          ?"Arrow IPC parsing is memory-backed."
+          :"CSV/JSON/Parquet source access uses DuckDB's lazy browser file reader.",
+        profile.opfs
+          ?"Final output is staged in the local workspace after DuckDB export."
+          :"DuckDB export is materialized in browser memory on this runtime."
+      ]
     };
   }
 
@@ -192,9 +211,7 @@ export class DuckDbDataEngine implements ConversionEngine{
     const fileName="input-"+crypto.randomUUID()+this.extensionFor(formatId);
     try{
       if(formatId==="arrow"){
-        const mobile=typeof matchMedia==="function"&&matchMedia("(pointer: coarse)").matches;
-        const limit=mobile?128*1024*1024:512*1024*1024;
-        if(source.size>limit) throw new Error("ARROW_MEMORY_LIMIT: Arrow IPC input exceeds this device's browser memory budget.");
+        assertMemoryBackedSource(source.size,"Arrow IPC parsing",2,768*1024*1024);
         const table=tableFromIPC(new Uint8Array(await source.arrayBuffer()));
         await conn.insertArrowTable(table as any,{name:"data"});
       }else{
