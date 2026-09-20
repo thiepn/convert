@@ -8,11 +8,11 @@ import { defaultImageSettings } from "../../core/image/types";
 import type { VipsWorkerResponse } from "./messages";
 
 const INPUTS = new Set(["jpeg", "png", "webp", "gif", "tiff", "bmp", "avif", "heif", "jxl", "svg"]);
-const OUTPUTS = new Set(["jpeg", "png", "webp", "gif", "tiff", "avif", "heif", "jxl"]);
+const OUTPUTS = new Set(["jpeg", "png", "webp", "gif", "tiff", "avif", "jxl"]);
 
 function requiredLibraries(from: string, to: string): string[] {
   const libraries = new Set<string>();
-  if (["avif", "heif"].includes(from) || ["avif", "heif"].includes(to)) libraries.add("vips-heif.wasm");
+  if (from === "avif" || to === "avif") libraries.add("vips-heif.wasm");
   if (from === "jxl" || to === "jxl") libraries.add("vips-jxl.wasm");
   if (from === "svg") libraries.add("vips-resvg.wasm");
   return [...libraries];
@@ -40,11 +40,14 @@ export class VipsImageEngine implements ConversionEngine {
     return INPUTS.has(from) && OUTPUTS.has(to);
   }
 
-  async estimate(source: Blob): Promise<ConversionEstimate> {
+  async estimate(source: Blob, from: string): Promise<ConversionEstimate> {
+    const multiplier = from === "heif" ? 3 : 1.5;
     return {
-      temporaryBytes: Math.max(source.size * 1.5, 128 * 1024 * 1024),
+      temporaryBytes: Math.max(source.size * multiplier, 160 * 1024 * 1024),
       outputBytes: null,
-      notes: ["wasm-vips processing is isolated in a disposable worker and uses demand-driven image evaluation where supported."]
+      notes: [from === "heif"
+        ? "HEIC/HEIF is decoded locally through a dedicated libheif worker path before image processing."
+        : "wasm-vips runs in a disposable worker and uses demand-driven image evaluation where supported."]
     };
   }
 
