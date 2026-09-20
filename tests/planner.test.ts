@@ -60,6 +60,13 @@ describe("ConversionPlanner",()=>{
     expect(route.warnings.some(w=>w.code==="METADATA_LOSS")).toBe(true);
   });
 
+  it("does not leak PDF reconstruction targets into image inputs",()=>{
+    const targets=planner.availableTargets("jpeg");
+    expect(targets).toContain("pdf");
+    expect(targets).not.toContain("docx");
+    expect(()=>planner.plan("jpeg","docx","semantic")).toThrow();
+  });
+
   it("advertises PDF and semantic targets from document inputs",()=>{
     const targets=planner.availableTargets("docx");
     expect(targets).toContain("pdf");
