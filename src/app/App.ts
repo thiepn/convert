@@ -259,7 +259,7 @@ export class App {
       for(let index=0;index<this.files.length;index++){
         const file=this.files[index];
         try {
-          const output=await this.jobs.convert(file,targetId,quality,options,snapshot=>{
+          const output=await this.jobs.convert(file,targetId,quality,options as unknown as Record<string,unknown>,snapshot=>{
             const overall=(index+snapshot.progress)/this.files.length;
             element("job-stage").textContent=this.files.length>1
               ?"File "+(index+1)+"/"+this.files.length+" · "+snapshot.stage
