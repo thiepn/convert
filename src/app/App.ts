@@ -1014,6 +1014,7 @@ export class App {
           handle,
           (_progress,stage)=>this.setProgress(1,"Packaging results · "+stage)
         );
+        const retainedPackageWorkspace=packageWorkspace;
         expanded.push({
           name:"converted-files.zip",
           blob:packaged.blob,
@@ -1022,7 +1023,9 @@ export class App {
               ?"Local Phase 9 batch package streamed into OPFS."
               :"Local batch package; this browser could not provide OPFS streaming."
           ],
-          release:packageWorkspace?async()=>packageWorkspace?.cleanup():undefined
+          release:retainedPackageWorkspace
+            ?async()=>{await retainedPackageWorkspace.cleanup();}
+            :undefined
         });
         packageWorkspace=null;
       }catch(error){
