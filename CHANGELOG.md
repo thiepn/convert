@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.1 — 2026-09-21
+
+Post-v1 production hardening release.
+
+### Fixed
+- add an official certified GitHub Pages deployment workflow for the Vite production build
+- add real-browser production smoke testing across Chromium, Firefox, WebKit, and mobile emulation
+- certify the GitHub Pages service-worker cross-origin-isolation fallback
+- add real-file conversion smoke coverage across major engine families
+
 ## 1.0.0 — 2026-09-20
 
 First stable release of Thiepn Convert.
