@@ -15,5 +15,6 @@ export interface ConversionOutput {
   formatId:string;
   jobId:string;
   warnings:string[];
+  extraFiles?:Array<{name:string;blob:Blob}>;
   release?:()=>Promise<void>;
 }

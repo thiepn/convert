@@ -163,6 +163,84 @@ export const FLV:FormatDefinition={
   capabilities:{metadata:true,multipleStreams:true},readOnly:true,status:"experimental"
 };
 
+
+const isRtf=(bytes:Uint8Array)=>{
+  try{return new TextDecoder().decode(bytes.slice(0,16)).startsWith("{\\rtf");}catch{return false;}
+};
+const isHtmlDocument=(bytes:Uint8Array)=>{
+  try{
+    const text=new TextDecoder().decode(bytes.slice(0,Math.min(bytes.length,8192))).replace(/^\uFEFF/,"").trimStart();
+    return /^(?:<!doctype\s+html|<html(?:\s|>))/i.test(text);
+  }catch{return false;}
+};
+const isLatexDocument=(bytes:Uint8Array)=>{
+  try{
+    const text=new TextDecoder().decode(bytes.slice(0,Math.min(bytes.length,8192)));
+    return /\\(?:documentclass|begin\s*\{document\})/.test(text);
+  }catch{return false;}
+};
+
+export const DOCX:FormatDefinition={
+  id:"docx",name:"Word DOCX",category:"document",extensions:["docx"],mimeTypes:["application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+  signatures:[],capabilities:{metadata:true,multiplePages:true},status:"production"
+};
+export const DOCM:FormatDefinition={
+  id:"docm",name:"Word DOCM",category:"document",extensions:["docm"],mimeTypes:["application/vnd.ms-word.document.macroEnabled.12"],
+  signatures:[],capabilities:{metadata:true,multiplePages:true,macros:true},readOnly:true,status:"beta"
+};
+export const DOC:FormatDefinition={
+  id:"doc",name:"Word DOC",category:"document",extensions:["doc"],mimeTypes:["application/msword"],
+  signatures:[],capabilities:{metadata:true,multiplePages:true,macros:true},readOnly:true,status:"beta"
+};
+export const ODT:FormatDefinition={
+  id:"odt",name:"OpenDocument Text",category:"document",extensions:["odt"],mimeTypes:["application/vnd.oasis.opendocument.text"],
+  signatures:[],capabilities:{metadata:true,multiplePages:true},status:"production"
+};
+export const RTF:FormatDefinition={
+  id:"rtf",name:"Rich Text Format",category:"document",extensions:["rtf"],mimeTypes:["application/rtf","text/rtf"],
+  signatures:[],matcher:isRtf,capabilities:{metadata:true},status:"production"
+};
+export const HTML_DOC:FormatDefinition={
+  id:"html-doc",name:"HTML",category:"document",extensions:["html","htm"],mimeTypes:["text/html"],
+  signatures:[],matcher:isHtmlDocument,capabilities:{metadata:true},status:"production"
+};
+export const MARKDOWN:FormatDefinition={
+  id:"markdown",name:"Markdown",category:"document",extensions:["md","markdown","mdown","mkd"],mimeTypes:["text/markdown"],
+  signatures:[],capabilities:{metadata:true},status:"production"
+};
+export const TXT:FormatDefinition={
+  id:"txt",name:"Plain Text",category:"document",extensions:["txt","text"],mimeTypes:["text/plain"],
+  signatures:[],capabilities:{metadata:false},status:"production"
+};
+export const LATEX:FormatDefinition={
+  id:"latex",name:"LaTeX",category:"document",extensions:["tex","latex"],mimeTypes:["application/x-latex","text/x-tex"],
+  signatures:[],matcher:isLatexDocument,capabilities:{metadata:true},status:"production"
+};
+export const TYPST:FormatDefinition={
+  id:"typst",name:"Typst",category:"document",extensions:["typ"],mimeTypes:["text/x-typst"],
+  signatures:[],capabilities:{metadata:true},status:"production"
+};
+export const EPUB:FormatDefinition={
+  id:"epub",name:"EPUB",category:"document",extensions:["epub"],mimeTypes:["application/epub+zip"],
+  signatures:[],capabilities:{metadata:true,multiplePages:true},status:"production"
+};
+export const PPTX:FormatDefinition={
+  id:"pptx",name:"PowerPoint PPTX",category:"document",extensions:["pptx"],mimeTypes:["application/vnd.openxmlformats-officedocument.presentationml.presentation"],
+  signatures:[],capabilities:{metadata:true,multiplePages:true},status:"production"
+};
+export const PPTM:FormatDefinition={
+  id:"pptm",name:"PowerPoint PPTM",category:"document",extensions:["pptm"],mimeTypes:["application/vnd.ms-powerpoint.presentation.macroEnabled.12"],
+  signatures:[],capabilities:{metadata:true,multiplePages:true,macros:true},readOnly:true,status:"beta"
+};
+export const PPT:FormatDefinition={
+  id:"ppt",name:"PowerPoint PPT",category:"document",extensions:["ppt"],mimeTypes:["application/vnd.ms-powerpoint"],
+  signatures:[],capabilities:{metadata:true,multiplePages:true,macros:true},readOnly:true,status:"beta"
+};
+export const ODP:FormatDefinition={
+  id:"odp",name:"OpenDocument Presentation",category:"document",extensions:["odp"],mimeTypes:["application/vnd.oasis.opendocument.presentation"],
+  signatures:[],capabilities:{metadata:true,multiplePages:true},status:"production"
+};
+
 export const PDF:FormatDefinition={
   id:"pdf",name:"PDF",category:"pdf",extensions:["pdf"],mimeTypes:["application/pdf"],
   signatures:[[{offset:0,bytes:[0x25,0x50,0x44,0x46,0x2d]}]],
@@ -173,7 +251,8 @@ export function createDefaultFormatRegistry():FormatRegistry {
   const registry=new FormatRegistry();
   [
     JPEG,PNG,WEBP,GIF,TIFF,AVIF,HEIC,JXL,SVG,
-    MOV,MP4,WEBM_MEDIA,MKV,OGG,AAC,MP3,WAV,FLAC,MPEG_TS,AVI,FLV,PDF
+    MOV,MP4,WEBM_MEDIA,MKV,OGG,AAC,MP3,WAV,FLAC,MPEG_TS,AVI,FLV,PDF,
+    DOCX,DOCM,DOC,ODT,RTF,HTML_DOC,MARKDOWN,TXT,LATEX,TYPST,EPUB,PPTX,PPTM,PPT,ODP
   ].forEach(format=>registry.register(format));
   return registry;
 }
