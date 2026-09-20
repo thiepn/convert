@@ -142,6 +142,7 @@ export class App {
   private kind:SelectionKind=null;
   private leases:ResultLease[]=[];
   private routeRevision=0;
+  private batchPackageResults=true;
 
   constructor(){
     this.engines.register(this.imageEngine);
@@ -231,6 +232,7 @@ export class App {
         if(id==="archive-operation") this.updateArchiveOptionVisibility();
         if(id==="data-sheet-policy") this.updateDataOptionVisibility();
         if(id==="data-table-select") void this.refreshDatabasePreview();
+        this.updateBatchControls();
         void this.renderRoute();
       });
     }
@@ -428,6 +430,7 @@ export class App {
     this.renderArchiveEntries();
     this.populateTargets();
     this.updateArchiveOptionVisibility();
+    this.updateBatchControls();
     await this.renderRoute();
   }
 
@@ -824,6 +827,181 @@ export class App {
       header:element<HTMLInputElement>("data-header").checked,
       query:element<HTMLTextAreaElement>("data-query").value.trim()||undefined
     };
+  }
+
+  private synchronousPipelineOptions():{options:Record<string,unknown>;quality:number}{
+    if(this.kind==="image"){
+      return {
+        options:this.readImageOptions() as unknown as Record<string,unknown>,
+        quality:Number(element<HTMLSelectElement>("image-quality").value)
+      };
+    }
+    if(this.kind==="media"){
+      return {options:this.readMediaOptions() as unknown as Record<string,unknown>,quality:.82};
+    }
+    if(this.kind==="spreadsheet"){
+      return {options:this.readSpreadsheetOptions() as unknown as Record<string,unknown>,quality:.82};
+    }
+    if(this.kind==="data"||this.kind==="database"){
+      return {options:this.readDataOptions() as unknown as Record<string,unknown>,quality:.82};
+    }
+    if(this.kind==="archive"){
+      return {options:this.readArchiveOptions() as unknown as Record<string,unknown>,quality:.82};
+    }
+    if(this.kind==="document"){
+      return {
+        options:{
+          routePreference:element<HTMLSelectElement>("document-route").value,
+          trackChanges:element<HTMLSelectElement>("document-track-changes").value,
+          assets:element<HTMLSelectElement>("document-assets").value,
+          standalone:element<HTMLInputElement>("document-standalone").checked,
+          tableOfContents:element<HTMLInputElement>("document-toc").checked,
+          preserveComments:true
+        },
+        quality:.82
+      };
+    }
+    return {options:{},quality:.82};
+  }
+
+  private updateBatchControls(){
+    const operation=this.kind==="archive"?element<HTMLSelectElement>("archive-operation").value:"";
+    const active=this.files.length>1
+      &&this.kind!=="pdf"
+      &&this.kind!=="archive-build"
+      &&(this.kind!=="archive"||operation==="repack");
+    element("batch-controls").classList.toggle("hidden",!active);
+    if(!active){
+      element("batch-task-list").classList.add("hidden");
+      element<HTMLButtonElement>("batch-resume-button").classList.add("hidden");
+      return;
+    }
+
+    const targetId=element<HTMLSelectElement>("target-format").value;
+    if(!targetId){
+      element("batch-pipeline-summary").textContent="No common target is available.";
+      element("batch-pipeline-steps").replaceChildren();
+      return;
+    }
+
+    try{
+      const current=this.synchronousPipelineOptions();
+      const pipeline=buildBatchPipeline({
+        targetFormatId:targetId,
+        quality:current.quality,
+        options:current.options,
+        namingTemplate:element<HTMLInputElement>("batch-name-template").value,
+        executionMode:element<HTMLSelectElement>("batch-execution").value as BatchExecutionMode,
+        packageResults:element<HTMLInputElement>("batch-package-results").checked
+      });
+      const labels=describePipeline(pipeline);
+      element("batch-pipeline-summary").textContent=
+        pipeline.executionMode==="auto"
+          ?"Automatic local scheduling · "+labels.length+" step(s)"
+          :"Sequential local scheduling · "+labels.length+" step(s)";
+      const container=element("batch-pipeline-steps");
+      container.replaceChildren();
+      labels.forEach((label,index)=>{
+        if(index){
+          const arrow=document.createElement("span");arrow.className="pipeline-arrow";arrow.textContent="→";container.append(arrow);
+        }
+        const step=document.createElement("span");step.className="pipeline-step";step.textContent=label;container.append(step);
+      });
+    }catch(error){
+      element("batch-pipeline-summary").textContent=error instanceof Error?error.message:String(error);
+      element("batch-pipeline-steps").replaceChildren();
+    }
+  }
+
+  private renderBatchSnapshot(snapshot:BatchSnapshot){
+    this.setProgress(snapshot.progress,snapshot.stage);
+    element("batch-status").textContent=
+      snapshot.completed+"/"+snapshot.total+" complete"
+      +(snapshot.failed?" · "+snapshot.failed+" failed":"")
+      +(snapshot.cancelled?" · "+snapshot.cancelled+" cancelled":"");
+    element("batch-status-detail").textContent=
+      snapshot.running+" running · "+snapshot.pending+" queued · failures stay isolated";
+    element<HTMLButtonElement>("batch-resume-button").classList.toggle("hidden",!snapshot.resumable||snapshot.running>0);
+
+    const container=element("batch-task-list");
+    container.classList.toggle("hidden",snapshot.tasks.length===0);
+    container.replaceChildren();
+    for(const task of snapshot.tasks){
+      const row=document.createElement("div");row.className="batch-task-row";
+      const name=document.createElement("div");name.className="batch-task-name";
+      const strong=document.createElement("strong");strong.textContent=task.sourceName;
+      const sub=document.createElement("span");
+      sub.textContent=task.outputName
+        ?task.outputName
+        :task.error
+          ?task.error
+          :(task.sourceFormatId??"Inspecting");
+      name.append(strong,sub);
+
+      const stage=document.createElement("div");stage.className="batch-task-stage";
+      stage.textContent=Math.round(task.progress*100)+"% · "+task.stage;
+
+      const state=document.createElement("span");state.className="batch-task-state "+task.state;
+      state.textContent=task.state;
+      row.append(name,stage,state);container.append(row);
+    }
+  }
+
+  private async resumeBatch(){
+    if(!this.batchRunner.hasResumable()) return;
+    const button=element<HTMLButtonElement>("convert-button");
+    const cancel=element<HTMLButtonElement>("cancel-button");
+    button.disabled=true;cancel.classList.remove("hidden");
+    try{
+      const result=await this.batchRunner.resume(snapshot=>this.renderBatchSnapshot(snapshot),true);
+      await this.renderBatchResults(result,this.batchPackageResults);
+    }catch(error){
+      this.renderWarnings("loss-warnings",[error instanceof Error?error.message:String(error)]);
+    }finally{
+      button.disabled=false;cancel.classList.add("hidden");
+    }
+  }
+
+  private async renderBatchResults(result:BatchRunResult,packageResults:boolean){
+    await this.releaseResults();
+    const expanded:Array<{name:string;blob:Blob;warnings:string[]}>=[];
+
+    for(const output of result.outputs){
+      expanded.push({name:output.fileName,blob:output.blob,warnings:output.warnings});
+      const prefix=sanitizeFilename(stem(output.fileName));
+      for(const extra of output.extraFiles??[]){
+        expanded.push({
+          name:prefix+"-assets-"+sanitizeFilename(extra.name.replaceAll("/","-")),
+          blob:extra.blob,
+          warnings:[]
+        });
+      }
+    }
+
+    const failures=[...result.failures];
+    if(packageResults&&expanded.length>1){
+      try{
+        const packaged=await this.archiveEngine.createFromFiles(
+          expanded.map(item=>({blob:item.blob,path:item.name,lastModified:null})),
+          "zip",
+          {compressionLevel:6,preservePaths:false},
+          undefined,
+          (progress,stage)=>this.setProgress(.94+progress*.05,"Packaging results · "+stage)
+        );
+        expanded.push({
+          name:"converted-files.zip",
+          blob:packaged.blob,
+          warnings:["Local Phase 8 batch package of successful outputs."]
+        });
+      }catch(error){
+        failures.push({
+          name:"converted-files.zip",
+          error:"Batch packaging failed: "+(error instanceof Error?error.message:String(error))
+        });
+      }
+    }
+
+    this.showBlobResults(expanded,failures);
   }
 
   private commonTargets():string[]{
