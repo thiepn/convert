@@ -7,6 +7,7 @@ import type {
   EngineConvertResult
 } from "../../core/engines/Engine";
 import type { DataColumnInfo, DataConversionOptions, DetailedDataInspection } from "../../core/data/types";
+import { validateLocalSelectQuery } from "../../core/data/querySecurity";
 
 const INPUTS=new Set(["csv","tsv","json-data","jsonl","parquet","arrow"]);
 const OUTPUTS=new Set(["csv","tsv","json-data","jsonl","parquet","arrow"]);
@@ -42,23 +43,6 @@ function tablePreview(table:Table,maxRows=20):Array<Record<string,unknown>>{
     rows.push(row);
   }
   return rows;
-}
-
-function assertSafeQuery(query:string):string{
-  const trimmed=query.trim();
-  if(!/^(select|with)\b/i.test(trimmed)){
-    throw new Error("DATA_QUERY_RESTRICTED: Only SELECT or WITH queries are allowed.");
-  }
-  if(trimmed.includes(";")){
-    throw new Error("DATA_QUERY_RESTRICTED: Multiple SQL statements are blocked.");
-  }
-  if(/:\/\//.test(trimmed)){
-    throw new Error("DATA_QUERY_RESTRICTED: Network URLs are blocked.");
-  }
-  if(/\b(?:install|load|attach|detach|copy|export|import|pragma|call|create|insert|update|delete|drop|alter|read_[a-z_]+|glob|sqlite_scan|parquet_scan|csv_scan|json_scan)\b/i.test(trimmed)){
-    throw new Error("DATA_QUERY_RESTRICTED: External I/O and mutating SQL are blocked.");
-  }
-  return trimmed;
 }
 
 export class DuckDbDataEngine implements ConversionEngine{
@@ -122,7 +106,7 @@ export class DuckDbDataEngine implements ConversionEngine{
       request.signal.throwIfAborted?.();
       request.onProgress?.(.18,"Preparing local analytical query");
 
-      const query=options.query?.trim()?assertSafeQuery(options.query):"SELECT * FROM data";
+      const query=options.query?.trim()?validateLocalSelectQuery(options.query):"SELECT * FROM data";
       if(request.targetFormatId==="arrow"){
         const result=await conn.query(query);
         request.signal.throwIfAborted?.();
