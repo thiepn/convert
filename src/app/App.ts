@@ -784,12 +784,21 @@ export class App {
         ? (source==="mov"||source==="mkv"||source==="webm-media"?"mp4":source)
         : this.kind==="document"
           ? (["markdown","latex","typst","txt","html-doc","epub"].includes(source??"")?"docx":targets.includes("pdf")?"pdf":source)
-          : source;
+          : this.kind==="spreadsheet"
+            ? (source&&targets.includes(source)?source:targets.includes("xlsx")?"xlsx":source)
+            : this.kind==="data"
+              ? (source&&targets.includes(source)?source:targets.includes("parquet")?"parquet":source)
+              : this.kind==="database"
+                ? (targets.includes("sqlite")?"sqlite":targets.includes("csv")?"csv":source)
+                : source;
 
     if(preferred&&targets.includes(preferred)) select.value=preferred;
     else if(this.kind==="media"&&targets.includes("mp4")) select.value="mp4";
     else if(this.kind==="image"&&targets.includes("webp")) select.value="webp";
     else if(this.kind==="document"&&targets.includes("docx")) select.value="docx";
+    else if(this.kind==="spreadsheet"&&targets.includes("xlsx")) select.value="xlsx";
+    else if(this.kind==="data"&&targets.includes("parquet")) select.value="parquet";
+    else if(this.kind==="database"&&targets.includes("sqlite")) select.value="sqlite";
     else if((this.kind==="archive"||this.kind==="archive-build")&&targets.includes("zip")) select.value="zip";
 
     element<HTMLButtonElement>("convert-button").disabled=targets.length===0;
