@@ -6,6 +6,13 @@ import { createDefaultFormatRegistry } from "../core/formats/defaultFormats";
 import type { DetailedImageInspection, ImageConversionOptions } from "../core/image/types";
 import type { DetailedDocumentInspection, DocumentConversionOptions } from "../core/document/types";
 import type { ArchiveConversionOptions, DetailedArchiveInspection } from "../core/archive/types";
+import type {
+  DataConversionOptions,
+  DetailedDataInspection,
+  DetailedDatabaseInspection,
+  DetailedSpreadsheetInspection,
+  SpreadsheetConversionOptions
+} from "../core/data/types";
 import type { FileInspection } from "../core/inspection/inspectFile";
 import { inspectFile } from "../core/inspection/inspectFile";
 import { JobManager } from "../core/jobs/JobManager";
@@ -20,6 +27,9 @@ import {
   PdfOutputValidator,
   DocumentOutputValidator,
   ArchiveOutputValidator,
+  SpreadsheetOutputValidator,
+  DataOutputValidator,
+  DatabaseOutputValidator,
   UniversalOutputValidator
 } from "../core/validation/Validator";
 import { BrowserImageEngine } from "../engines/browser-image/BrowserImageEngine";
@@ -31,8 +41,11 @@ import { PandocDocumentEngine } from "../engines/document/PandocDocumentEngine";
 import { OfficeDocumentEngine } from "../engines/document/OfficeDocumentEngine";
 import { PdfReconstructionEngine } from "../engines/document/PdfReconstructionEngine";
 import { ArchiveEngine } from "../engines/archive/ArchiveEngine";
+import { SpreadsheetEngine } from "../engines/data/SpreadsheetEngine";
+import { DuckDbDataEngine } from "../engines/data/DuckDbDataEngine";
+import { SqliteEngine } from "../engines/data/SqliteEngine";
 
-type SelectionKind="image"|"media"|"pdf"|"document"|"archive"|"archive-build"|null;
+type SelectionKind="image"|"media"|"pdf"|"document"|"archive"|"archive-build"|"spreadsheet"|"data"|"database"|null;
 type ResultLease={url:string;release?:()=>Promise<void>};
 
 function element<T extends HTMLElement>(id:string):T {
@@ -89,6 +102,9 @@ export class App {
   private readonly officeDocumentEngine=new OfficeDocumentEngine();
   private readonly pdfReconstructionEngine=new PdfReconstructionEngine(this.pdfEngine,this.pandocDocumentEngine);
   private readonly archiveEngine=new ArchiveEngine();
+  private readonly spreadsheetEngine=new SpreadsheetEngine();
+  private readonly duckDbDataEngine=new DuckDbDataEngine();
+  private readonly sqliteEngine=new SqliteEngine();
   private readonly planner:ConversionPlanner;
   private readonly jobs:JobManager;
 
@@ -99,6 +115,9 @@ export class App {
   private pdfDetail:DetailedPdfInspection|null=null;
   private documentDetail:DetailedDocumentInspection|null=null;
   private archiveDetail:DetailedArchiveInspection|null=null;
+  private spreadsheetDetail:DetailedSpreadsheetInspection|null=null;
+  private dataDetail:DetailedDataInspection|null=null;
+  private databaseDetail:DetailedDatabaseInspection|null=null;
   private archiveAbort:AbortController|null=null;
   private kind:SelectionKind=null;
   private leases:ResultLease[]=[];
@@ -113,6 +132,9 @@ export class App {
     this.engines.register(this.officeDocumentEngine);
     this.engines.register(this.pdfReconstructionEngine);
     this.engines.register(this.archiveEngine);
+    this.engines.register(this.spreadsheetEngine);
+    this.engines.register(this.duckDbDataEngine);
+    this.engines.register(this.sqliteEngine);
     this.planner=new ConversionPlanner(this.graph,this.formats,this.engines);
 
     const validator=new UniversalOutputValidator(
@@ -124,7 +146,10 @@ export class App {
       new MediaOutputValidator(this.formats,blob=>this.mediaEngine.inspect(blob)),
       new PdfOutputValidator(this.formats,(blob,password)=>this.pdfEngine.inspect(blob,password)),
       new DocumentOutputValidator(this.formats,(blob,formatId)=>this.documentInspector.inspect(blob,formatId)),
-      new ArchiveOutputValidator(this.formats,(blob,formatId,password)=>this.archiveEngine.inspect(blob,formatId,password))
+      new ArchiveOutputValidator(this.formats,(blob,formatId,password)=>this.archiveEngine.inspect(blob,formatId,password)),
+      new SpreadsheetOutputValidator(this.formats,(blob,formatId)=>this.spreadsheetEngine.inspect(blob,formatId)),
+      new DataOutputValidator(this.formats,(blob,formatId,options)=>this.duckDbDataEngine.inspect(blob,formatId,options)),
+      new DatabaseOutputValidator(this.formats,blob=>this.sqliteEngine.inspect(blob))
     );
     this.jobs=new JobManager(this.formats,this.engines,this.planner,validator);
   }
