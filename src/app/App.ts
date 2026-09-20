@@ -161,18 +161,26 @@ export class App {
       "hardware-acceleration","pdf-operation","pdf-pages","pdf-split-groups","pdf-order",
       "pdf-image-format","pdf-image-quality","pdf-dpi","pdf-ocr-language","pdf-ocr-pages",
       "pdf-rotation","document-route","document-track-changes","document-assets",
-      "document-standalone","document-toc"
+      "document-standalone","document-toc","archive-operation","archive-compression-level",
+      "archive-preserve-paths","archive-output-password"
     ];
     for(const id of routeControls){
       element(id).addEventListener("change",()=>{
         if(id==="pdf-operation") this.updatePdfOptionVisibility();
+        if(id==="archive-operation") this.updateArchiveOptionVisibility();
         void this.renderRoute();
       });
     }
 
     element<HTMLButtonElement>("pdf-reinspect-button").addEventListener("click",()=>void this.refreshPdfInspection());
+    element<HTMLButtonElement>("archive-reinspect-button").addEventListener("click",()=>void this.refreshArchiveInspection());
+    element<HTMLButtonElement>("archive-select-all").addEventListener("click",()=>this.setArchiveSelection(true));
+    element<HTMLButtonElement>("archive-select-none").addEventListener("click",()=>this.setArchiveSelection(false));
     element<HTMLButtonElement>("convert-button").addEventListener("click",()=>void this.convertAll());
-    element<HTMLButtonElement>("cancel-button").addEventListener("click",()=>this.jobs.cancelAll());
+    element<HTMLButtonElement>("cancel-button").addEventListener("click",()=>{
+      this.jobs.cancelAll();
+      this.archiveAbort?.abort();
+    });
   }
 
   private getKind(inspection:FileInspection):SelectionKind {
@@ -181,6 +189,7 @@ export class App {
     if(category==="audio"||category==="video") return "media";
     if(category==="pdf") return "pdf";
     if(category==="document") return "document";
+    if(category==="archive") return "archive";
     return null;
   }
 
