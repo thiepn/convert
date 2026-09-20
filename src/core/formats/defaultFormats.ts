@@ -408,7 +408,7 @@ const psdVersion=(bytes:Uint8Array,version:number)=>
   bytes.length>=6&&ascii(bytes,0,4)==="8BPS"&&bytes[4]===0&&bytes[5]===version;
 const isCameraRaw=(bytes:Uint8Array)=>
   (bytes.length>=12&&ascii(bytes,8,2)==="CR")
-  ||ascii(bytes,0,16)==="FUJIFILMCCD-RAW"
+  ||ascii(bytes,0,15)==="FUJIFILMCCD-RAW"
   ||isIsoBmffBrand(bytes,["crx "]);
 const isSrt=(bytes:Uint8Array)=>/\d{1,2}:\d{2}:\d{2}[,.]\d{3}\s*-->\s*\d{1,2}:\d{2}:\d{2}[,.]\d{3}/.test(textProbe(bytes));
 const isVtt=(bytes:Uint8Array)=>textProbe(bytes,256).trimStart().startsWith("WEBVTT");
