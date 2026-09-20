@@ -47,7 +47,7 @@ function tablePreview(table:Table,maxRows=20):Array<Record<string,unknown>>{
 
 export class DuckDbDataEngine implements ConversionEngine{
   readonly id="duckdb-data";
-  readonly version="duckdb-wasm-1.33.0";
+  readonly version="duckdb-wasm-1.32.0";
   private db:duckdb.AsyncDuckDB|null=null;
   private worker:Worker|null=null;
   private baseUrl="";
@@ -92,7 +92,7 @@ export class DuckDbDataEngine implements ConversionEngine{
         columns,
         preview,
         warnings:[],
-        engine:"DuckDB-Wasm 1.33.0"
+        engine:"DuckDB-Wasm 1.32.0"
       };
     })) as Promise<DetailedDataInspection>;
   }
