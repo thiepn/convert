@@ -21,6 +21,7 @@ export interface FormatCapabilities {
   layers?: boolean;
   formulas?: boolean;
   macros?: boolean;
+  vector?: boolean;
 }
 
 export interface ByteSignature {
@@ -35,7 +36,10 @@ export interface FormatDefinition {
   extensions: string[];
   mimeTypes: string[];
   signatures: ByteSignature[][];
+  matcher?: (bytes: Uint8Array) => boolean;
   capabilities: FormatCapabilities;
+  readOnly?: boolean;
+  status?: "production" | "beta" | "experimental";
 }
 
 export interface FormatDetection {
