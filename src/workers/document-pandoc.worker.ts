@@ -1,12 +1,14 @@
 import type { DocumentConversionOptions } from "../core/document/types";
 import type { PandocWorkerRequest, PandocWorkerResponse } from "../engines/document/pandoc-protocol";
+import { createPandocRuntime } from "../engines/document/pandoc-runtime";
 
 const scope=globalThis as unknown as {
   postMessage(message:PandocWorkerResponse):void;
   onmessage:((event:MessageEvent<PandocWorkerRequest>)=>void)|null;
 };
 
-let modulePromise:Promise<typeof import("pandoc-wasm")>|null=null;
+let runtimePromise:Promise<Awaited<ReturnType<typeof createPandocRuntime>>>|null=null;
+let loadedUrl="";
 
 const INPUT_FORMAT:Record<string,string>={
   docx:"docx",docm:"docx",odt:"odt",rtf:"rtf","html-doc":"html",
@@ -36,9 +38,15 @@ const MIME:Record<string,string>={
 
 function send(message:PandocWorkerResponse){scope.postMessage(message);}
 
-async function getPandoc(){
-  if(!modulePromise) modulePromise=import("pandoc-wasm");
-  return modulePromise;
+async function getPandoc(url:string){
+  if(runtimePromise&&loadedUrl===url) return runtimePromise;
+  loadedUrl=url;
+  runtimePromise=(async()=>{
+    const response=await fetch(url,{credentials:"same-origin"});
+    if(!response.ok) throw new Error("PANDOC_WASM_LOAD_FAILED: "+response.status);
+    return createPandocRuntime(await response.arrayBuffer());
+  })();
+  return runtimePromise;
 }
 
 function outputName(targetFormatId:string){
@@ -67,7 +75,7 @@ async function convertDocument(request:Extract<PandocWorkerRequest,{type:"conver
   if(!from||!to) throw new Error("PANDOC_ROUTE_UNSUPPORTED: Unsupported semantic document route.");
 
   send({type:"progress",requestId:request.requestId,progress:.06,stage:"Loading Pandoc WASM"});
-  const pandoc=await getPandoc();
+  const pandoc=await getPandoc(request.pandocWasmUrl);
   send({type:"progress",requestId:request.requestId,progress:.18,stage:"Preparing semantic document model"});
 
   const files:Record<string,string|Blob>={};
