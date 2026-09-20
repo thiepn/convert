@@ -57,7 +57,7 @@ function formatFor(id:string):any {
   if(id==="mp3") return new Mp3OutputFormat();
   if(id==="wav") return new WavOutputFormat();
   if(id==="flac") return new FlacOutputFormat();
-  if(id==="aac") return new (ADTS.constructor as any)();
+  if(id==="aac") return new AdtsOutputFormat();
   if(id==="mpegts") return new MpegTsOutputFormat();
   throw new Error("MEDIA_TARGET_UNSUPPORTED: Unknown media target "+id);
 }
@@ -228,7 +228,7 @@ async function convert(request:Extract<MediaWorkerRequest,{type:"convert"}>){
       target=new BufferTarget();
     }
 
-    const output=new Output({format:formatFor(request.targetFormatId),target});
+    const outputFormat=formatFor(request.targetFormatId);\n    const output=new Output({format:outputFormat,target});
     const conversion=await Conversion.init(conversionOptions(input,request.targetFormatId,adjusted,output));
     active.set(request.jobId,conversion);
 
@@ -251,7 +251,7 @@ async function convert(request:Extract<MediaWorkerRequest,{type:"convert"}>){
     } else {
       const buffer=(target as BufferTarget).buffer;
       if(!buffer) throw new Error("MEDIA_OUTPUT_EMPTY: Conversion produced no output buffer.");
-      blob=new Blob([buffer],{type:(output.format as any).mimeType??"application/octet-stream"});
+      blob=new Blob([buffer],{type:(outputFormat as any).mimeType??"application/octet-stream"});
     }
     return {
       blob,
