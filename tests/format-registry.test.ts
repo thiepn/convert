@@ -71,10 +71,14 @@ describe("FormatRegistry",()=>{
     expect(registry.detect(new TextEncoder().encode("SIMPLE  =                    T"),"x.bin").format?.id).toBe("fits");
   });
 
-  it("uses RAW extensions to disambiguate TIFF-based camera formats",()=>{
+  it("uses content and RAW extensions to disambiguate camera formats",()=>{
     const tiff=new Uint8Array([0x49,0x49,0x2a,0x00,8,0,0,0,0,0,0,0]);
     expect(registry.detect(tiff,"photo.nef","application/octet-stream").format?.id).toBe("camera-raw");
     expect(registry.detect(tiff,"scan.tiff","image/tiff").format?.id).toBe("tiff");
+
+    const cr2=new Uint8Array([0x49,0x49,0x2a,0x00,8,0,0,0,0x43,0x52,2,0]);
+    expect(registry.detect(cr2,"camera.bin").format?.id).toBe("camera-raw");
+    expect(registry.detect(new TextEncoder().encode("FUJIFILMCCD-RAW "), "camera.bin").format?.id).toBe("camera-raw");
   });
 
   it("recognizes legacy ASF and font containers",()=>{
