@@ -27,6 +27,7 @@ export class PdfEngine implements ConversionEngine {
   private pdfWorkerUrl="";
   private qpdfBase="";
   private ocr=new PdfOcrEngine();
+  private qpdfRunner:Awaited<ReturnType<typeof createQpdfRunner>>|null=null;
 
   async prepare():Promise<void>{
     this.pdfWorkerUrl=new URL("engines/pdfjs/pdf.worker.min.mjs",document.baseURI).href;
@@ -277,13 +278,21 @@ export class PdfEngine implements ConversionEngine {
     );
   }
 
-  dispose():void{
+  cancelActive():void{
     this.worker?.terminate();
     this.worker=null;
-    const error=new DOMException("PDF worker terminated.","AbortError");
+    const error=new DOMException("PDF operation cancelled.","AbortError");
     for(const pending of this.pending.values()) pending.reject(error);
     this.pending.clear();
     void this.ocr.dispose();
+
+    const runner=this.qpdfRunner;
+    this.qpdfRunner=null;
+    if(runner) void runner.destroy().catch(()=>{});
+  }
+
+  dispose():void{
+    this.cancelActive();
   }
 
   private async qpdfTransform(
@@ -300,6 +309,7 @@ export class PdfEngine implements ConversionEngine {
       wasmUrl:new URL("lib/qpdf.wasm",this.qpdfBase).href,
       timeoutMs:120000
     } as any);
+    this.qpdfRunner=runner;
     try{
       const passwordArgs=password&&!optionsContainPassword?["--password="+password]:[];
       const output=await runner.runOne({
@@ -313,7 +323,8 @@ export class PdfEngine implements ConversionEngine {
       new Uint8Array(buffer).set(outputBytes);
       return new Blob([buffer],{type:"application/pdf"});
     }finally{
-      await runner.destroy();
+      if(this.qpdfRunner===runner) this.qpdfRunner=null;
+      try{await runner.destroy();}catch{}
     }
   }
 
