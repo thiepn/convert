@@ -7,7 +7,6 @@ export default defineConfig({
     viteStaticCopy({
       targets: [
         { src: "node_modules/wasm-vips/lib/vips-es6.js", dest: "engines/vips" },
-        { src: "node_modules/wasm-vips/lib/vips-es6.worker.js", dest: "engines/vips" },
         { src: "node_modules/wasm-vips/lib/vips.wasm", dest: "engines/vips" },
         { src: "node_modules/wasm-vips/lib/vips-heif.wasm", dest: "engines/vips" },
         { src: "node_modules/wasm-vips/lib/vips-jxl.wasm", dest: "engines/vips" },
