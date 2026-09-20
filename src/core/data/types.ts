@@ -64,6 +64,7 @@ export interface SpreadsheetConversionOptions {
 }
 
 export interface DataConversionOptions {
+  routePreference?:"semantic";
   query?:string;
   selectedTable?:string;
   delimiter:string;
