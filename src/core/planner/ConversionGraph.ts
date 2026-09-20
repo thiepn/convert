@@ -21,13 +21,13 @@ export class ConversionGraph {
 }
 
 const IMAGE_INPUTS = ["jpeg", "png", "webp", "gif", "tiff", "bmp", "avif", "heif", "jxl", "svg"];
-const IMAGE_OUTPUTS = ["jpeg", "png", "webp", "gif", "tiff", "avif", "heif", "jxl"];
+const IMAGE_OUTPUTS = ["jpeg", "png", "webp", "gif", "tiff", "avif", "jxl"];
 
 function targetQualityLoss(target: string): number {
   if (target === "jpeg") return 0.28;
   if (target === "webp") return 0.12;
   if (target === "gif") return 0.35;
-  if (target === "avif" || target === "heif") return 0.10;
+  if (target === "avif") return 0.10;
   if (target === "jxl") return 0.08;
   return 0;
 }
@@ -42,9 +42,9 @@ export function createPhase1Graph(): ConversionGraph {
         to,
         engineId: "vips-image",
         qualityLoss: targetQualityLoss(to),
-        metadataLoss: [],
-        temporaryMultiplier: 1.35,
-        streaming: true
+        metadataLoss: from === "heif" ? ["EXIF", "XMP", "IPTC", "ICC"] : [],
+        temporaryMultiplier: from === "heif" ? 2.4 : 1.35,
+        streaming: from !== "heif"
       });
     }
   }
