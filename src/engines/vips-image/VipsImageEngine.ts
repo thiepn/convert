@@ -10,6 +10,22 @@ import type { VipsWorkerResponse } from "./messages";
 const INPUTS = new Set(["jpeg", "png", "webp", "gif", "tiff", "bmp", "avif", "heif", "jxl", "svg"]);
 const OUTPUTS = new Set(["jpeg", "png", "webp", "gif", "tiff", "avif", "jxl"]);
 
+function supportsSimd(): boolean {
+  try {
+    const bytes = new Uint8Array([
+      0,97,115,109,1,0,0,0,1,5,1,96,0,1,123,3,2,1,0,
+      10,10,1,8,0,65,0,253,15,253,98,11
+    ]);
+    return WebAssembly.validate(bytes);
+  } catch {
+    return false;
+  }
+}
+
+function supportsExceptionHandling(): boolean {
+  return "Exception" in (WebAssembly as unknown as Record<string, unknown>);
+}
+
 function requiredLibraries(from: string, to: string): string[] {
   const libraries = new Set<string>();
   if (from === "avif" || to === "avif") libraries.add("vips-heif.wasm");
@@ -23,15 +39,19 @@ export class VipsImageEngine implements ConversionEngine {
   readonly version = "wasm-vips-0.0.18";
   private workers = new Set<Worker>();
   private prepared = false;
+  private runtimeReady = false;
 
   async prepare(): Promise<void> {
     this.prepared = true;
+    this.runtimeReady = typeof WebAssembly !== "undefined"
+      && supportsSimd()
+      && supportsExceptionHandling();
   }
 
   isAvailable(): boolean {
     return this.prepared
+      && this.runtimeReady
       && typeof Worker !== "undefined"
-      && typeof WebAssembly !== "undefined"
       && typeof SharedArrayBuffer !== "undefined"
       && globalThis.crossOriginIsolated === true;
   }
