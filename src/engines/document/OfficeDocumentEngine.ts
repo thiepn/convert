@@ -172,8 +172,8 @@ export class OfficeDocumentEngine implements ConversionEngine{
     };
   }
 
-  async dispose():Promise<void>{
-    await this.resetConverter();
+  dispose():void{
+    void this.resetConverter();
     this.inspector.dispose();
   }
 
@@ -192,7 +192,7 @@ export class OfficeDocumentEngine implements ConversionEngine{
       enableProgressTracking:false,
       onProgress:info=>{
         const percent=Math.max(0,Math.min(100,info.percent))/100;
-        const scaled=percent<1?.02+percent*.2:.22;
+        const scaled=percent<1 ? .02+percent*.2 : .22;
         this.currentProgress?.(scaled,info.message||"Loading LibreOffice");
       }
     });
