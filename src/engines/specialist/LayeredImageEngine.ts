@@ -43,9 +43,24 @@ export class LayeredImageEngine implements ConversionEngine{
     request.onProgress?.(.15,"Reading PSD structure and composite");
     const buffer=await request.source.arrayBuffer();
     if(request.signal.aborted) throw new DOMException("PSD conversion cancelled.","AbortError");
+
+    if(buffer.byteLength<26) throw new Error("PSD_HEADER_INVALID: PSD header is truncated.");
+    const header=new DataView(buffer,0,26);
+    const headerHeight=header.getUint32(14,false);
+    const headerWidth=header.getUint32(18,false);
+    const channels=header.getUint16(12,false);
+    const depth=header.getUint16(22,false);
+    const pixelLimit=mobile?48_000_000:120_000_000;
+    if(!headerWidth||!headerHeight||headerWidth*headerHeight>pixelLimit){
+      throw new Error("PSD_DIMENSION_LIMIT: PSD dimensions exceed this device's guarded decoded-pixel limit.");
+    }
+    if(channels<1||channels>56||![1,8,16,32].includes(depth)){
+      throw new Error("PSD_HEADER_INVALID: PSD channel count or bit depth is invalid.");
+    }
+
     const psd=readPsd(buffer,{skipLayerImageData:true,skipThumbnail:true,throwForMissingFeatures:false} as any);
     const width=Number((psd as any).width??0),height=Number((psd as any).height??0);
-    if(!width||!height||width*height>120_000_000) throw new Error("PSD_DIMENSION_LIMIT: PSD dimensions are missing or exceed the guarded decoded-pixel limit.");
+    if(width!==headerWidth||height!==headerHeight) throw new Error("PSD_DIMENSION_MISMATCH: Decoded PSD dimensions do not match the guarded header.");
     const canvas=(psd as any).canvas;
     if(!canvas) throw new Error("PSD_COMPOSITE_MISSING: PSD has no decodable composite bitmap.");
 
