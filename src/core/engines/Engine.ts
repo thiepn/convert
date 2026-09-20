@@ -24,6 +24,7 @@ export interface EngineConvertResult {
 export interface ConversionEngine {
   readonly id: string;
   readonly version: string;
+  prepare?(): Promise<void>;
   isAvailable(): boolean;
   canConvert(from: string, to: string): boolean;
   estimate(source: Blob, from: string, to: string): Promise<ConversionEstimate>;
