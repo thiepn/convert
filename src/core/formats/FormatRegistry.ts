@@ -50,8 +50,10 @@ export class FormatRegistry {
     if (mimeMatch) reasons.push("Matched MIME hint");
     if (extensionMatch) reasons.push("Matched filename extension");
 
-    const format = binaryMatch ?? mimeMatch ?? extensionMatch ?? null;
-    const confidence = binaryMatch ? 0.99 : mimeMatch ? 0.75 : extensionMatch ? 0.55 : 0;
+    const genericMime = mime === "text/plain" || mime === "application/octet-stream" || mime === "application/zip";
+    const hintedMatch = extensionMatch && genericMime ? extensionMatch : (mimeMatch ?? extensionMatch);
+    const format = binaryMatch ?? hintedMatch ?? null;
+    const confidence = binaryMatch ? 0.99 : (hintedMatch === mimeMatch ? 0.75 : extensionMatch ? 0.62 : 0);
 
     if (binaryMatch && extensionMatch && binaryMatch.id !== extensionMatch.id) {
       warnings.push("Filename extension does not match the file contents.");
