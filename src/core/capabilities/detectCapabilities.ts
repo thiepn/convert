@@ -1,4 +1,5 @@
 import type { CapabilityProfile, CodecSupport } from "./CapabilityProfile";
+import { getDeviceProfile } from "../performance/DeviceProfile";
 
 function supportsSimd(): boolean {
   if (typeof WebAssembly === "undefined") return false;
@@ -72,6 +73,7 @@ export async function detectCapabilities(): Promise<CapabilityProfile> {
   ]);
 
   const g = globalThis as unknown as Record<string, any>;
+  const device=getDeviceProfile();
 
   return {
     webAssembly: typeof WebAssembly !== "undefined",
@@ -87,6 +89,12 @@ export async function detectCapabilities(): Promise<CapabilityProfile> {
     imageBitmap: typeof createImageBitmap === "function",
     webCodecs: Boolean(g.VideoDecoder || g.AudioDecoder),
     hardwareConcurrency: nav?.hardwareConcurrency ?? 1,
+    deviceMemoryGB:device.deviceMemoryGB,
+    performanceTier:device.tier,
+    mobileLike:device.mobileLike,
+    workingSetBudgetBytes:device.workingSetBudgetBytes,
+    maxBatchParallelism:device.maxBatchParallelism,
+    preferredChunkBytes:device.preferredChunkBytes,
     storageQuota: estimate.quota ?? null,
     storageUsage: estimate.usage ?? null,
     codecs: { h264, vp9, av1, aac, opus }

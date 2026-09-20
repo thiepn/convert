@@ -1,5 +1,7 @@
 import type { DetailedImageInspection, ImageConversionOptions, MetadataPolicy } from "../core/image/types";
 import type { ImageWorkerRequest, ImageWorkerResponse } from "../engines/image/protocol";
+import { assertDecodedImageBudget } from "../core/performance/Budget";
+import { getDeviceProfile } from "../core/performance/DeviceProfile";
 
 const scope = globalThis as unknown as {
   postMessage(message:ImageWorkerResponse):void;
@@ -29,9 +31,17 @@ async function getVips(assetBase:string):Promise<any> {
       printErr:() => {}
     });
     vips.blockUntrusted?.(true);
-    const cores = Math.max(1, Math.min(4, navigator.hardwareConcurrency || 1));
+    const profile=getDeviceProfile();
+    const cores=Math.max(1,Math.min(profile.maxWasmThreads,navigator.hardwareConcurrency||1));
     vips.concurrency?.(cores);
-    vips.Cache?.maxMem?.(64 * 1024 * 1024);
+    const cacheBytes=profile.tier==="constrained"
+      ?24*1024*1024
+      :profile.tier==="mobile"
+        ?48*1024*1024
+        :profile.tier==="balanced"
+          ?96*1024*1024
+          :160*1024*1024;
+    vips.Cache?.maxMem?.(cacheBytes);
     return vips;
   })();
   return vipsPromise;
@@ -138,11 +148,8 @@ async function loadImage(vips:any,source:Blob,sourceFormatId:string,preserveAnim
 }
 
 function safeLimits(inspect:DetailedImageInspection) {
-  const nav=navigator as any;
-  const mobile=(nav.maxTouchPoints ?? 0)>0 && (nav.hardwareConcurrency ?? 8)<=8;
-  const maxPixels=mobile ? 80_000_000 : 200_000_000;
-  const totalPixels=inspect.width*inspect.height*inspect.frames;
-  if (!Number.isSafeInteger(totalPixels) || totalPixels>maxPixels) throw new Error("IMAGE_DIMENSIONS_UNSAFE: Decoded pixel count exceeds this device's safety limit.");
+  const bytesPerPixel=Math.max(1,inspect.bands)*(inspect.bitDepth?Math.max(1,inspect.bitDepth/8):1);
+  assertDecodedImageBudget(inspect.width,inspect.height,inspect.frames,bytesPerPixel);
   if (inspect.frames>1000) throw new Error("IMAGE_FRAME_LIMIT_EXCEEDED: More than 1000 frames/pages are not processed automatically.");
 }
 

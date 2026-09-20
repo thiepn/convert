@@ -14,6 +14,7 @@ import type {
   PdfTextResult
 } from "../../core/pdf/types";
 import { PdfOcrEngine } from "./PdfOcrEngine";
+import { assertMemoryBackedSource } from "../../core/performance/Budget";
 import type { PdfWorkerRequest, PdfWorkerResponse } from "./protocol";
 
 const DIRECT_INPUTS=new Set(["jpeg","png","pdf"]);
@@ -41,11 +42,15 @@ export class PdfEngine implements ConversionEngine {
   }
 
   async estimate(source:Blob):Promise<ConversionEstimate>{
-    const mobile=typeof matchMedia==="function"&&matchMedia("(pointer: coarse)").matches;
+    const memoryBytes=Math.max(source.size*2,192*1024*1024);
     return {
-      temporaryBytes:Math.max(source.size*2,mobile?192*1024*1024:512*1024*1024),
+      temporaryBytes:memoryBytes,
+      memoryBytes,
+      workspaceBytes:Math.max(96*1024*1024,source.size*1.25),
       outputBytes:source.size,
-      notes:["PDF.js/pdf-lib and qpdf WASM use memory-backed byte arrays; very large PDFs are size-gated."]
+      sourceAccess:"buffered",
+      outputAccess:"buffered",
+      notes:["PDF.js/pdf-lib and qpdf WASM use memory-backed byte arrays; large PDFs are device-budgeted."]
     };
   }
 
@@ -313,19 +318,11 @@ export class PdfEngine implements ConversionEngine {
   }
 
   private assertPdfMemory(source:Blob,operation:string){
-    const mobile=typeof matchMedia==="function"&&matchMedia("(pointer: coarse)").matches;
-    const limit=mobile?192*1024*1024:768*1024*1024;
-    if(source.size>limit){
-      throw new Error("PDF_MEMORY_LIMIT: "+operation+" is size-gated on this device because PDF.js/pdf-lib currently require memory-backed input.");
-    }
+    assertMemoryBackedSource(source.size,"PDF "+operation,2,1024*1024*1024);
   }
 
   private assertQpdfMemory(source:Blob){
-    const mobile=typeof matchMedia==="function"&&matchMedia("(pointer: coarse)").matches;
-    const limit=mobile?96*1024*1024:384*1024*1024;
-    if(source.size>limit){
-      throw new Error("PDF_QPDF_MEMORY_LIMIT: qpdf WASM uses a memory filesystem, so this structural operation is disabled for this file size.");
-    }
+    assertMemoryBackedSource(source.size,"qpdf structural processing",3,512*1024*1024);
   }
 
   private getWorker():Worker{

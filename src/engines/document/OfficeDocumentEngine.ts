@@ -12,6 +12,8 @@ import type {
   EngineConvertResult
 } from "../../core/engines/Engine";
 import type { DocumentConversionOptions } from "../../core/document/types";
+import { assertMemoryBackedSource } from "../../core/performance/Budget";
+import { getDeviceProfile,memoryBackedSourceLimit } from "../../core/performance/DeviceProfile";
 import { DocumentInspector } from "./DocumentInspector";
 
 const WRITER_INPUTS=new Set(["doc","docx","odt","rtf","html-doc","txt","epub"]);
@@ -92,9 +94,14 @@ export class OfficeDocumentEngine implements ConversionEngine{
   }
 
   async estimate(source:Blob):Promise<ConversionEstimate>{
+    const memoryBytes=Math.max(512*1024*1024,source.size*4);
     return {
-      temporaryBytes:Math.max(512*1024*1024,source.size*4),
+      temporaryBytes:memoryBytes,
+      memoryBytes,
+      workspaceBytes:Math.max(96*1024*1024,source.size*2),
       outputBytes:null,
+      sourceAccess:"buffered",
+      outputAccess:"buffered",
       notes:[
         "LibreOffice WASM has a large fixed runtime footprint and is loaded only for fidelity routes.",
         "Input/output buffers are memory-backed inside the LibreOffice worker."
@@ -106,11 +113,8 @@ export class OfficeDocumentEngine implements ConversionEngine{
     if(!this.canConvert(request.sourceFormatId,request.targetFormatId)){
       throw new Error("OFFICE_ROUTE_UNSUPPORTED: LibreOffice cannot perform this document-family route.");
     }
-    const mobile=typeof matchMedia==="function"&&matchMedia("(pointer: coarse)").matches;
-    const limit=mobile?64*1024*1024:256*1024*1024;
-    if(request.source.size>limit){
-      throw new Error("OFFICE_MEMORY_LIMIT: This document is too large for the browser LibreOffice fidelity engine on this device.");
-    }
+    const profile=getDeviceProfile();
+    assertMemoryBackedSource(request.source.size,"LibreOffice fidelity conversion",4,384*1024*1024,profile);
 
     const options={...defaultOptions(),...(request.options??{})} as DocumentConversionOptions;
     const isSpreadsheet=SPREADSHEET_INPUTS.has(request.sourceFormatId);
@@ -139,7 +143,7 @@ export class OfficeDocumentEngine implements ConversionEngine{
     }
 
     const fontBytes=(options.fonts??[]).reduce((sum,font)=>sum+font.data.byteLength,0);
-    const fontLimit=mobile?64*1024*1024:192*1024*1024;
+    const fontLimit=memoryBackedSourceLimit(6,192*1024*1024,profile);
     if(fontBytes>fontLimit){
       throw new Error("DOCUMENT_FONT_LIMIT: Imported fonts exceed this device's fidelity-engine budget.");
     }

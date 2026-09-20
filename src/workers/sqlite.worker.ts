@@ -2,6 +2,7 @@ import initSqlJs from "sql.js";
 import type { Database, SqlJsStatic } from "sql.js";
 import type { DataColumnInfo, DataConversionOptions, DetailedDatabaseInspection, DetailedDataInspection } from "../core/data/types";
 import { validateLocalSelectQuery } from "../core/data/querySecurity";
+import { getDeviceProfile } from "../core/performance/DeviceProfile";
 import type { SqliteWorkerRequest, SqliteWorkerResponse } from "../engines/data/sqlite-protocol";
 
 const scope=globalThis as unknown as {
@@ -227,8 +228,14 @@ scope.onmessage=async(event)=>{
     }
 
     send({type:"progress",requestId:request.requestId,progress:.15,stage:"Opening SQLite data"});
-    const mobile=typeof matchMedia==="function"&&matchMedia("(pointer: coarse)").matches;
-    const maxRows=mobile?100_000:500_000;
+    const profile=getDeviceProfile();
+    const maxRows=profile.tier==="constrained"
+      ?75_000
+      :profile.tier==="mobile"
+        ?150_000
+        :profile.tier==="balanced"
+          ?500_000
+          :1_000_000;
     let blob:Blob;
 
     if(request.targetFormatId==="sqlite"){

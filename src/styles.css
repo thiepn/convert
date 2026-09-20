@@ -136,3 +136,111 @@ details{margin-top:16px;color:#929bab}summary{cursor:pointer}pre{white-space:pre
 .batch-task-state.running{color:#abc4ef;border-color:rgba(171,196,239,.35)}
 @media(max-width:760px){.batch-controls-grid{grid-template-columns:1fr 1fr}.batch-status-row{align-items:flex-start;flex-direction:column}}
 @media(max-width:480px){.batch-controls-grid{grid-template-columns:1fr}.batch-task-row{grid-template-columns:minmax(0,1fr) 68px}.batch-task-stage{grid-column:1/-1;grid-row:2}.batch-task-state{grid-column:2;grid-row:1}}
+
+
+/* Phase 9 — mobile, performance, and large-file polish */
+html{min-height:100%;background:#0c0e12}
+body{min-height:100dvh;overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent}
+button,.download-link,label[for],select{touch-action:manipulation}
+.panel{content-visibility:auto;contain-intrinsic-size:auto 520px}
+.drop-zone,.control-section,.fact,.capability,.result-item,.batch-task-row,.archive-entry-row{contain:layout paint}
+.data-preview-scroll,.archive-entry-list,.batch-task-list{overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.progress-bar{will-change:width}
+
+@media(max-width:760px){
+  .shell{
+    width:100%;
+    padding:18px 10px calc(96px + env(safe-area-inset-bottom));
+  }
+  .hero{margin:0 5px 14px;gap:10px}
+  .hero h1{font-size:clamp(1.75rem,9vw,2.45rem);margin:6px 0 9px;letter-spacing:-.04em}
+  .hero p{font-size:.88rem;line-height:1.5}
+  .privacy-badge{margin-top:12px;padding:6px 9px;font-size:.75rem}
+  .panel{margin:9px 0;padding:13px;border-radius:13px;box-shadow:none}
+  .compact-panel{padding:15px}
+  .drop-panel{padding:10px}
+  .drop-zone{min-height:122px;border-radius:11px;gap:5px}
+  .drop-zone strong{font-size:.95rem}
+  .drop-zone span{font-size:.76rem;max-width:94%;line-height:1.35}
+  .section-heading{margin-bottom:12px;gap:10px}
+  h2{font-size:1.08rem}
+  hr{margin:15px 0}
+  .facts{gap:7px}
+  .fact,.capability{padding:9px;border-radius:9px}
+  .fact span,.capability span,label>span{font-size:.7rem;margin-bottom:4px}
+  .fact strong,.capability strong{font-size:.82rem}
+  .control-section{margin-top:11px;padding:11px;border-radius:10px}
+  .control-title{margin-bottom:9px;font-size:.68rem}
+  .convert-grid,.phase-controls,.media-controls-grid,.pdf-controls-grid,
+  .document-controls-grid,.data-controls-grid,.archive-controls-grid,.batch-controls-grid{
+    gap:9px;
+  }
+  select,input[type="number"],input[type="text"],input[type="password"],
+  .data-query-wrap textarea{
+    min-height:44px;
+    padding:9px 10px;
+    border-radius:9px;
+    font-size:16px;
+  }
+  input[type="color"]{height:44px}
+  .check-row{margin:10px 0;font-size:.8rem}
+  .route-box{margin-top:10px;padding:10px 11px;font-size:.78rem}
+  .warning{padding:8px 9px;font-size:.76rem;margin:5px 0}
+  .action-row{
+    position:sticky;
+    z-index:30;
+    bottom:max(6px,env(safe-area-inset-bottom));
+    margin:14px -6px -5px;
+    padding:7px;
+    gap:6px;
+    border:1px solid #2b323d;
+    border-radius:13px;
+    background:rgba(15,18,23,.94);
+    backdrop-filter:blur(16px);
+    box-shadow:0 8px 28px rgba(0,0,0,.32);
+  }
+  .action-row .primary-button,.action-row .secondary-button{
+    flex:1;
+    min-width:0;
+    min-height:48px;
+    margin:0;
+    padding:0 10px;
+    font-size:.82rem;
+  }
+  .job-panel{margin-top:12px}
+  .job-row{font-size:.72rem}
+  .results{margin-top:12px;gap:6px}
+  .result-item{padding:9px 10px}
+  .download-link{min-height:42px}
+  .track-list{gap:5px;margin-top:10px}
+  .archive-entry-list,.batch-task-list{max-height:min(360px,45dvh)}
+  .archive-entry-row,.batch-task-row{padding:8px 9px}
+  .data-preview-scroll{max-height:min(300px,40dvh)}
+  .batch-pipeline-heading{align-items:flex-start;flex-direction:column;gap:3px}
+  .batch-pipeline-heading span{text-align:left}
+  .pipeline-steps{padding:8px;gap:5px}
+  .pipeline-step{font-size:.67rem;min-height:26px}
+  details{margin-top:11px}
+  pre{font-size:.68rem;padding:10px}
+}
+
+@media(max-width:520px){
+  .convert-grid,.phase-controls,.media-controls-grid,.pdf-controls-grid,
+  .document-controls-grid,.document-files-grid,.archive-controls-grid,
+  .data-controls-grid,.batch-controls-grid{grid-template-columns:1fr}
+  .facts,.capability-grid{grid-template-columns:1fr 1fr}
+  .document-checks{gap:4px}
+  .archive-entry-toolbar{gap:8px}
+  .archive-entry-actions{display:grid;grid-template-columns:1fr 1fr;width:100%}
+  .archive-entry-actions .secondary-button:last-child{grid-column:1/-1}
+  .batch-status-row{gap:8px}
+}
+
+@media(max-width:360px){
+  .facts,.capability-grid{grid-template-columns:1fr}
+  .shell{padding-left:7px;padding-right:7px}
+}
+
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}
+}

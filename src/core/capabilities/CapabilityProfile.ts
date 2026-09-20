@@ -17,6 +17,12 @@ export interface CapabilityProfile {
   imageBitmap: boolean;
   webCodecs: boolean;
   hardwareConcurrency: number;
+  deviceMemoryGB: number | null;
+  performanceTier: "constrained"|"mobile"|"balanced"|"powerful";
+  mobileLike: boolean;
+  workingSetBudgetBytes: number;
+  maxBatchParallelism: number;
+  preferredChunkBytes: number;
   storageQuota: number | null;
   storageUsage: number | null;
   codecs: {

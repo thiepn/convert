@@ -19,6 +19,8 @@ import type {
 import type { FileInspection } from "../core/inspection/inspectFile";
 import { inspectFile } from "../core/inspection/inspectFile";
 import { JobManager } from "../core/jobs/JobManager";
+import { getDeviceProfile } from "../core/performance/DeviceProfile";
+import { TempWorkspace } from "../core/storage/TempWorkspace";
 import type { ConversionOutput } from "../core/jobs/types";
 import type { DetailedMediaInspection, MediaConversionOptions } from "../core/media/types";
 import type { DetailedPdfInspection, PdfCreateImage, PdfOcrOptions, PdfSplitRange } from "../core/pdf/types";
@@ -103,6 +105,7 @@ function sanitizeFilename(name:string):string {
 }
 
 export class App {
+  private readonly deviceProfile=getDeviceProfile();
   private readonly formats=createDefaultFormatRegistry();
   private readonly engines=new EngineRegistry();
   private readonly graph=createConversionGraph();
@@ -191,6 +194,7 @@ export class App {
 
   async start():Promise<void>{
     this.bindInputs();
+    await TempWorkspace.cleanupOrphanedJobs();
     await this.engines.prepareAll();
     await this.renderCapabilities(await detectCapabilities());
   }
@@ -305,6 +309,15 @@ export class App {
       : known.length+"/"+files.length+" recognized";
 
     const warnings=this.inspections.flatMap(item=>item.detection.warnings.map(w=>item.name+": "+w));
+    const largestFile=files.reduce((max,file)=>Math.max(max,file.size),0);
+    const largeThreshold=Math.min(256*1024*1024,Math.floor(this.deviceProfile.workingSetBudgetBytes*.35));
+    if(largestFile>=largeThreshold){
+      warnings.push(
+        this.deviceProfile.opfs
+          ?"Large-file mode: Phase 9 will use route-specific memory preflight and OPFS staging/streaming where supported."
+          :"Large file selected, but OPFS is unavailable. Buffered-output routes may be rejected earlier to protect this tab."
+      );
+    }
     if(this.kind==="archive-build"){
       warnings.push("Unknown or otherwise unsupported selections can still be packed into a new local archive.");
     }else{
@@ -674,7 +687,10 @@ export class App {
     }
 
     const entries=this.archiveDetail.entries.filter(entry=>!entry.directory);
-    const shown=entries.slice(0,500);
+    const renderLimit=this.deviceProfile.mobileLike
+      ?(this.deviceProfile.tier==="constrained"?80:120)
+      :500;
+    const shown=entries.slice(0,renderLimit);
     container.replaceChildren();
     container.classList.toggle("hidden",shown.length===0);
 
@@ -920,14 +936,18 @@ export class App {
       snapshot.completed+"/"+snapshot.total+" complete"
       +(snapshot.failed?" · "+snapshot.failed+" failed":"")
       +(snapshot.cancelled?" · "+snapshot.cancelled+" cancelled":"");
+    const renderLimit=this.deviceProfile.mobileLike
+      ?(this.deviceProfile.tier==="constrained"?60:100)
+      :250;
     element("batch-status-detail").textContent=
-      snapshot.running+" running · "+snapshot.pending+" queued · failures stay isolated";
+      snapshot.running+" running · "+snapshot.pending+" queued · failures stay isolated"
+      +(snapshot.tasks.length>renderLimit?" · showing "+renderLimit+"/"+snapshot.tasks.length:"");
     element<HTMLButtonElement>("batch-resume-button").classList.toggle("hidden",!snapshot.resumable||snapshot.running>0);
 
     const container=element("batch-task-list");
     container.classList.toggle("hidden",snapshot.tasks.length===0);
     container.replaceChildren();
-    for(const task of snapshot.tasks){
+    for(const task of snapshot.tasks.slice(0,renderLimit)){
       const row=document.createElement("div");row.className="batch-task-row";
       const name=document.createElement("div");name.className="batch-task-name";
       const strong=document.createElement("strong");strong.textContent=task.sourceName;
@@ -965,7 +985,7 @@ export class App {
 
   private async renderBatchResults(result:BatchRunResult,packageResults:boolean){
     await this.releaseResults();
-    const expanded:Array<{name:string;blob:Blob;warnings:string[]}>=[];
+    const expanded:Array<{name:string;blob:Blob;warnings:string[];release?:()=>Promise<void>}>=[];
 
     for(const output of result.outputs){
       expanded.push({name:output.fileName,blob:output.blob,warnings:output.warnings});
@@ -981,20 +1001,35 @@ export class App {
 
     const failures=[...result.failures];
     if(packageResults&&expanded.length>1){
+      let packageWorkspace:TempWorkspace|null=null;
       try{
+        packageWorkspace=await TempWorkspace.create("package-"+crypto.randomUUID());
+        const handle=packageWorkspace
+          ?await packageWorkspace.getFileHandle("converted-files.zip")
+          :undefined;
         const packaged=await this.archiveEngine.createFromFiles(
           expanded.map(item=>({blob:item.blob,path:item.name,lastModified:null})),
           "zip",
           {compressionLevel:6,preservePaths:false},
-          undefined,
+          handle,
           (_progress,stage)=>this.setProgress(1,"Packaging results · "+stage)
         );
+        const retainedPackageWorkspace=packageWorkspace;
         expanded.push({
           name:"converted-files.zip",
           blob:packaged.blob,
-          warnings:["Local Phase 8 batch package of successful outputs."]
+          warnings:[
+            handle
+              ?"Local Phase 9 batch package streamed into OPFS."
+              :"Local batch package; this browser could not provide OPFS streaming."
+          ],
+          release:retainedPackageWorkspace
+            ?async()=>{await retainedPackageWorkspace.cleanup();}
+            :undefined
         });
+        packageWorkspace=null;
       }catch(error){
+        try{await packageWorkspace?.cleanup();}catch{}
         failures.push({
           name:"converted-files.zip",
           error:"Batch packaging failed: "+(error instanceof Error?error.message:String(error))
@@ -1915,7 +1950,11 @@ export class App {
     for(const output of outputs) this.addResult(container,output.name,output.blob,output.warnings,output.release);
 
     const total=outputs.reduce((sum,item)=>sum+item.blob.size,0);
-    if(autoPackage&&outputs.length>1&&total<=512*1024*1024){
+    const conveniencePackageLimit=Math.min(
+      512*1024*1024,
+      Math.floor(this.deviceProfile.workingSetBudgetBytes*.25)
+    );
+    if(autoPackage&&outputs.length>1&&total<=conveniencePackageLimit){
       void (async()=>{
         try{
           const entries=Object.create(null) as Record<string,Uint8Array>;
@@ -1978,6 +2017,9 @@ export class App {
       ["Mesh conversion",this.meshEngine.isAvailable()],
       ["RAW preview extraction",this.rawPreviewEngine.isAvailable()],
       ["Scientific metadata",this.scientificMetadataEngine.isAvailable()],
+      ["Device profile",this.deviceProfile.tier+(this.deviceProfile.mobileLike?" · mobile":"")],
+      ["Working-set budget",formatBytes(this.deviceProfile.workingSetBudgetBytes)],
+      ["Batch parallelism",String(this.deviceProfile.maxBatchParallelism)],
       ["Batch scheduler","Auto-safe parallel · sequential · resume"],
       ["Local OCR","English · German · French · Turkish · Korean"],
       ["WebCodecs",profile.webCodecs],
@@ -2006,7 +2048,7 @@ export class App {
       &&this.sqliteEngine.isAvailable()
       &&this.subtitleEngine.isAvailable()
       &&this.meshEngine.isAvailable()
-      ?"Phase 8 ready"
+      ?"Phase 9 ready"
       :"One or more local engines degraded";
     element("capability-json").textContent=JSON.stringify({
       ...profile,
@@ -2023,7 +2065,8 @@ export class App {
       legacyMediaEngine:this.legacyMediaEngine.isAvailable()?"FFmpeg WASM 0.12.10 (lazy)":"unavailable",
       fontEngine:this.fontEngine.isAvailable()?"fonteditor-core 2.6.3":"unavailable",
       specialistNativeEngines:"subtitles + meshes + RAW preview + FITS metadata + FB2",
-      batchScheduler:"capability-aware + sequential + in-session resume"
+      batchScheduler:"capability-aware + sequential + in-session resume",
+      deviceProfile:this.deviceProfile
     },null,2);
   }
 }

@@ -9,8 +9,16 @@ export class ScientificMetadataEngine implements ConversionEngine{
   isAvailable():boolean{return true;}
   canConvert(from:string,to:string):boolean{return from==="fits"&&to==="json-data";}
 
-  async estimate(source:Blob):Promise<ConversionEstimate>{
-    return {temporaryBytes:Math.min(Math.max(4*1024*1024,source.size*.05),16*1024*1024),outputBytes:null,notes:["Only the FITS header is read; scientific array/table payloads remain untouched."]};
+  async estimate(_source:Blob):Promise<ConversionEstimate>{
+    return {
+      temporaryBytes:16*1024*1024,
+      memoryBytes:16*1024*1024,
+      workspaceBytes:8*1024*1024,
+      outputBytes:null,
+      sourceAccess:"streaming",
+      outputAccess:"buffered",
+      notes:["Only a bounded FITS header slice is read; multi-gigabyte scientific payloads remain untouched."]
+    };
   }
 
   async convert(request:EngineConvertRequest):Promise<EngineConvertResult>{

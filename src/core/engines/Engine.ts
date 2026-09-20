@@ -2,6 +2,10 @@ export interface ConversionEstimate {
   temporaryBytes: number;
   outputBytes: number | null;
   notes: string[];
+  memoryBytes?: number;
+  workspaceBytes?: number;
+  sourceAccess?: "streaming" | "buffered";
+  outputAccess?: "streaming" | "buffered";
 }
 
 export interface EngineConvertRequest {

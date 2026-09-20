@@ -1,6 +1,8 @@
 import type { ConversionEngine, ConversionEstimate, EngineConvertRequest, EngineConvertResult } from "../../core/engines/Engine";
 import type { DetailedImageInspection, ImageConversionOptions } from "../../core/image/types";
 import type { ImageWorkerRequest, ImageWorkerResponse } from "./protocol";
+import { assertMemoryBackedSource } from "../../core/performance/Budget";
+import { getDeviceProfile } from "../../core/performance/DeviceProfile";
 
 const INPUTS = new Set(["jpeg","png","webp","gif","tiff","avif","heic","jxl","svg"]);
 const OUTPUTS = new Set(["jpeg","png","webp","gif","tiff","avif","jxl"]);
@@ -46,15 +48,21 @@ export class VipsImageEngine implements ConversionEngine {
   }
 
   async estimate(source:Blob):Promise<ConversionEstimate> {
-    const mobile = matchMedia?.("(pointer: coarse)")?.matches ?? false;
+    const profile=getDeviceProfile();
+    const memoryBytes=Math.max(source.size*3,profile.tier==="constrained"?160*1024*1024:256*1024*1024);
     return {
-      temporaryBytes: Math.max(source.size * 3, mobile ? 192*1024*1024 : 384*1024*1024),
+      temporaryBytes:memoryBytes,
+      memoryBytes,
+      workspaceBytes:Math.max(64*1024*1024,source.size*1.5),
       outputBytes:null,
-      notes:["libvips uses a demand-driven image pipeline; encoded input is still passed to the WASM worker."]
+      sourceAccess:"buffered",
+      outputAccess:"buffered",
+      notes:["libvips is demand-driven after decode, but the encoded source and encoded output cross the WASM worker as memory-backed buffers."]
     };
   }
 
   async inspect(source:Blob, sourceFormatId:string):Promise<DetailedImageInspection> {
+    assertMemoryBackedSource(source.size,"libvips image inspection",3,512*1024*1024);
     const requestId = crypto.randomUUID();
     return this.request({
       type:"inspect", requestId, source, sourceFormatId, assetBase:this.assetBase
@@ -65,6 +73,7 @@ export class VipsImageEngine implements ConversionEngine {
     if (!this.isAvailable() || !this.canConvert(request.sourceFormatId, request.targetFormatId)) {
       throw new Error("IMAGE_ENGINE_UNAVAILABLE: The production image engine cannot perform this route.");
     }
+    assertMemoryBackedSource(request.source.size,"libvips image conversion",3,512*1024*1024);
     const requestId = crypto.randomUUID();
     const options = { ...defaultOptions(), ...(request.options ?? {}) } as ImageConversionOptions;
 

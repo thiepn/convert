@@ -1,5 +1,6 @@
 import type { ConversionEngine, ConversionEstimate, EngineConvertRequest, EngineConvertResult } from "../../core/engines/Engine";
 import type { DetailedMediaInspection, MediaConversionOptions } from "../../core/media/types";
+import { getDeviceProfile } from "../../core/performance/DeviceProfile";
 import type { MediaPlan, MediaWorkerRequest, MediaWorkerResponse } from "./protocol";
 
 const INPUTS=new Set(["mp4","mov","webm-media","mkv","ogg","mp3","wav","flac","aac","mpegts"]);
@@ -34,10 +35,23 @@ export class MediaEngine implements ConversionEngine {
   }
 
   async estimate(source:Blob):Promise<ConversionEstimate> {
+    const profile=getDeviceProfile();
+    const streaming=profile.opfs;
+    const memoryBytes=streaming
+      ?Math.max(96*1024*1024,Math.min(384*1024*1024,Math.ceil(source.size*.08)))
+      :Math.max(128*1024*1024,Math.ceil(source.size*1.5));
     return {
-      temporaryBytes:Math.max(96*1024*1024,Math.ceil(source.size*1.35)),
+      temporaryBytes:memoryBytes,
+      memoryBytes,
+      workspaceBytes:Math.max(96*1024*1024,Math.ceil(source.size*1.2)),
       outputBytes:source.size,
-      notes:["Mediabunny reads the source lazily and streams output to OPFS when an output handle is available."]
+      sourceAccess:"streaming",
+      outputAccess:streaming?"streaming":"buffered",
+      notes:[
+        streaming
+          ?"Mediabunny reads the source lazily and streams output to OPFS."
+          :"Source access is lazy, but this browser lacks OPFS so large outputs may require memory buffering."
+      ]
     };
   }
 
