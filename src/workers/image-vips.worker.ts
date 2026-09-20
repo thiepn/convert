@@ -6,7 +6,7 @@ declare const self: DedicatedWorkerGlobalScope;
 let vipsPromise: Promise<any> | null = null;
 let loadedBase = "";
 
-function send(message:ImageWorkerResponse) { self.postMessage(message); }
+function send(message:ImageWorkerResponse) { scope.postMessage(message); }
 
 async function getVips(assetBase:string):Promise<any> {
   if (vipsPromise && loadedBase === assetBase) return vipsPromise;
@@ -135,7 +135,7 @@ async function loadImage(vips:any,source:Blob,sourceFormatId:string,preserveAnim
 }
 
 function safeLimits(inspect:DetailedImageInspection) {
-  const mobile=(navigator.maxTouchPoints ?? 0)>0 && (navigator.hardwareConcurrency ?? 8)<=8;
+  const nav=navigator as any;\n  const mobile=(nav.maxTouchPoints ?? 0)>0 && (nav.hardwareConcurrency ?? 8)<=8;
   const maxPixels=mobile ? 80_000_000 : 200_000_000;
   const totalPixels=inspect.width*inspect.height*inspect.frames;
   if (!Number.isSafeInteger(totalPixels) || totalPixels>maxPixels) throw new Error("IMAGE_DIMENSIONS_UNSAFE: Decoded pixel count exceeds this device's safety limit.");
@@ -223,7 +223,7 @@ async function inspectSource(vips:any,source:Blob,sourceFormatId:string):Promise
   } finally { loaded.image.delete?.(); }
 }
 
-self.onmessage=async(event:MessageEvent<ImageWorkerRequest>)=>{
+scope.onmessage=async(event:MessageEvent<ImageWorkerRequest>)=>{
   const request=event.data;
   try {
     const vips=await getVips(request.assetBase);
