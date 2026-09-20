@@ -1,4 +1,5 @@
 import { EngineRegistry } from "../engines/EngineRegistry";
+import type { ConversionEstimate } from "../engines/Engine";
 import { FormatRegistry } from "../formats/FormatRegistry";
 import { inspectFile } from "../inspection/inspectFile";
 import { ConversionPlanner } from "../planner/ConversionPlanner";
@@ -70,7 +71,7 @@ export class JobManager {
       const target=this.formats.get(targetFormatId);
       if(!target) throw new Error("FORMAT_UNSUPPORTED: Target format is unknown.");
 
-      const estimates=[];
+      const estimates:ConversionEstimate[]=[];
       for(const edge of route.edges){
         const engine=this.engines.get(edge.engineId);
         if(!engine) throw new Error("ENGINE_UNAVAILABLE: "+edge.engineId);
