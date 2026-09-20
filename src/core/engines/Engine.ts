@@ -11,6 +11,7 @@ export interface EngineConvertRequest {
   targetFormatId: string;
   targetMime: string;
   quality?: number;
+  options?: Record<string, unknown>;
   signal: AbortSignal;
   onProgress?: (progress: number, stage: string) => void;
 }
@@ -19,6 +20,8 @@ export interface EngineConvertResult {
   blob: Blob;
   width?: number;
   height?: number;
+  warnings?: string[];
+  details?: Record<string, unknown>;
 }
 
 export interface ConversionEngine {
