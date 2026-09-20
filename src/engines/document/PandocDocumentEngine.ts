@@ -53,6 +53,13 @@ export class PandocDocumentEngine implements ConversionEngine{
     }
 
     const options={...defaults(),...(request.options??{})} as DocumentConversionOptions;
+    const auxiliaryBytes=(options.referenceDocument?.size??0)
+      +(options.resources??[]).reduce((sum,item)=>sum+item.blob.size,0);
+    const auxiliaryLimit=mobile?48*1024*1024:160*1024*1024;
+    if(auxiliaryBytes>auxiliaryLimit){
+      throw new Error("DOCUMENT_RESOURCE_LIMIT: Reference/resources exceed this device's semantic conversion budget.");
+    }
+
     const worker=new Worker(new URL("../../workers/document-pandoc.worker.ts",import.meta.url),{type:"module"});
     this.workers.add(worker);
     const requestId=crypto.randomUUID();
