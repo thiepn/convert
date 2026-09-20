@@ -7,6 +7,7 @@ export interface ArchiveEntryInfo {
   encrypted:boolean|null;
   lastModified:number|null;
   comment:string|null;
+  type?:"file"|"directory"|"symlink"|"other";
 }
 
 export interface DetailedArchiveInspection {
