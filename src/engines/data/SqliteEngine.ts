@@ -5,6 +5,7 @@ import type {
   EngineConvertResult
 } from "../../core/engines/Engine";
 import type { DataConversionOptions, DetailedDatabaseInspection, DetailedDataInspection } from "../../core/data/types";
+import { assertMemoryBackedSource } from "../../core/performance/Budget";
 import type { SqliteWorkerRequest, SqliteWorkerResponse } from "./sqlite-protocol";
 
 const INPUTS=new Set(["sqlite","json-data","jsonl"]);
@@ -31,11 +32,15 @@ export class SqliteEngine implements ConversionEngine{
   }
 
   async estimate(source:Blob):Promise<ConversionEstimate>{
-    const mobile=typeof matchMedia==="function"&&matchMedia("(pointer: coarse)").matches;
+    const memoryBytes=Math.max(source.size*3,192*1024*1024);
     return {
-      temporaryBytes:Math.max(source.size*3,mobile?192*1024*1024:512*1024*1024),
+      temporaryBytes:memoryBytes,
+      memoryBytes,
+      workspaceBytes:Math.max(64*1024*1024,source.size*1.5),
       outputBytes:null,
-      notes:["sql.js loads the SQLite database into WebAssembly memory; large databases are size-gated."]
+      sourceAccess:"buffered",
+      outputAccess:"buffered",
+      notes:["sql.js loads the SQLite database into WebAssembly memory; large databases are device-budgeted."]
     };
   }
 
@@ -83,9 +88,7 @@ export class SqliteEngine implements ConversionEngine{
   }
 
   private assertSize(source:Blob){
-    const mobile=typeof matchMedia==="function"&&matchMedia("(pointer: coarse)").matches;
-    const limit=mobile?128*1024*1024:512*1024*1024;
-    if(source.size>limit) throw new Error("SQLITE_MEMORY_LIMIT: SQLite source exceeds this device's sql.js memory budget.");
+    assertMemoryBackedSource(source.size,"sql.js SQLite processing",3,768*1024*1024);
   }
 
   private run(
