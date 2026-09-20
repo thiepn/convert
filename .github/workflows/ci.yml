@@ -1,4 +1,4 @@
-name: Phase 0 CI
+name: Convert CI
 
 on:
   push:
