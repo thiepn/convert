@@ -30,7 +30,7 @@ export default defineConfig({
         { src: "node_modules/@tesseract.js-data/kor/4.0.0_best_int/kor.traineddata.gz", dest: "engines/tesseract/lang" },
 
         { src: "node_modules/@matbee/libreoffice-converter/wasm/*", dest: "engines/libreoffice/wasm" },
-        { src: "node_modules/@matbee/libreoffice-converter/dist/browser.worker.js", dest: "engines/libreoffice", rename: "browser.worker.js" }
+        { src: "node_modules/@matbee/libreoffice-converter/dist/browser.worker.global.js", dest: "engines/libreoffice", rename: "browser.worker.global.js" }
       ]
     })
   ],
