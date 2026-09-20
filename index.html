@@ -13,17 +13,17 @@
     <header class="hero">
       <div>
         <div class="eyebrow">THIEPN CONVERT · LOCAL ENGINE</div>
-        <h1>Convert images, audio, and video locally.</h1>
-        <p>Files stay on your device. Compatible media tracks are remuxed without re-encoding; transcoding uses browser-native codecs where available.</p>
+        <h1>Convert files locally in your browser.</h1>
+        <p>Images, audio, video, and PDFs stay on your device. No conversion server is involved.</p>
       </div>
       <div class="privacy-badge"><span class="privacy-dot"></span> No file uploads</div>
     </header>
 
     <section class="panel drop-panel">
       <label id="drop-zone" class="drop-zone" for="file-input">
-        <input id="file-input" type="file" multiple accept="image/*,audio/*,video/*,.heic,.heif,.jxl,.tif,.tiff,.svg,.mkv,.webm,.mov,.m4a,.aac,.flac,.ogg,.opus,.ts,.m2ts,.avi,.flv">
-        <strong>Drop images, audio, or video</strong>
-        <span>Images · MP4 · MOV · MKV · WebM · MP3 · WAV · FLAC · AAC · Ogg · MPEG-TS</span>
+        <input id="file-input" type="file" multiple accept="image/*,audio/*,video/*,application/pdf,.pdf,.heic,.heif,.jxl,.tif,.tiff,.svg,.mkv,.webm,.mov,.m4a,.aac,.flac,.ogg,.opus,.ts,.m2ts,.avi,.flv">
+        <strong>Drop files anywhere</strong>
+        <span>Images · Audio · Video · PDF</span>
       </label>
     </section>
 
@@ -42,7 +42,7 @@
 
       <hr>
 
-      <div class="convert-grid">
+      <div id="common-controls" class="convert-grid">
         <label>
           <span>Convert to</span>
           <select id="target-format"></select>
@@ -198,11 +198,119 @@
         </div>
       </div>
 
+      <div id="pdf-controls" class="control-section hidden">
+        <div class="control-title">PDF tools</div>
+        <div class="convert-grid phase-controls pdf-controls-grid">
+          <label>
+            <span>Operation</span>
+            <select id="pdf-operation">
+              <option value="optimize" selected>Lossless optimize</option>
+              <option value="linearize">Optimize for fast web view</option>
+              <option value="repair">Repair / rewrite structure</option>
+              <option value="export-images">Export pages as images</option>
+              <option value="extract-text">Extract text</option>
+              <option value="ocr">Make searchable with OCR</option>
+              <option value="split">Split / extract page groups</option>
+              <option value="rotate">Rotate pages</option>
+              <option value="reorder">Reorder / delete pages</option>
+              <option value="flatten-forms">Flatten form fields</option>
+              <option value="encrypt">Encrypt with AES-256</option>
+              <option value="decrypt">Decrypt</option>
+              <option value="merge">Merge selected PDFs</option>
+            </select>
+          </label>
+
+          <label>
+            <span>Password / current password</span>
+            <input id="pdf-password" type="password" autocomplete="off" placeholder="If required">
+          </label>
+
+          <label class="pdf-option pdf-new-password">
+            <span>New password</span>
+            <input id="pdf-new-password" type="password" autocomplete="new-password" placeholder="For encryption">
+          </label>
+
+          <label class="pdf-option pdf-pages">
+            <span>Pages</span>
+            <input id="pdf-pages" type="text" placeholder="all or 1-3,5,8">
+          </label>
+
+          <label class="pdf-option pdf-split">
+            <span>Split groups</span>
+            <input id="pdf-split-groups" type="text" placeholder="1-3;4-6;7-9">
+          </label>
+
+          <label class="pdf-option pdf-reorder">
+            <span>New page order</span>
+            <input id="pdf-order" type="text" placeholder="3,1,2,4-8">
+          </label>
+
+          <label class="pdf-option pdf-render">
+            <span>Page image format</span>
+            <select id="pdf-image-format">
+              <option value="png" selected>PNG</option>
+              <option value="jpeg">JPEG</option>
+              <option value="webp">WebP</option>
+            </select>
+          </label>
+
+          <label class="pdf-option pdf-render">
+            <span>Render quality</span>
+            <select id="pdf-image-quality">
+              <option value="1">Maximum</option>
+              <option value="0.9" selected>High</option>
+              <option value="0.8">Balanced</option>
+              <option value="0.65">Small</option>
+            </select>
+          </label>
+
+          <label class="pdf-option pdf-dpi">
+            <span>Render / OCR resolution</span>
+            <select id="pdf-dpi">
+              <option value="150">150 DPI · fast</option>
+              <option value="250" selected>250 DPI · balanced</option>
+              <option value="300">300 DPI · accurate</option>
+              <option value="600">600 DPI · very large</option>
+            </select>
+          </label>
+
+          <label class="pdf-option pdf-ocr">
+            <span>OCR language</span>
+            <select id="pdf-ocr-language">
+              <option value="eng">English</option>
+              <option value="deu" selected>German</option>
+              <option value="fra">French</option>
+              <option value="tur">Turkish</option>
+              <option value="kor">Korean</option>
+              <option value="eng+deu">English + German</option>
+            </select>
+          </label>
+
+          <label class="pdf-option pdf-ocr">
+            <span>OCR pages</span>
+            <select id="pdf-ocr-pages">
+              <option value="scanned" selected>Only pages without text</option>
+              <option value="all">All pages</option>
+            </select>
+          </label>
+
+          <label class="pdf-option pdf-rotate">
+            <span>Rotation</span>
+            <select id="pdf-rotation">
+              <option value="90">90° clockwise</option>
+              <option value="180">180°</option>
+              <option value="270">270° clockwise</option>
+            </select>
+          </label>
+        </div>
+        <button id="pdf-reinspect-button" class="secondary-button" type="button">Re-inspect with password</button>
+      </div>
+
       <div id="route-box" class="route-box"></div>
       <div id="loss-warnings" class="warnings"></div>
 
       <div class="action-row">
-        <button id="convert-button" class="primary-button" type="button">Convert locally</button>
+        <button id="convert-button" class="primary-button" type="button">Run locally</button>
         <button id="cancel-button" class="secondary-button hidden" type="button">Cancel</button>
       </div>
 
@@ -234,7 +342,7 @@
 
     <section class="panel compact-panel">
       <h2>Privacy model</h2>
-      <p>Conversion uses local browser APIs, WebAssembly, WebCodecs, workers, and OPFS. Source files, media tracks, filenames, metadata, and outputs are not uploaded to a conversion server.</p>
+      <p>Conversion uses local browser APIs, WebAssembly, WebCodecs, workers, OPFS, PDF.js, qpdf, and Tesseract. Source files, passwords, extracted text, OCR results, and outputs are not uploaded to a conversion server.</p>
     </section>
   </main>
   <script type="module" src="/src/main.ts"></script>
