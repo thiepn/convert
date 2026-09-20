@@ -63,7 +63,14 @@ export function buildBatchPipeline(input:PipelineInput):BatchPipeline {
     });
   }
 
-  if(quality<.999) steps.push({kind:"quality",label:"Quality "+Math.round(quality*100)+"%"});
+  const qualityRelevant=
+    options.maxDimension!=null
+    ||options.background!=null
+    ||options.lossless!=null
+    ||options.preserveAnimation!=null;
+  if(quality<.999&&qualityRelevant){
+    steps.push({kind:"quality",label:"Quality "+Math.round(quality*100)+"%"});
+  }
   steps.push({kind:"convert",label:"Convert to "+target});
 
   const packageResults=input.packageResults??true;
