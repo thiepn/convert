@@ -199,6 +199,12 @@ export function createConversionGraph():ConversionGraph {
     }
   }
 
+  edges.push({
+    from:"sqlite",to:"sqlite",engineId:"sqlite-data",
+    qualityLoss:0,metadataLoss:[],
+    temporaryMultiplier:3,streaming:false,baseCost:2,mode:"semantic"
+  });
+
   for(const to of SQLITE_OUTPUTS){
     edges.push({
       from:"sqlite",to,engineId:"sqlite-data",
