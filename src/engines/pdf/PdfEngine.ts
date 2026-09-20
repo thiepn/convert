@@ -205,12 +205,14 @@ export class PdfEngine implements ConversionEngine {
 
     const replacements:Array<{page:number;pdf:Blob}>=[];
     const texts:string[]=[];
+    let currentOcrIndex=0;
     await this.ocr.prepare(options.language,(progress,status)=>{
-      onProgress?.(progress*.8/status.length||0,status);
+      onProgress?.((currentOcrIndex+progress)/Math.max(1,pages.length),status);
     });
 
     try{
       for(let index=0;index<pages.length;index++){
+        currentOcrIndex=index;
         const page=pages[index];
         const base=index/pages.length;
         onProgress?.(base,"Rendering page "+page+" for OCR");
@@ -264,7 +266,7 @@ export class PdfEngine implements ConversionEngine {
     const prefix=currentPassword?["--password="+currentPassword]:[];
     return this.qpdfTransform(
       source,
-      [...prefix,"--encrypt",newPassword,owner,"256","--"],
+      [...prefix,"--encrypt",newPassword,owner,"256"],
       undefined,
       true
     );
