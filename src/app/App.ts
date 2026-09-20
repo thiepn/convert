@@ -9,18 +9,21 @@ import { inspectFile } from "../core/inspection/inspectFile";
 import { JobManager } from "../core/jobs/JobManager";
 import type { ConversionOutput } from "../core/jobs/types";
 import type { DetailedMediaInspection, MediaConversionOptions } from "../core/media/types";
+import type { DetailedPdfInspection, PdfCreateImage, PdfOcrOptions, PdfSplitRange } from "../core/pdf/types";
 import { createConversionGraph } from "../core/planner/ConversionGraph";
 import { ConversionPlanner } from "../core/planner/ConversionPlanner";
 import {
   ImageOutputValidator,
   MediaOutputValidator,
+  PdfOutputValidator,
   UniversalOutputValidator
 } from "../core/validation/Validator";
 import { BrowserImageEngine } from "../engines/browser-image/BrowserImageEngine";
 import { VipsImageEngine } from "../engines/image/VipsImageEngine";
 import { MediaEngine } from "../engines/media/MediaEngine";
+import { PdfEngine } from "../engines/pdf/PdfEngine";
 
-type SelectionKind="image"|"media"|null;
+type SelectionKind="image"|"media"|"pdf"|null;
 type ResultLease={url:string;release?:()=>Promise<void>};
 
 function element<T extends HTMLElement>(id:string):T {
@@ -50,9 +53,19 @@ function formatDuration(seconds:number|null):string {
 }
 
 function bool(value:boolean):string { return value?"Available":"Unavailable"; }
+
 function numeric(id:string,scale=1):number|undefined {
   const value=Number(element<HTMLInputElement>(id).value);
   return Number.isFinite(value)&&value>0?value*scale:undefined;
+}
+
+function stem(name:string):string {
+  const index=name.lastIndexOf(".");
+  return index>0?name.slice(0,index):name;
+}
+
+function sanitizeFilename(name:string):string {
+  return name.replace(/[<>:"/\\|?*\u0000-\u001f]/g,"_").replace(/\.+$/,"").slice(0,180)||"output";
 }
 
 export class App {
@@ -61,6 +74,7 @@ export class App {
   private readonly graph=createConversionGraph();
   private readonly imageEngine=new VipsImageEngine();
   private readonly mediaEngine=new MediaEngine();
+  private readonly pdfEngine=new PdfEngine();
   private readonly planner:ConversionPlanner;
   private readonly jobs:JobManager;
 
@@ -68,6 +82,7 @@ export class App {
   private inspections:FileInspection[]=[];
   private imageDetail:DetailedImageInspection|null=null;
   private mediaDetail:DetailedMediaInspection|null=null;
+  private pdfDetail:DetailedPdfInspection|null=null;
   private kind:SelectionKind=null;
   private leases:ResultLease[]=[];
   private routeRevision=0;
@@ -76,6 +91,7 @@ export class App {
     this.engines.register(this.imageEngine);
     this.engines.register(new BrowserImageEngine());
     this.engines.register(this.mediaEngine);
+    this.engines.register(this.pdfEngine);
     this.planner=new ConversionPlanner(this.graph,this.formats,this.engines);
 
     const validator=new UniversalOutputValidator(
@@ -84,9 +100,9 @@ export class App {
         const detail=await this.imageEngine.inspect(blob,formatId);
         return {width:detail.width,height:detail.height};
       }),
-      new MediaOutputValidator(this.formats,blob=>this.mediaEngine.inspect(blob))
+      new MediaOutputValidator(this.formats,blob=>this.mediaEngine.inspect(blob)),
+      new PdfOutputValidator(this.formats,(blob,password)=>this.pdfEngine.inspect(blob,password))
     );
-
     this.jobs=new JobManager(this.formats,this.engines,this.planner,validator);
   }
 
@@ -105,12 +121,10 @@ export class App {
     });
 
     ["dragenter","dragover"].forEach(type=>zone.addEventListener(type,event=>{
-      event.preventDefault();
-      zone.classList.add("dragging");
+      event.preventDefault();zone.classList.add("dragging");
     }));
     ["dragleave","drop"].forEach(type=>zone.addEventListener(type,event=>{
-      event.preventDefault();
-      zone.classList.remove("dragging");
+      event.preventDefault();zone.classList.remove("dragging");
     }));
     zone.addEventListener("drop",event=>{
       const files=[...(event.dataTransfer?.files??[])];
@@ -121,12 +135,18 @@ export class App {
       "target-format","metadata-policy","image-quality","max-dimension","image-target-size",
       "background-color","lossless","track-policy","media-height","media-fps","video-codec",
       "audio-codec","video-bitrate","audio-bitrate","media-target-size","trim-start","trim-end",
-      "hardware-acceleration"
+      "hardware-acceleration","pdf-operation","pdf-pages","pdf-split-groups","pdf-order",
+      "pdf-image-format","pdf-image-quality","pdf-dpi","pdf-ocr-language","pdf-ocr-pages",
+      "pdf-rotation"
     ];
     for(const id of routeControls){
-      element(id).addEventListener("change",()=>void this.renderRoute());
+      element(id).addEventListener("change",()=>{
+        if(id==="pdf-operation") this.updatePdfOptionVisibility();
+        void this.renderRoute();
+      });
     }
 
+    element<HTMLButtonElement>("pdf-reinspect-button").addEventListener("click",()=>void this.refreshPdfInspection());
     element<HTMLButtonElement>("convert-button").addEventListener("click",()=>void this.convertAll());
     element<HTMLButtonElement>("cancel-button").addEventListener("click",()=>this.jobs.cancelAll());
   }
@@ -135,6 +155,7 @@ export class App {
     const category=inspection.detection.format?.category;
     if(category==="image") return "image";
     if(category==="audio"||category==="video") return "media";
+    if(category==="pdf") return "pdf";
     return null;
   }
 
@@ -143,6 +164,7 @@ export class App {
     this.files=files;
     this.imageDetail=null;
     this.mediaDetail=null;
+    this.pdfDetail=null;
     this.inspections=await Promise.all(files.map(file=>inspectFile(file,this.formats)));
 
     const kinds=new Set(this.inspections.map(i=>this.getKind(i)).filter(Boolean) as Exclude<SelectionKind,null>[]);
@@ -164,8 +186,8 @@ export class App {
 
     const warnings=this.inspections.flatMap(item=>item.detection.warnings.map(w=>item.name+": "+w));
     if(known.length!==files.length) warnings.push("At least one file could not be identified.");
-    if(kinds.size>1) warnings.push("Mixed image and media batches are intentionally separated; select one file family at a time.");
-    if(kinds.size===0) warnings.push("This format is recognized but does not have a Phase 2 local conversion engine.");
+    if(kinds.size>1) warnings.push("Mixed file families must be processed separately.");
+    if(kinds.size===0) warnings.push("This format has no active local conversion workflow.");
 
     this.renderSelectionControls();
 
@@ -177,9 +199,18 @@ export class App {
         }else if(this.kind==="media"&&this.mediaEngine.isAvailable()){
           this.mediaDetail=await this.mediaEngine.inspect(files[0]);
           warnings.push(...this.mediaDetail.warnings);
+        }else if(this.kind==="pdf"&&this.pdfEngine.isAvailable()){
+          const password=this.readPdfPassword();
+          this.pdfDetail=await this.pdfEngine.inspect(files[0],password);
+          warnings.push(...this.pdfDetail.warnings);
         }
       }catch(error){
-        warnings.push("Detailed inspection unavailable: "+(error instanceof Error?error.message:String(error)));
+        const message=error instanceof Error?error.message:String(error);
+        if(this.kind==="pdf"&&/PDF_PASSWORD_REQUIRED|PDF_PASSWORD_INCORRECT/.test(message)){
+          warnings.push("This PDF is password-protected. Enter the password and choose Re-inspect.");
+        }else{
+          warnings.push("Detailed inspection unavailable: "+message);
+        }
       }
     }
 
@@ -187,12 +218,30 @@ export class App {
     this.renderTracks();
     this.renderWarnings("inspection-warnings",warnings);
     this.populateTargets();
+    this.updatePdfOptionVisibility();
+    await this.renderRoute();
+  }
+
+  private async refreshPdfInspection(){
+    if(this.kind!=="pdf"||this.files.length!==1) return;
+    const warnings:string[]=[];
+    try{
+      this.pdfDetail=await this.pdfEngine.inspect(this.files[0],this.readPdfPassword());
+      warnings.push(...this.pdfDetail.warnings);
+    }catch(error){
+      this.pdfDetail=null;
+      warnings.push(error instanceof Error?error.message:String(error));
+    }
+    this.renderFacts();
+    this.renderWarnings("inspection-warnings",warnings);
     await this.renderRoute();
   }
 
   private renderSelectionControls(){
+    element("common-controls").classList.toggle("hidden",this.kind==="pdf");
     element("image-controls").classList.toggle("hidden",this.kind!=="image");
     element("media-controls").classList.toggle("hidden",this.kind!=="media");
+    element("pdf-controls").classList.toggle("hidden",this.kind!=="pdf");
   }
 
   private renderFacts(){
@@ -238,55 +287,64 @@ export class App {
         ["Subtitles",String(this.mediaDetail?.subtitleTracks??0)],
         ["MIME",this.mediaDetail?.mimeType??first?.mime??"—"]
       ];
+    }else if(this.kind==="pdf"){
+      facts=[
+        ["Format","PDF"],
+        ["Size",formatBytes(total)],
+        ["Pages",this.pdfDetail?String(this.pdfDetail.pages):"Locked / not inspected"],
+        ["Content",this.pdfDetail
+          ? this.pdfDetail.mixed?"Mixed text + scans":this.pdfDetail.scannedPages===this.pdfDetail.pages?"Image / scanned":"Searchable text"
+          :"—"],
+        ["Text pages",this.pdfDetail?String(this.pdfDetail.textPages):"—"],
+        ["Scan pages",this.pdfDetail?String(this.pdfDetail.scannedPages):"—"],
+        ["Forms",this.pdfDetail?String(this.pdfDetail.forms):"—"],
+        ["Annotations",this.pdfDetail?String(this.pdfDetail.annotations):"—"],
+        ["Attachments",this.pdfDetail?String(this.pdfDetail.attachments):"—"],
+        ["Bookmarks",this.pdfDetail?String(this.pdfDetail.outlineItems):"—"],
+        ["Signatures",this.pdfDetail?String(this.pdfDetail.signatures):"—"],
+        ["Producer",this.pdfDetail?.producer??"—"]
+      ];
     }else{
       facts=[
         ["Format",first?.detection.format?.name??"Unknown"],
         ["Size",formatBytes(total)],
-        ["Status","No active Phase 2 route"],
+        ["Status","No active workflow"],
         ["Category",first?.detection.format?.category??"Unknown"]
       ];
     }
 
     const container=element("file-facts");
     container.replaceChildren(...facts.map(([label,value])=>{
-      const node=document.createElement("div");
-      node.className="fact";
+      const node=document.createElement("div");node.className="fact";
       const caption=document.createElement("span");caption.textContent=label;
       const strong=document.createElement("strong");strong.textContent=value;
-      node.append(caption,strong);
-      return node;
+      node.append(caption,strong);return node;
     }));
   }
 
   private renderTracks(){
     const container=element("track-list");
     if(!this.mediaDetail||!this.mediaDetail.tracks.length){
-      container.classList.add("hidden");
-      return;
+      container.classList.add("hidden");return;
     }
-    container.classList.remove("hidden");
-    container.replaceChildren();
-
+    container.classList.remove("hidden");container.replaceChildren();
     for(const track of this.mediaDetail.tracks){
       const row=document.createElement("div");row.className="track-row";
-      const type=document.createElement("strong");
-      type.textContent=track.type.toUpperCase()+" "+track.number;
+      const type=document.createElement("strong");type.textContent=track.type.toUpperCase()+" "+track.number;
       const info=document.createElement("span");
-      const details=[
+      info.textContent=[
         track.codecParameters??track.codec??"unknown codec",
         track.language!=="und"?track.language:null,
         track.name,
         track.bitrate?Math.round(track.bitrate/1000)+" kbps":null,
         track.type==="audio"&&track.channels?track.channels+" ch":null
-      ].filter(Boolean);
-      info.textContent=details.join(" · ");
-      row.append(type,info);
-      container.append(row);
+      ].filter(Boolean).join(" · ");
+      row.append(type,info);container.append(row);
     }
   }
 
   private commonTargets():string[]{
-    if(!this.inspections.length||!this.kind||this.inspections.some(i=>!i.detection.format)) return [];
+    if(!this.inspections.length||!this.kind||this.kind==="pdf"||this.inspections.some(i=>!i.detection.format)) return [];
     const sets=this.inspections.map(i=>new Set(this.planner.availableTargets(i.detection.format!.id)));
     return [...sets[0]].filter(target=>sets.every(set=>set.has(target)));
   }
@@ -294,15 +352,15 @@ export class App {
   private populateTargets(){
     const select=element<HTMLSelectElement>("target-format");
     select.replaceChildren();
-    const targets=this.commonTargets();
+    if(this.kind==="pdf"){
+      element<HTMLButtonElement>("convert-button").disabled=false;
+      return;
+    }
 
+    const targets=this.commonTargets();
     for(const id of targets){
-      const format=this.formats.get(id);
-      if(!format) continue;
-      const option=document.createElement("option");
-      option.value=id;
-      option.textContent=format.name;
-      select.append(option);
+      const format=this.formats.get(id);if(!format) continue;
+      const option=document.createElement("option");option.value=id;option.textContent=format.name;select.append(option);
     }
 
     const source=this.inspections[0]?.detection.format?.id;
@@ -337,13 +395,10 @@ export class App {
     const trimStart=numeric("trim-start");
     const trimEnd=numeric("trim-end");
     const targetId=element<HTMLSelectElement>("target-format").value;
-    const targetCategory=this.formats.get(targetId)?.category;
-
     return {
       tracks:element<HTMLSelectElement>("track-policy").value as MediaConversionOptions["tracks"],
       metadataPolicy:element<HTMLSelectElement>("metadata-policy").value as MediaConversionOptions["metadataPolicy"],
-      trimStart,
-      trimEnd,
+      trimStart,trimEnd,
       maxHeight:height?Number(height):undefined,
       frameRate:fps?Number(fps):undefined,
       videoCodec:element<HTMLSelectElement>("video-codec").value||undefined,
@@ -351,19 +406,71 @@ export class App {
       videoBitrate:numeric("video-bitrate",1_000_000),
       audioBitrate:numeric("audio-bitrate",1_000),
       targetBytes:targetMb?Math.round(targetMb*1024*1024):undefined,
-      extractAudio:targetCategory==="audio",
+      extractAudio:this.formats.get(targetId)?.category==="audio",
       hardwareAcceleration:element<HTMLSelectElement>("hardware-acceleration").value as MediaConversionOptions["hardwareAcceleration"]
     };
   }
 
+  private readPdfPassword():string|undefined{
+    return element<HTMLInputElement>("pdf-password").value||undefined;
+  }
+
+  private updatePdfOptionVisibility(){
+    if(this.kind!=="pdf") return;
+    const operation=element<HTMLSelectElement>("pdf-operation").value;
+    for(const node of document.querySelectorAll<HTMLElement>(".pdf-option")) node.classList.add("hidden");
+    const show=(selector:string)=>document.querySelectorAll<HTMLElement>(selector).forEach(node=>node.classList.remove("hidden"));
+
+    if(operation==="encrypt") show(".pdf-new-password");
+    if(operation==="export-images"){show(".pdf-pages");show(".pdf-render");show(".pdf-dpi");}
+    if(operation==="ocr"){show(".pdf-ocr");show(".pdf-dpi");}
+    if(operation==="split"){show(".pdf-split");}
+    if(operation==="rotate"){show(".pdf-pages");show(".pdf-rotate");}
+    if(operation==="reorder"){show(".pdf-reorder");}
+  }
+
   private async renderRoute(){
     const revision=++this.routeRevision;
-    const targetId=element<HTMLSelectElement>("target-format").value;
     const box=element("route-box");
+
+    if(this.kind==="pdf"){
+      const operation=element<HTMLSelectElement>("pdf-operation").value;
+      const labels:Record<string,string>={
+        optimize:"Lossless structural optimization with qpdf",
+        linearize:"Linearize PDF for progressive web viewing",
+        repair:"Rewrite PDF structure with qpdf",
+        "export-images":"Render selected pages locally with PDF.js",
+        "extract-text":"Extract positioned PDF text locally",
+        ocr:"Render → Tesseract OCR → searchable PDF pages",
+        split:"Create selected page groups without rasterizing",
+        rotate:"Rotate page metadata/content without rasterizing",
+        reorder:"Rebuild page tree in the specified order",
+        "flatten-forms":"Flatten AcroForm fields into page appearances",
+        encrypt:"Encrypt with qpdf AES-256",
+        decrypt:"Decrypt with qpdf",
+        merge:"Merge selected PDFs without rasterizing"
+      };
+      box.textContent=(labels[operation]??operation)+" · local only";
+      const warnings:string[]=[];
+      if(this.pdfDetail?.signatures&&operation!=="extract-text"&&operation!=="export-images"){
+        warnings.push("This PDF contains digital signature fields. Modifying the document may invalidate existing signatures.");
+      }
+      if(this.pdfDetail?.javascriptActions){
+        warnings.push("Embedded PDF JavaScript/actions were detected. They are never executed.");
+      }
+      if(["optimize","linearize","repair","encrypt","decrypt"].includes(operation)){
+        warnings.push("qpdf WASM uses a memory filesystem; this operation is size-gated on large PDFs.");
+      }
+      if(operation==="merge"&&this.files.length<2) warnings.push("Select at least two PDF files to merge.");
+      if(operation==="ocr") warnings.push("OCR assets and selected language data are self-hosted and processed locally.");
+      this.renderWarnings("loss-warnings",warnings);
+      return;
+    }
+
+    const targetId=element<HTMLSelectElement>("target-format").value;
     if(!targetId||!this.kind||!this.inspections.length){
       box.textContent="No common local conversion route is available for this selection.";
-      this.renderWarnings("loss-warnings",[]);
-      return;
+      this.renderWarnings("loss-warnings",[]);return;
     }
 
     try{
@@ -374,17 +481,14 @@ export class App {
       if(this.kind==="image"){
         box.textContent=(this.files.length>1?this.files.length+" files · ":"")
           +"→ "+(this.formats.get(targetId)?.name??targetId)
-          +" · "+[...new Set(routes.flatMap(r=>r.edges.map(e=>e.engineId==="vips-image"?"libvips/WASM":"browser fallback")))].join(" + ")
-          +" · local only";
+          +" · "+[...new Set(routes.flatMap(r=>r.edges.map(e=>
+            e.engineId==="vips-image"?"libvips/WASM":e.engineId==="pdf-engine"?"PDF engine":"browser fallback"
+          )))].join(" + ")+" · local only";
       }else if(this.files.length===1){
         box.textContent="Inspecting stream-copy compatibility…";
         const mediaPlan=await this.mediaEngine.plan(this.files[0],targetId,this.readMediaOptions());
         if(revision!==this.routeRevision) return;
-        const mode=mediaPlan.mode==="remux"
-          ?"Lossless stream copy / remux"
-          :mediaPlan.mode==="partial-transcode"
-            ?"Partial transcode"
-            :"Transcode required";
+        const mode=mediaPlan.mode==="remux"?"Lossless stream copy / remux":mediaPlan.mode==="partial-transcode"?"Partial transcode":"Transcode required";
         box.textContent=mode+" · "+mediaPlan.copyableTracks+"/"+mediaPlan.selectedTracks+" selected tracks directly copyable · OPFS streaming output";
         warnings.push(...mediaPlan.warnings);
       }else{
@@ -399,13 +503,9 @@ export class App {
   }
 
   private renderWarnings(id:string,warnings:string[]){
-    const container=element(id);
-    container.replaceChildren();
+    const container=element(id);container.replaceChildren();
     for(const text of warnings){
-      const warning=document.createElement("div");
-      warning.className="warning";
-      warning.textContent=text;
-      container.append(warning);
+      const warning=document.createElement("div");warning.className="warning";warning.textContent=text;container.append(warning);
     }
   }
 
@@ -416,15 +516,45 @@ export class App {
     return null;
   }
 
+  private parsePageSpec(spec:string,max:number):number[]{
+    const value=spec.trim().toLowerCase();
+    if(!value||value==="all") return Array.from({length:max},(_,i)=>i+1);
+    const pages:number[]=[];
+    for(const token of value.split(",").map(v=>v.trim()).filter(Boolean)){
+      const range=token.match(/^(\d+)(?:-(\d+))?$/);
+      if(!range) throw new Error("PDF_PAGE_RANGE_INVALID: Invalid page token "+token);
+      const start=Number(range[1]),end=Number(range[2]??range[1]);
+      const step=start<=end?1:-1;
+      for(let p=start;step>0?p<=end:p>=end;p+=step){
+        if(p<1||p>max) throw new Error("PDF_PAGE_RANGE_INVALID: Page "+p+" is outside 1-"+max+".");
+        if(!pages.includes(p)) pages.push(p);
+      }
+    }
+    if(!pages.length) throw new Error("PDF_PAGE_RANGE_INVALID: No pages selected.");
+    return pages;
+  }
+
+  private async ensurePdfDetail():Promise<DetailedPdfInspection>{
+    if(this.pdfDetail) return this.pdfDetail;
+    if(this.files.length!==1) throw new Error("PDF_OPERATION_REQUIRES_SINGLE_FILE: This operation requires one PDF.");
+    this.pdfDetail=await this.pdfEngine.inspect(this.files[0],this.readPdfPassword());
+    return this.pdfDetail;
+  }
+
   private async convertAll(){
     if(!this.files.length||!this.kind) return;
+    if(this.kind==="pdf"){
+      await this.runPdfOperation();
+      return;
+    }
+
     const targetId=element<HTMLSelectElement>("target-format").value;
     if(!targetId) return;
 
-    const button=element<HTMLButtonElement>("convert-button");
-    const cancel=element<HTMLButtonElement>("cancel-button");
-    const panel=element("job-panel");
-    const results=element("results");
+    if(this.kind==="image"&&targetId==="pdf"&&this.files.length>1){
+      await this.createCombinedImagePdf();
+      return;
+    }
 
     const imageOptions=this.kind==="image"?this.readImageOptions():null;
     const mediaOptions=this.kind==="media"?this.readMediaOptions():null;
@@ -433,29 +563,34 @@ export class App {
       if(validation){this.renderWarnings("loss-warnings",[validation]);return;}
     }
 
-    button.disabled=true;
-    cancel.classList.remove("hidden");
-    panel.classList.remove("hidden");
-    results.classList.add("hidden");
-    results.replaceChildren();
-    await this.releaseResults();
+    await this.runGenericBatch(targetId,imageOptions,mediaOptions);
+  }
+
+  private async runGenericBatch(
+    targetId:string,
+    imageOptions:ImageConversionOptions|null,
+    mediaOptions:MediaConversionOptions|null
+  ){
+    const button=element<HTMLButtonElement>("convert-button");
+    const cancel=element<HTMLButtonElement>("cancel-button");
+    const panel=element("job-panel");
+    const results=element("results");
+    button.disabled=true;cancel.classList.remove("hidden");panel.classList.remove("hidden");
+    results.classList.add("hidden");results.replaceChildren();await this.releaseResults();
 
     const outputs:ConversionOutput[]=[];
     const failed:Array<{name:string;error:string}>=[];
-
     try{
       for(let index=0;index<this.files.length;index++){
         const file=this.files[index];
         try{
           const options=(imageOptions??mediaOptions) as unknown as Record<string,unknown>;
-          const quality=this.kind==="image"?Number(element<HTMLSelectElement>("image-quality").value):0.82;
+          const quality=this.kind==="image"?Number(element<HTMLSelectElement>("image-quality").value):.82;
           const output=await this.jobs.convert(file,targetId,quality,options,snapshot=>{
             const overall=(index+snapshot.progress)/this.files.length;
-            element("job-stage").textContent=this.files.length>1
+            this.setProgress(overall,this.files.length>1
               ?"File "+(index+1)+"/"+this.files.length+" · "+snapshot.stage
-              : snapshot.stage;
-            element("job-progress").textContent=Math.round(overall*100)+"%";
-            element<HTMLElement>("progress-bar").style.width=Math.round(overall*100)+"%";
+              :snapshot.stage);
           });
           outputs.push(output);
         }catch(error){
@@ -468,73 +603,212 @@ export class App {
       this.renderWarnings("loss-warnings",[error instanceof Error?error.message:"Conversion cancelled."]);
       for(const output of outputs) await output.release?.();
     }finally{
-      button.disabled=false;
-      cancel.classList.add("hidden");
+      button.disabled=false;cancel.classList.add("hidden");
     }
+  }
+
+  private async createCombinedImagePdf(){
+    const button=element<HTMLButtonElement>("convert-button");
+    button.disabled=true;
+    await this.releaseResults();
+    element("job-panel").classList.remove("hidden");
+    const normalized:Array<PdfCreateImage>=[];
+    const releases:Array<()=>Promise<void>>=[];
+    try{
+      const options=this.readImageOptions();
+      for(let i=0;i<this.files.length;i++){
+        const file=this.files[i];
+        const sourceId=this.inspections[i].detection.format!.id;
+        if(sourceId==="jpeg"||sourceId==="png"){
+          normalized.push({blob:file,format:sourceId,name:file.name});
+        }else{
+          const result=await this.jobs.convert(file,"png",1,options as unknown as Record<string,unknown>,snapshot=>{
+            this.setProgress((i+snapshot.progress)/this.files.length,"Normalizing image "+(i+1)+"/"+this.files.length);
+          });
+          normalized.push({blob:result.blob,format:"png",name:file.name});
+          if(result.release) releases.push(result.release);
+        }
+      }
+      this.setProgress(.9,"Building PDF");
+      const blob=await this.pdfEngine.imagesToPdf(normalized,"auto",0);
+      await this.pdfEngine.inspect(blob);
+      this.showBlobResults([{name:"images-combined.pdf",blob,warnings:[]}],[]);
+      this.setProgress(1,"Complete");
+    }catch(error){
+      this.renderWarnings("loss-warnings",[error instanceof Error?error.message:String(error)]);
+    }finally{
+      for(const release of releases){try{await release();}catch{}}
+      button.disabled=false;
+    }
+  }
+
+  private async runPdfOperation(){
+    const operation=element<HTMLSelectElement>("pdf-operation").value;
+    const button=element<HTMLButtonElement>("convert-button");
+    const panel=element("job-panel");
+    button.disabled=true;panel.classList.remove("hidden");
+    await this.releaseResults();
+    element("results").classList.add("hidden");
+    element("results").replaceChildren();
+
+    const password=this.readPdfPassword();
+    const outputs:Array<{name:string;blob:Blob;warnings:string[]}>=[];
+
+    try{
+      if(operation==="merge"){
+        if(this.files.length<2) throw new Error("PDF_MERGE_REQUIRES_MULTIPLE: Select at least two PDFs.");
+        this.setProgress(.1,"Merging PDFs");
+        const blob=await this.pdfEngine.merge(this.files);
+        await this.pdfEngine.inspect(blob);
+        outputs.push({name:"merged.pdf",blob,warnings:[]});
+      }else{
+        if(this.files.length!==1) throw new Error("PDF_OPERATION_REQUIRES_SINGLE_FILE: Choose one PDF for this operation.");
+        const source=this.files[0];
+        const base=sanitizeFilename(stem(source.name));
+
+        if(operation==="optimize"){
+          this.setProgress(.2,"Lossless structural optimization");
+          const blob=await this.pdfEngine.optimize(source,password);
+          await this.pdfEngine.inspect(blob,password);
+          outputs.push({name:base+"-optimized.pdf",blob,warnings:[]});
+        }else if(operation==="linearize"){
+          this.setProgress(.2,"Linearizing PDF");
+          const blob=await this.pdfEngine.linearize(source,password);
+          await this.pdfEngine.inspect(blob,password);
+          outputs.push({name:base+"-web.pdf",blob,warnings:[]});
+        }else if(operation==="repair"){
+          this.setProgress(.2,"Repairing PDF structure");
+          const blob=await this.pdfEngine.repair(source,password);
+          await this.pdfEngine.inspect(blob,password);
+          outputs.push({name:base+"-repaired.pdf",blob,warnings:[]});
+        }else if(operation==="decrypt"){
+          if(!password) throw new Error("PDF_PASSWORD_REQUIRED: Enter the current password.");
+          this.setProgress(.2,"Decrypting PDF");
+          const blob=await this.pdfEngine.decrypt(source,password);
+          await this.pdfEngine.inspect(blob);
+          outputs.push({name:base+"-decrypted.pdf",blob,warnings:[]});
+        }else if(operation==="encrypt"){
+          const newPassword=element<HTMLInputElement>("pdf-new-password").value;
+          if(!newPassword) throw new Error("PDF_PASSWORD_REQUIRED: Enter a new password.");
+          this.setProgress(.2,"Encrypting PDF with AES-256");
+          const blob=await this.pdfEngine.encrypt(source,newPassword,password);
+          await this.pdfEngine.inspect(blob,newPassword);
+          outputs.push({name:base+"-encrypted.pdf",blob,warnings:["Owner password is generated locally and not retained; the user password can still open/decrypt the file."]});
+        }else if(operation==="flatten-forms"){
+          this.setProgress(.2,"Flattening form fields");
+          const blob=await this.pdfEngine.flattenForms(source,password);
+          await this.pdfEngine.inspect(blob);
+          outputs.push({name:base+"-flattened.pdf",blob,warnings:["Form fields are no longer editable."]});
+        }else if(operation==="extract-text"){
+          this.setProgress(.2,"Extracting PDF text");
+          const result=await this.pdfEngine.extractText(source,password);
+          outputs.push({name:base+".txt",blob:new Blob([result.text],{type:"text/plain;charset=utf-8"}),warnings:[]});
+        }else if(operation==="export-images"){
+          const detail=await this.ensurePdfDetail();
+          const pages=this.parsePageSpec(element<HTMLInputElement>("pdf-pages").value,detail.pages);
+          const format=element<HTMLSelectElement>("pdf-image-format").value as "png"|"jpeg"|"webp";
+          const dpi=Number(element<HTMLSelectElement>("pdf-dpi").value);
+          const quality=Number(element<HTMLSelectElement>("pdf-image-quality").value);
+          const rendered=await this.pdfEngine.exportPages(source,format,dpi,quality,pages,password,(progress,stage)=>this.setProgress(progress,stage));
+          outputs.push(...rendered.map(item=>({name:item.name,blob:item.blob,warnings:[]})));
+        }else if(operation==="ocr"){
+          const detail=await this.ensurePdfDetail();
+          const options:PdfOcrOptions={
+            language:element<HTMLSelectElement>("pdf-ocr-language").value,
+            dpi:Number(element<HTMLSelectElement>("pdf-dpi").value),
+            pages:element<HTMLSelectElement>("pdf-ocr-pages").value as PdfOcrOptions["pages"]
+          };
+          if(options.pages==="scanned"&&detail.scannedPages===0){
+            throw new Error("PDF_OCR_NOT_NEEDED: No pages without searchable text were detected.");
+          }
+          const result=await this.pdfEngine.ocrSearchable(source,options,password,(progress,stage)=>this.setProgress(progress,stage));
+          await this.pdfEngine.inspect(result.blob);
+          outputs.push({name:base+"-searchable.pdf",blob:result.blob,warnings:["OCR replaced selected scan pages with locally rendered searchable equivalents."]});
+          if(result.text.trim()) outputs.push({name:base+"-ocr.txt",blob:new Blob([result.text],{type:"text/plain;charset=utf-8"}),warnings:[]});
+        }else if(operation==="split"){
+          const detail=await this.ensurePdfDetail();
+          const raw=element<HTMLInputElement>("pdf-split-groups").value.trim();
+          const groups=raw?raw.split(";").filter(Boolean):detail.pagesInfo.map(page=>String(page.page));
+          const ranges:PdfSplitRange[]=groups.map((group,index)=>({
+            name:base+"-part-"+String(index+1).padStart(3,"0")+".pdf",
+            pages:this.parsePageSpec(group,detail.pages)
+          }));
+          const split=await this.pdfEngine.split(source,ranges,password);
+          outputs.push(...split.map(item=>({name:item.name,blob:item.blob,warnings:[]})));
+        }else if(operation==="rotate"){
+          const detail=await this.ensurePdfDetail();
+          const pages=this.parsePageSpec(element<HTMLInputElement>("pdf-pages").value,detail.pages);
+          const rotation=Number(element<HTMLSelectElement>("pdf-rotation").value) as 90|180|270;
+          const blob=await this.pdfEngine.rotate(source,pages,rotation,password);
+          await this.pdfEngine.inspect(blob);
+          outputs.push({name:base+"-rotated.pdf",blob,warnings:[]});
+        }else if(operation==="reorder"){
+          const detail=await this.ensurePdfDetail();
+          const order=this.parsePageSpec(element<HTMLInputElement>("pdf-order").value,detail.pages);
+          const blob=await this.pdfEngine.reorder(source,order,password);
+          await this.pdfEngine.inspect(blob);
+          outputs.push({name:base+"-reordered.pdf",blob,warnings:order.length<detail.pages?["Pages omitted from the order were removed."]:[]});
+        }
+      }
+
+      this.setProgress(1,"Complete");
+      this.showBlobResults(outputs,[]);
+    }catch(error){
+      this.renderWarnings("loss-warnings",[error instanceof Error?error.message:String(error)]);
+    }finally{
+      button.disabled=false;
+    }
+  }
+
+  private setProgress(progress:number,stage:string){
+    element("job-panel").classList.remove("hidden");
+    const value=Math.max(0,Math.min(1,progress));
+    element("job-stage").textContent=stage;
+    element("job-progress").textContent=Math.round(value*100)+"%";
+    element<HTMLElement>("progress-bar").style.width=Math.round(value*100)+"%";
   }
 
   private async renderResults(outputs:ConversionOutput[],failed:Array<{name:string;error:string}>){
-    const container=element("results");
-    container.replaceChildren();
-    container.classList.remove("hidden");
+    this.showBlobResults(outputs.map(o=>({name:o.fileName,blob:o.blob,warnings:o.warnings,release:o.release})),failed);
+  }
 
-    for(const output of outputs){
-      this.addResult(container,output.fileName,output.blob,output.warnings,output.release);
-    }
+  private showBlobResults(
+    outputs:Array<{name:string;blob:Blob;warnings:string[];release?:()=>Promise<void>}>,
+    failed:Array<{name:string;error:string}>
+  ){
+    const container=element("results");container.replaceChildren();container.classList.remove("hidden");
+    for(const output of outputs) this.addResult(container,output.name,output.blob,output.warnings,output.release);
 
     const total=outputs.reduce((sum,item)=>sum+item.blob.size,0);
     if(outputs.length>1&&total<=512*1024*1024){
-      try{
-        const entries:Record<string,Uint8Array>={};
-        for(const output of outputs){
-          entries[output.fileName]=new Uint8Array(await output.blob.arrayBuffer());
+      void (async()=>{
+        try{
+          const entries:Record<string,Uint8Array>={};
+          for(const output of outputs) entries[output.name]=new Uint8Array(await output.blob.arrayBuffer());
+          const zipped=zipSync(entries,{level:0});
+          this.addResult(container,"converted-files.zip",new Blob([zipped],{type:"application/zip"}),["Local batch package."]);
+        }catch(error){
+          const node=document.createElement("div");node.className="warning";
+          node.textContent="Batch ZIP: "+(error instanceof Error?error.message:String(error));container.append(node);
         }
-        const zipped=zipSync(entries,{level:0});
-        this.addResult(
-          container,
-          "converted-files.zip",
-          new Blob([zipped],{type:"application/zip"}),
-          ["Batch package; already-compressed media is stored without redundant ZIP compression."]
-        );
-      }catch(error){
-        failed.push({name:"Batch ZIP",error:error instanceof Error?error.message:String(error)});
-      }
+      })();
     }
 
     for(const failure of failed){
-      const node=document.createElement("div");
-      node.className="warning";
-      node.textContent=failure.name+": "+failure.error;
-      container.append(node);
+      const node=document.createElement("div");node.className="warning";
+      node.textContent=failure.name+": "+failure.error;container.append(node);
     }
   }
 
-  private addResult(
-    container:HTMLElement,
-    name:string,
-    blob:Blob,
-    warnings:string[],
-    release?:()=>Promise<void>
-  ){
-    const url=URL.createObjectURL(blob);
-    this.leases.push({url,release});
-
-    const item=document.createElement("div");
-    item.className="result-item";
-    const meta=document.createElement("div");
-    meta.className="result-meta";
+  private addResult(container:HTMLElement,name:string,blob:Blob,warnings:string[],release?:()=>Promise<void>){
+    const url=URL.createObjectURL(blob);this.leases.push({url,release});
+    const item=document.createElement("div");item.className="result-item";
+    const meta=document.createElement("div");meta.className="result-meta";
     const strong=document.createElement("strong");strong.textContent=name;
-    const sub=document.createElement("span");
-    sub.textContent=formatBytes(blob.size)+(warnings.length?" · "+warnings.length+" warning(s)":"");
+    const sub=document.createElement("span");sub.textContent=formatBytes(blob.size)+(warnings.length?" · "+warnings.length+" warning(s)":"");
     meta.append(strong,sub);
-
-    const link=document.createElement("a");
-    link.className="download-link";
-    link.href=url;
-    link.download=name;
-    link.textContent="Save";
-    item.append(meta,link);
-    container.append(item);
+    const link=document.createElement("a");link.className="download-link";link.href=url;link.download=name;link.textContent="Save";
+    item.append(meta,link);container.append(item);
   }
 
   private async releaseResults(){
@@ -549,6 +823,8 @@ export class App {
     const entries:Array<[string,boolean|string]>=[
       ["Image engine",this.imageEngine.isAvailable()],
       ["Media engine",this.mediaEngine.isAvailable()],
+      ["PDF engine",this.pdfEngine.isAvailable()],
+      ["Local OCR","English · German · French · Turkish · Korean"],
       ["WebCodecs",profile.webCodecs],
       ["H.264 decode / encode",profile.codecs.h264.decode+" / "+profile.codecs.h264.encode],
       ["VP9 decode / encode",profile.codecs.vp9.decode+" / "+profile.codecs.vp9.encode],
@@ -562,23 +838,21 @@ export class App {
       ["CPU threads",String(profile.hardwareConcurrency)]
     ];
 
-    const container=element("capabilities");
-    container.replaceChildren();
+    const container=element("capabilities");container.replaceChildren();
     for(const [label,value] of entries){
       const node=document.createElement("div");
       node.className="capability"+(typeof value==="boolean"?(value?" ok":" no"):"");
       const caption=document.createElement("span");caption.textContent=label;
-      const strong=document.createElement("strong");
-      strong.textContent=typeof value==="boolean"?bool(value):String(value);
-      node.append(caption,strong);
-      container.append(node);
+      const strong=document.createElement("strong");strong.textContent=typeof value==="boolean"?bool(value):String(value);
+      node.append(caption,strong);container.append(node);
     }
 
-    element("runtime-status").textContent=this.mediaEngine.isAvailable()?"Phase 2 ready":"Media degraded";
+    element("runtime-status").textContent=this.pdfEngine.isAvailable()?"Phase 3 ready":"PDF degraded";
     element("capability-json").textContent=JSON.stringify({
       ...profile,
       imageEngine:this.imageEngine.isAvailable()?"wasm-vips":"browser fallback",
-      mediaEngine:this.mediaEngine.isAvailable()?"Mediabunny 1.58.0":"unavailable"
+      mediaEngine:this.mediaEngine.isAvailable()?"Mediabunny 1.58.0":"unavailable",
+      pdfEngine:this.pdfEngine.isAvailable()?"PDF.js + pdf-lib + qpdf + Tesseract":"unavailable"
     },null,2);
   }
 }
