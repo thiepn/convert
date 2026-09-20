@@ -4,7 +4,7 @@ A local-first universal browser file-conversion platform.
 
 ## Current status
 
-Phase 4 — Documents & Office is implemented on top of the image, media, and PDF engines.
+Phase 5 — Archives & Compression is implemented on top of the image, media, PDF, and document engines.
 
 ### Images
 
@@ -20,13 +20,42 @@ Inspection, merge/split/reorder/rotate, page rendering, text extraction, searcha
 
 ### Documents & Office
 
-Semantic conversion uses Pandoc WASM; fidelity conversion uses a lazy self-hosted LibreOffice WASM worker.
+Pandoc WASM provides semantic conversion while a lazy self-hosted LibreOffice WASM worker handles layout-oriented Office fidelity conversion.
 
-Supported document families include DOC / DOCX / DOCM input, ODT, RTF, HTML, Markdown, TXT, LaTeX, Typst, EPUB, PPT / PPTX / PPTM input, ODP, Office/document to PDF fidelity conversion, and PDF to editable DOCX/ODT/HTML/Markdown reconstruction.
+Supported families include DOC/DOCX/DOCM input, ODT, RTF, HTML, Markdown, TXT, LaTeX, Typst, EPUB, PPT/PPTX/PPTM input, ODP, Office-to-PDF conversion, and PDF-to-editable reconstruction.
 
-Phase 4 includes semantic-vs-fidelity route selection, tracked-change policy, extracted/embedded resource handling, reference DOCX/ODT/PPTX styling, local user-supplied fonts for LibreOffice, macro detection for packaged OOXML, external-relationship warnings, selective ZIP package inspection with bomb/path guards, document batch conversion, sidecar asset output, and output reopening/validation.
+### Archives & Compression
 
-The LibreOffice runtime is intentionally lazy and is only downloaded/initialized when a fidelity route actually needs it.
+Phase 5 adds local inspection, extraction, creation, and repacking for common archive formats.
+
+Read/input coverage includes:
+
+- ZIP / Zip64
+- 7z
+- RAR v4/v5
+- TAR
+- GZIP
+- BZIP2
+- XZ
+- Zstandard where supported by bundled libarchive
+- TAR.GZ
+- TAR.BZ2
+- TAR.XZ
+- CPIO/libarchive-compatible input
+
+Creation/output coverage includes:
+
+- ZIP / Zip64
+- password-protected ZIP with AES-256
+- 7z
+- TAR
+- TAR.GZ
+- TAR.BZ2
+- TAR.XZ
+
+Archive security includes path traversal blocking, expansion-ratio/size guards, entry-count limits, extraction memory budgets, duplicate/case-collision handling, special-entry filtering, and direct raw libarchive worker RPC so hostile paths are validated before JavaScript object materialization.
+
+Any current file selection can be switched to Pack these files. Mixed or otherwise unsupported selections automatically enter archive-building mode.
 
 ## Development
 
@@ -43,13 +72,13 @@ Checks:
 
 ## Privacy
 
-Conversion jobs do not upload files. Document resources, fonts, reference files, extracted text, and outputs remain local to the browser.
+Conversion jobs do not upload files. Passwords, archive entry names, extracted files, document resources, fonts, OCR data, and all generated outputs remain local to the browser.
 
-See docs/privacy-model.md, docs/architecture.md, docs/image-engine.md, docs/media-engine.md, docs/pdf-engine.md, and docs/document-engine.md.
+See docs/privacy-model.md, docs/architecture.md, docs/image-engine.md, docs/media-engine.md, docs/pdf-engine.md, docs/document-engine.md, and docs/archive-engine.md.
 
 ## Licensing
 
-The dependency manifest is in licenses/dependencies.json. In particular, pandoc-wasm ships the GPL-2.0-or-later Pandoc binary; distribution must comply with the relevant GPL obligations.
+Dependency/license metadata lives in licenses/dependencies.json. Notable shipped components include GPL-2.0-or-later Pandoc WASM, MPL-2.0 document/media components, BSD-3-Clause zip.js, and the permissively licensed libarchive stack. Preserve all applicable source/binary redistribution notices.
 
 ## Roadmap
 
@@ -58,5 +87,5 @@ The dependency manifest is in licenses/dependencies.json. In particular, pandoc-
 - Phase 2: production audio/video engine — implemented
 - Phase 3: production PDF engine — implemented
 - Phase 4: documents and Office — implemented
-- Phase 5: archives
+- Phase 5: archives and compression — implemented
 - Phase 6: spreadsheets, data, and databases
