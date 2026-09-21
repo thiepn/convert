@@ -3,6 +3,7 @@ import type { ConversionEstimate } from "../engines/Engine";
 import { FormatRegistry } from "../formats/FormatRegistry";
 import { inspectFile } from "../inspection/inspectFile";
 import { ConversionPlanner } from "../planner/ConversionPlanner";
+import type { ConversionEdge } from "../planner/ConversionGraph";
 import { NetworkGuard } from "../security/NetworkGuard";
 import { assertSafeImageDimensions } from "../security/ResourceLimits";
 import { memoryPreflight } from "../performance/Budget";
@@ -113,22 +114,27 @@ export class JobManager {
       let current:Blob=source;
       let finalInWorkspace=false;
       let extraFiles:Array<{name:string;blob:Blob}>|undefined;
+      const attemptedEngines=new Set<string>();
 
-      this.emit(onUpdate,id,"PREPARING",0.12,"Preparing local conversion engine");
-      for(let index=0;index<route.edges.length;index++){
-        const edge=route.edges[index];
+      const runEdge=async(
+        edge:ConversionEdge,
+        index:number,
+        input:Blob,
+        recovery=false
+      )=>{
         const engine=this.engines.get(edge.engineId);
         const edgeTarget=this.formats.get(edge.to);
         if(!engine||!edgeTarget) throw new Error("ENGINE_UNAVAILABLE: Planned engine is missing.");
+        attemptedEngines.add(edge.engineId);
 
         const isLast=index===route.edges.length-1;
         const outputHandle=isLast&&workspace
-          ? await workspace.getFileHandle("engine-output."+extensionFor(this.formats,edge.to))
-          : undefined;
+          ?await workspace.getFileHandle("engine-output."+extensionFor(this.formats,edge.to))
+          :undefined;
 
-        const result=await engine.convert({
+        return engine.convert({
           jobId:id,
-          source:current,
+          source:input,
           sourceFormatId:edge.from,
           targetFormatId:edge.to,
           targetMime:edgeTarget.mimeTypes[0]??"application/octet-stream",
@@ -139,15 +145,89 @@ export class JobManager {
           onProgress:(progress,stage)=>{
             const base=index/route.edges.length;
             const scaled=(base+progress/route.edges.length)*0.75+0.15;
-            this.emit(onUpdate,id,"RUNNING",Math.min(0.9,scaled),stage);
+            this.emit(
+              onUpdate,id,"RUNNING",Math.min(0.9,scaled),
+              recovery?"Recovery · "+stage:stage
+            );
           }
         });
+      };
 
+      const findDirectRecovery=async(reference:ConversionEdge)=>{
+        if(route.edges.length!==1) return null;
+        const mode=reference.mode??"neutral";
+        const alternatives=this.planner.directAlternatives(
+          sourceFormat.id,targetFormatId,routePreference
+        );
+        for(const candidate of alternatives){
+          const edge=candidate.edges[0];
+          if(!edge||attemptedEngines.has(edge.engineId)||(edge.mode??"neutral")!==mode) continue;
+          const engine=this.engines.get(edge.engineId);
+          if(!engine) continue;
+
+          const estimate=await engine.estimate(source,edge.from,edge.to);
+          const recoveryResources=estimateRouteResources(source.size,[edge],[estimate],profile);
+          const recoveryMemory=memoryPreflight(recoveryResources.memoryBytes,profile);
+          if(!recoveryMemory.safe) continue;
+          if(profile.opfs){
+            const recoveryStorage=await storagePreflight(
+              recoveryResources.workspaceBytes,profile.storageReserveBytes
+            );
+            if(!recoveryStorage.safe) continue;
+          }
+          return candidate;
+        }
+        return null;
+      };
+
+      this.emit(onUpdate,id,"PREPARING",0.12,"Preparing local conversion engine");
+      let lastEdge:ConversionEdge|null=null;
+      for(let index=0;index<route.edges.length;index++){
+        const edge=route.edges[index];
+        const isLast=index===route.edges.length-1;
+        let usedEdge=edge;
+        let result;
+        try{
+          result=await runEdge(edge,index,current);
+        }catch(error){
+          const cancelled=controller.signal.aborted||(error instanceof DOMException&&error.name==="AbortError");
+          if(cancelled) throw error;
+          const recovery=await findDirectRecovery(edge);
+          if(!recovery) throw error;
+          usedEdge=recovery.edges[0];
+          warnings.push(...recovery.warnings.map(w=>w.message));
+          warnings.push("The primary local engine failed, so the conversion recovered with an alternate certified local engine.");
+          this.emit(onUpdate,id,"PREPARING",0.16,"Recovering with alternate local engine");
+          result=await runEdge(usedEdge,index,current,true);
+        }
+
+        lastEdge=usedEdge;
         current=result.blob;
         finalInWorkspace=isLast&&Boolean(result.outputInWorkspace);
         if(result.warnings) warnings.push(...result.warnings);
         if(isLast&&result.extraFiles?.length) extraFiles=result.extraFiles;
       }
+
+      this.emit(onUpdate,id,"VALIDATING",0.92,"Validating output");
+      let validation=await this.validator.validate(current,targetFormatId,options);
+      if(!validation.valid&&lastEdge){
+        const recovery=await findDirectRecovery(lastEdge);
+        if(recovery){
+          const recoveryEdge=recovery.edges[0];
+          warnings.push(...recovery.warnings.map(w=>w.message));
+          warnings.push("The first output failed independent validation, so an alternate certified local engine was used.");
+          this.emit(onUpdate,id,"PREPARING",0.9,"Retrying with alternate local engine");
+          const result=await runEdge(recoveryEdge,0,source,true);
+          lastEdge=recoveryEdge;
+          current=result.blob;
+          finalInWorkspace=Boolean(result.outputInWorkspace);
+          extraFiles=result.extraFiles?.length?result.extraFiles:undefined;
+          if(result.warnings) warnings.push(...result.warnings);
+          this.emit(onUpdate,id,"VALIDATING",0.94,"Validating recovered output");
+          validation=await this.validator.validate(current,targetFormatId,options);
+        }
+      }
+      if(!validation.valid) throw new Error("OUTPUT_INVALID: "+validation.errors.join(" "));
 
       if(workspace&&!finalInWorkspace){
         const name="final-output."+extensionFor(this.formats,targetFormatId);
@@ -155,10 +235,6 @@ export class JobManager {
         current=await workspace.readBlob(name);
         finalInWorkspace=true;
       }
-
-      this.emit(onUpdate,id,"VALIDATING",0.92,"Validating output");
-      const validation=await this.validator.validate(current,targetFormatId,options);
-      if(!validation.valid) throw new Error("OUTPUT_INVALID: "+validation.errors.join(" "));
 
       const external=this.networkGuard.externalRequestsSince(networkSnapshot);
       if(external.length){
