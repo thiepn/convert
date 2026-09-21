@@ -415,6 +415,13 @@ export class App {
       element<HTMLSelectElement>("archive-operation").value="repack";
     }
 
+    // Show planner-derived targets immediately. Detailed inspection can lazy-load
+    // large WASM engines, so target discovery must not appear broken while that
+    // richer inspection is still warming up.
+    this.populateTargets();
+    const convertButton=element<HTMLButtonElement>("convert-button");
+    convertButton.disabled=true;
+
     if(files.length===1&&known.length===1){
       try{
         if(this.kind==="image"&&this.imageEngine.isAvailable()){
