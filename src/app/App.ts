@@ -1465,7 +1465,12 @@ export class App {
           warnings.push("The SQL transform is ignored by this route. Choose a DuckDB-backed target, or export a SQLite table to a flat/data target first.");
         }
         if(query&&queryApplied){
-          warnings.push("The optional SQL transform runs locally and is restricted to one SELECT/WITH query.");
+          try{
+            validateLocalSelectQuery(query);
+            warnings.push("The optional SQL transform runs locally and is restricted to one SELECT/WITH query.");
+          }catch(error){
+            warnings.push(error instanceof Error?error.message:String(error));
+          }
         }
 
         if(this.kind==="spreadsheet"){
