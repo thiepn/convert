@@ -61,18 +61,19 @@ export class FontEngine implements ConversionEngine{
     let inputBytes=new Uint8Array(await request.source.arrayBuffer());
     let inputType=request.sourceFormatId;
 
+    if(request.sourceFormatId==="woff2"&&request.targetFormatId==="woff2"){
+      const copy=copyBytes(inputBytes);
+      return {
+        blob:new Blob([asArrayBuffer(copy)],{type:MIME.woff2}),
+        warnings:["WOFF2 input was preserved without re-encoding."]
+      };
+    }
+
     if(request.sourceFormatId==="woff2"){
       request.onProgress?.(.32,"Decompressing WOFF2 locally");
       inputBytes=copyBytes(await decompressWoff2(inputBytes));
       inputType=sfntType(inputBytes);
       if(request.signal.aborted) throw new DOMException("Font conversion cancelled.","AbortError");
-    }
-
-    if(request.sourceFormatId==="woff2"&&request.targetFormatId==="woff2"){
-      return {
-        blob:new Blob([asArrayBuffer(inputBytes)],{type:MIME.woff2}),
-        warnings:["WOFF2 input was decoded and validated locally before being returned."]
-      };
     }
 
     const font=createFont(asArrayBuffer(inputBytes),{
