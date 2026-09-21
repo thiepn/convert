@@ -68,3 +68,27 @@ test("Pages-like host becomes cross-origin isolated through the service worker f
   await expect(page.locator("#drop-zone")).toBeVisible();
   await expect(page.locator("#runtime-status")).not.toHaveText(/Probing/i,{timeout:120_000});
 });
+
+
+test("quick targets and keyboard conversion stay in the primary workflow",async({page},testInfo)=>{
+  test.skip(testInfo.project.name!=="chromium","workflow shortcut regression runs once in Chromium");
+  await openApp(page);
+
+  await page.locator("#file-input").setInputFiles({
+    name:"keyboard.srt",
+    mimeType:"application/x-subrip",
+    buffer:srtFixture("keyboard.srt").buffer
+  });
+  await expect(page.locator("#file-panel")).toBeVisible();
+
+  const quickVtt=page.locator('.target-shortcut[data-target="vtt"]');
+  await expect(quickVtt).toBeVisible();
+  await quickVtt.click();
+  await expect(page.locator("#target-format")).toHaveValue("vtt");
+  await expect(quickVtt).toHaveAttribute("aria-pressed","true");
+
+  await expect(page.locator("details.diagnostics-panel")).not.toHaveAttribute("open","");
+  await page.locator("h1").click();
+  await page.keyboard.press("Control+Enter");
+  await expect(page.locator("#results .result-item")).toHaveCount(1,{timeout:120_000});
+});
