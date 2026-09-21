@@ -1054,8 +1054,12 @@ export class App {
     const renderLimit=this.deviceProfile.mobileLike
       ?(this.deviceProfile.tier==="constrained"?60:100)
       :250;
+    const retryableFailures=snapshot.tasks.filter(task=>task.state==="failed"&&task.retryable!==false).length;
+    const blockedFailures=snapshot.tasks.filter(task=>task.state==="failed"&&task.retryable===false).length;
     element("batch-status-detail").textContent=
       snapshot.running+" running · "+snapshot.pending+" queued · failures stay isolated"
+      +(retryableFailures?" · "+retryableFailures+" retryable":"")
+      +(blockedFailures?" · "+blockedFailures+" need changed input/settings":"")
       +(snapshot.tasks.length>renderLimit?" · showing "+renderLimit+"/"+snapshot.tasks.length:"");
     element<HTMLButtonElement>("batch-resume-button").classList.toggle("hidden",!snapshot.resumable||snapshot.running>0);
 
