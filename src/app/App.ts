@@ -247,6 +247,7 @@ export class App {
         if(id==="archive-operation") this.updateArchiveOptionVisibility();
         if(id==="data-sheet-policy") this.updateDataOptionVisibility();
         if(id==="data-table-select") void this.refreshDatabasePreview();
+        if(id==="target-format") this.syncTargetShortcuts();
         this.updateBatchControls();
         void this.renderRoute();
       });
@@ -265,6 +266,40 @@ export class App {
       this.jobs.cancelAll();
       this.pdfEngine.cancelActive();
       this.archiveAbort?.abort();
+    });
+
+    this.bindKeyboardShortcuts(input);
+  }
+
+  private bindKeyboardShortcuts(input:HTMLInputElement){
+    document.addEventListener("keydown",event=>{
+      if(event.defaultPrevented) return;
+      const target=event.target as HTMLElement|null;
+      const editing=Boolean(target&&(target.matches("input, textarea, select")||target.isContentEditable));
+      const command=event.ctrlKey||event.metaKey;
+
+      if(command&&event.key==="Enter"&&!editing){
+        const button=element<HTMLButtonElement>("convert-button");
+        if(!button.disabled&&this.files.length){
+          event.preventDefault();
+          button.click();
+        }
+        return;
+      }
+
+      if(event.key==="Escape"){
+        const cancel=element<HTMLButtonElement>("cancel-button");
+        if(!cancel.classList.contains("hidden")){
+          event.preventDefault();
+          cancel.click();
+        }
+        return;
+      }
+
+      if(command&&event.key.toLowerCase()==="o"&&!editing){
+        event.preventDefault();
+        input.click();
+      }
     });
   }
 
@@ -1135,10 +1170,72 @@ export class App {
     return [...sets[0]].filter(target=>sets.every(set=>set.has(target)));
   }
 
+  private targetShortcutPreferences():string[]{
+    switch(this.kind){
+      case "image": return ["webp","jpeg","png","pdf","avif"];
+      case "media": return ["mp4","webm-media","mp3","flac","wav","ogg"];
+      case "document": return ["pdf","docx","markdown","html-doc","txt","odt"];
+      case "spreadsheet": return ["xlsx","csv","pdf","ods","json-data"];
+      case "data": return ["parquet","csv","json-data","jsonl","arrow","sqlite"];
+      case "database": return ["sqlite","csv","json-data","jsonl"];
+      case "archive":
+      case "archive-build": return ["zip","7z","tar","tar-gzip"];
+      case "specialist": return ["png","jpeg","webp","docx","html-doc","ttf","vtt","stl","json-data"];
+      default: return [];
+    }
+  }
+
+  private syncTargetShortcuts(){
+    const selected=element<HTMLSelectElement>("target-format").value;
+    document.querySelectorAll<HTMLButtonElement>("#target-shortcuts .target-shortcut").forEach(button=>{
+      const active=button.dataset.target===selected;
+      button.classList.toggle("active",active);
+      button.setAttribute("aria-pressed",String(active));
+    });
+  }
+
+  private renderTargetShortcuts(targets:string[]){
+    const container=element("target-shortcuts");
+    container.replaceChildren();
+    if(this.kind==="pdf"||targets.length<2){
+      container.classList.add("hidden");
+      return;
+    }
+
+    const targetSet=new Set(targets);
+    const selected=element<HTMLSelectElement>("target-format").value;
+    const ordered=[...new Set([
+      ...this.targetShortcutPreferences(),
+      selected,
+      ...targets
+    ])].filter(id=>targetSet.has(id)).slice(0,6);
+
+    for(const id of ordered){
+      const format=this.formats.get(id);
+      if(!format) continue;
+      const button=document.createElement("button");
+      button.type="button";
+      button.className="target-shortcut";
+      button.dataset.target=id;
+      button.textContent=format.name;
+      button.setAttribute("aria-pressed","false");
+      button.addEventListener("click",()=>{
+        const select=element<HTMLSelectElement>("target-format");
+        select.value=id;
+        select.dispatchEvent(new Event("change",{bubbles:true}));
+      });
+      container.append(button);
+    }
+
+    container.classList.toggle("hidden",container.childElementCount<2);
+    this.syncTargetShortcuts();
+  }
+
   private populateTargets(){
     const select=element<HTMLSelectElement>("target-format");
     select.replaceChildren();
     if(this.kind==="pdf"){
+      this.renderTargetShortcuts([]);
       element<HTMLButtonElement>("convert-button").disabled=false;
       return;
     }
@@ -1183,6 +1280,7 @@ export class App {
     else if(this.kind==="database"&&targets.includes("sqlite")) select.value="sqlite";
     else if((this.kind==="archive"||this.kind==="archive-build")&&targets.includes("zip")) select.value="zip";
 
+    this.renderTargetShortcuts(targets);
     element<HTMLButtonElement>("convert-button").disabled=targets.length===0;
   }
 
