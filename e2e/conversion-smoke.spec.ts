@@ -175,9 +175,10 @@ test("invalid data query fails safely with a human-readable recovery message",as
   await page.locator("#data-query").fill("DELETE FROM data");
   await page.locator("#convert-button").click();
 
-  const warning=page.locator("#results .warning").last();
-  await expect(warning).toBeVisible({timeout:120_000});
+  const warning=page.locator("#loss-warnings .warning").last();
+  await expect(warning).toBeVisible({timeout:10_000});
   const text=(await warning.textContent())??"";
   expect(text).not.toMatch(/[A-Z]{3,}_[A-Z_]+:/);
-  expect(text).toMatch(/could not|query|conversion/i);
+  expect(text).toMatch(/Query blocked|SELECT|WITH/i);
+  await expect(page.locator("#job-stage")).not.toContainText(/DuckDB|analytical query/i);
 });
