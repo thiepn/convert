@@ -55,7 +55,7 @@ export async function appDiagnostics(page:Page){
   });
 }
 
-export async function runTarget(page:Page,target:string){
+export async function runTarget(page:Page,target:string,timeoutMs=120_000){
   const option=page.locator(`#target-format option[value="${target}"]`);
   try{
     await expect(option).toHaveCount(1,{timeout:15_000});
@@ -71,7 +71,7 @@ export async function runTarget(page:Page,target:string){
   const button=page.locator("#convert-button");
   await button.click();
 
-  const deadline=Date.now()+120_000;
+  const deadline=Date.now()+timeoutMs;
   while(Date.now()<deadline){
     if(await page.locator("#results .result-item").count()) return;
     if(!(await button.isDisabled())){
