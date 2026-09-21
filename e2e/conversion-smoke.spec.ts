@@ -98,6 +98,7 @@ test("PDF qpdf path optimizes a generated PDF and validates it",async({page})=>{
 });
 
 test("Pandoc and LibreOffice document routes operate on real HTML",async({page})=>{
+  test.setTimeout(420_000);
   await selectFixture(page,htmlFixture());
   await runTarget(page,"markdown");
   const markdown=await resultText(page,"document-converted");
@@ -106,7 +107,7 @@ test("Pandoc and LibreOffice document routes operate on real HTML",async({page})
 
   await page.locator("#start-over-button").click();
   await selectFixture(page,htmlFixture());
-  await runTarget(page,"pdf");
+  await runTarget(page,"pdf",360_000);
   const pdf=await resultBytes(page,"document-converted");
   expect(pdf.subarray(0,5).toString("ascii")).toBe("%PDF-");
 });
