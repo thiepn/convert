@@ -72,7 +72,7 @@ Phase 7 adds deliberately bounded specialist packs:
 
 - PSD → flattened PNG / JPEG / WebP
 - Camera RAW families → embedded JPEG preview (not RAW development)
-- TTF / OTF / WOFF / WOFF2 / EOT font conversion
+- TTF / WOFF / EOT font conversion plus OTF → TTF; WOFF2 recognition-only after strict-CSP browser certification
 - SRT / WebVTT / ASS subtitle conversion
 - AVI / FLV / ASF / WMV / WMA through a lazy local FFmpeg WASM fallback
 - FB2 → semantic HTML → existing document routes
