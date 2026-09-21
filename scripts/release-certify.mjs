@@ -101,6 +101,17 @@ directoryHas(
   "Build contains LibreOffice WASM runtime"
 );
 
+const libreOfficeWorker=read("dist/engines/libreoffice/browser.worker.global.js");
+const libreOfficeTimeoutAt=libreOfficeWorker.indexOf("WASM initialization timeout");
+const libreOfficeTimeoutWindow=libreOfficeTimeoutAt>=0
+  ?libreOfficeWorker.slice(libreOfficeTimeoutAt,libreOfficeTimeoutAt+500)
+  :"";
+ok(
+  "LibreOffice cold-start timeout is maintenance-patched",
+  libreOfficeTimeoutAt>=0&&/(?:360000|36e4)/.test(libreOfficeTimeoutWindow)
+    &&!/(?:120000|12e4)/.test(libreOfficeTimeoutWindow)
+);
+
 for(const check of checks){
   console.log((check.condition?"PASS ":"FAIL ")+check.name+(check.detail?" — "+check.detail:""));
 }
