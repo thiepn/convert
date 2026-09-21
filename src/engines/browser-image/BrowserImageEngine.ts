@@ -37,11 +37,16 @@ export class BrowserImageEngine implements ConversionEngine {
     this.encodableTargets.clear();
     if (!this.baseAvailable()) return;
 
-    const canvas = new OffscreenCanvas(1, 1);
+    const canvas = new OffscreenCanvas(2, 2);
+    const context=canvas.getContext("2d");
+    if(!context) return;
+    context.fillStyle="#ffffff";
+    context.fillRect(0,0,2,2);
+
     for (const [formatId, mime] of Object.entries(MIME_BY_FORMAT)) {
       try {
         const blob = await canvas.convertToBlob({ type: mime, quality: 0.8 });
-        if (blob.type === mime && blob.size > 0) this.encodableTargets.add(formatId);
+        if (blob.type.toLowerCase() === mime && blob.size > 0) this.encodableTargets.add(formatId);
       } catch {}
     }
   }
