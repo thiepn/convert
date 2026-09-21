@@ -1,0 +1,32 @@
+name: Pages Source Fix
+
+on:
+  push:
+    branches:
+      - maintenance-1-pages-source-fix
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+
+jobs:
+  fix-pages-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect current Pages source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api             -H "Accept: application/vnd.github+json"             -H "X-GitHub-Api-Version: 2026-03-10"             "repos/$GITHUB_REPOSITORY/pages"             --jq '{build_type,source,html_url,cname,https_enforced}'
+      - name: Switch Pages to workflow publishing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api             -X PUT             -H "Accept: application/vnd.github+json"             -H "X-GitHub-Api-Version: 2026-03-10"             "repos/$GITHUB_REPOSITORY/pages"             -f build_type=workflow
+      - name: Verify Pages source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(gh api             -H "Accept: application/vnd.github+json"             -H "X-GitHub-Api-Version: 2026-03-10"             "repos/$GITHUB_REPOSITORY/pages"             --jq '.build_type')" = "workflow"
+          gh api             -H "Accept: application/vnd.github+json"             -H "X-GitHub-Api-Version: 2026-03-10"             "repos/$GITHUB_REPOSITORY/pages"             --jq '{build_type,source,html_url,cname,https_enforced}'
