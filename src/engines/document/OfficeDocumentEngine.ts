@@ -217,16 +217,27 @@ export class OfficeDocumentEngine implements ConversionEngine{
       ...createWasmPaths(this.wasmBase),
       browserWorkerJs:this.workerUrl,
       fonts,
-      enableProgressTracking:false,
+      enableProgressTracking:true,
       onProgress:info=>{
         const percent=Math.max(0,Math.min(100,info.percent))/100;
         const scaled=percent<1 ? .02+percent*.2 : .22;
         this.currentProgress?.(scaled,info.message||"Loading LibreOffice");
       }
     });
-    await converter.initialize();
-    this.converter=converter;
-    return converter;
+    try{
+      await converter.initialize();
+      this.converter=converter;
+      return converter;
+    }catch(error){
+      this.available=false;
+      this.fontSignature="";
+      try{await converter.destroy();}catch{}
+      const message=error instanceof Error?error.message:String(error);
+      throw new Error(
+        "OFFICE_ENGINE_UNAVAILABLE: LibreOffice fidelity mode could not initialize in this browser session. "
+        +"Use Semantic structure mode where available. "+message
+      );
+    }
   }
 
   private async resetConverter():Promise<void>{
