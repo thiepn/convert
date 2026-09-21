@@ -132,11 +132,10 @@ export class DuckDbDataEngine implements ConversionEngine{
       throw new Error("DATA_ROUTE_UNSUPPORTED: Unsupported structured-data route.");
     }
     const options={...defaultOptions(),...(request.options??{})} as DataConversionOptions;
+    const query=options.query?.trim()?validateLocalSelectQuery(options.query):"SELECT * FROM data";
     return this.exclusive(async()=>this.withSource(request.source,request.sourceFormatId,options,async(conn,db)=>{
       request.signal.throwIfAborted?.();
       request.onProgress?.(.18,"Preparing local analytical query");
-
-      const query=options.query?.trim()?validateLocalSelectQuery(options.query):"SELECT * FROM data";
       if(request.targetFormatId==="arrow"){
         const result=await conn.query(query);
         request.signal.throwIfAborted?.();
