@@ -50,6 +50,26 @@ export class ConversionPlanner {
     return [...targets];
   }
 
+  directAlternatives(
+    sourceId:string,
+    targetId:string,
+    preference?:"semantic"|"fidelity"
+  ):ConversionRoute[]{
+    const source=this.formats.get(sourceId);
+    const target=this.formats.get(targetId);
+    if(!source||!target) return [];
+
+    return this.graph.outgoing(sourceId)
+      .filter(edge=>edge.to===targetId)
+      .filter(edge=>this.engines.supports(edge.engineId,edge.from,edge.to))
+      .sort((a,b)=>edgeScore(a,preference)-edgeScore(b,preference))
+      .map(edge=>({
+        edges:[edge],
+        score:edgeScore(edge,preference),
+        warnings:analyzeLoss(source,target,[edge])
+      }));
+  }
+
   plan(
     sourceId:string,
     targetId:string,
@@ -60,15 +80,9 @@ export class ConversionPlanner {
     if(!source||!target) throw new Error("Unknown source or target format.");
 
     if(sourceId===targetId){
-      const direct=this.graph.outgoing(sourceId)
-        .filter(edge=>edge.to===targetId&&this.engines.supports(edge.engineId,edge.from,edge.to))
-        .sort((a,b)=>edgeScore(a,preference)-edgeScore(b,preference))[0];
+      const direct=this.directAlternatives(sourceId,targetId,preference)[0];
       if(!direct) throw new Error("No local conversion route is available on this browser.");
-      return {
-        edges:[direct],
-        score:edgeScore(direct,preference),
-        warnings:analyzeLoss(source,target,[direct])
-      };
+      return direct;
     }
 
     const queue:Array<{id:string;edges:ConversionEdge[];score:number}>=[{id:sourceId,edges:[],score:0}];
