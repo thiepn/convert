@@ -69,9 +69,9 @@ test("subtitle, mesh, FITS, and font specialist routes preserve usable output",a
 
   await page.locator("#start-over-button").click();
   await selectFixture(page,fontFixture());
-  await runTarget(page,"woff2");
+  await runTarget(page,"woff");
   const font=await resultBytes(page,"LiberationSans-Regular-converted");
-  expect(font.subarray(0,4).toString("ascii")).toBe("wOF2");
+  expect(font.subarray(0,4).toString("ascii")).toBe("wOFF");
 });
 
 test("PSD compatibility flattens an actual PSD to PNG",async({page})=>{
