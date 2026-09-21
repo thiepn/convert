@@ -107,9 +107,9 @@ const libreOfficeTimeoutWindow=libreOfficeTimeoutAt>=0
   ?libreOfficeWorker.slice(libreOfficeTimeoutAt,libreOfficeTimeoutAt+500)
   :"";
 ok(
-  "LibreOffice cold-start timeout is maintenance-patched",
-  libreOfficeTimeoutAt>=0&&/(?:360000|36e4)/.test(libreOfficeTimeoutWindow)
-    &&!/(?:120000|12e4)/.test(libreOfficeTimeoutWindow)
+  "LibreOffice uses the upstream initialization deadline",
+  libreOfficeTimeoutAt>=0&&/(?:120000|12e4)/.test(libreOfficeTimeoutWindow)
+    &&!/(?:360000|36e4)/.test(libreOfficeTimeoutWindow)
 );
 
 for(const check of checks){
