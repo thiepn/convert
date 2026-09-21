@@ -419,8 +419,6 @@ export class App {
     // large WASM engines, so target discovery must not appear broken while that
     // richer inspection is still warming up.
     this.populateTargets();
-    const convertButton=element<HTMLButtonElement>("convert-button");
-    convertButton.disabled=true;
 
     if(files.length===1&&known.length===1){
       try{
@@ -484,7 +482,6 @@ export class App {
     this.renderArchiveEntries();
     this.renderDataPreview();
     this.renderWarnings("inspection-warnings",warnings);
-    this.populateTargets();
     this.updatePdfOptionVisibility();
     this.updateArchiveOptionVisibility();
     this.updateDataOptionVisibility();
