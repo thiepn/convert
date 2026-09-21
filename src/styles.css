@@ -314,7 +314,10 @@ button:disabled{cursor:not-allowed}
   border-radius:999px;
   background:#12161c;
   color:#aeb7c5;
-  font:700 .76rem/1 inherit;
+  font:inherit;
+  font-size:.76rem;
+  font-weight:700;
+  line-height:1;
   cursor:pointer;
   transition:border-color 120ms ease,background 120ms ease,color 120ms ease;
 }
