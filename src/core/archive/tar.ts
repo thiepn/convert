@@ -71,10 +71,12 @@ export async function createUstar(files:TarInput[],signal?:AbortSignal):Promise<
   for(const input of files){
     signal?.throwIfAborted?.();
     const header=createUstarHeader(input);
-    parts.push(header.buffer,input.blob);
+    const headerBuffer=new ArrayBuffer(header.byteLength);
+    new Uint8Array(headerBuffer).set(header);
+    parts.push(headerBuffer,input.blob);
     const padding=(BLOCK-(input.blob.size%BLOCK))%BLOCK;
-    if(padding) parts.push(new Uint8Array(padding).buffer);
+    if(padding) parts.push(new ArrayBuffer(padding));
   }
-  parts.push(new Uint8Array(BLOCK*2).buffer);
+  parts.push(new ArrayBuffer(BLOCK*2));
   return new Blob(parts,{type:"application/x-tar"});
 }
