@@ -298,3 +298,70 @@ button:disabled{cursor:not-allowed}
   }
   #start-over-button{flex-basis:100%}
 }
+
+
+/* Maintenance Pass 2 — conversion workflow UX */
+.target-shortcuts{
+  display:flex;
+  flex-wrap:wrap;
+  gap:7px;
+  margin:10px 0 2px;
+}
+.target-shortcut{
+  min-height:36px;
+  padding:0 12px;
+  border:1px solid #343c48;
+  border-radius:999px;
+  background:#12161c;
+  color:#aeb7c5;
+  font:700 .76rem/1 inherit;
+  cursor:pointer;
+  transition:border-color 120ms ease,background 120ms ease,color 120ms ease;
+}
+.target-shortcut:hover{border-color:#65748a;color:#eef1f6}
+.target-shortcut.active{
+  border-color:#e8ebf0;
+  background:#e8ebf0;
+  color:#111318;
+}
+.target-shortcut:focus-visible{outline:2px solid #a9bfe9;outline-offset:2px}
+.shortcut-hint{
+  margin:7px 2px 0;
+  color:#6f7988;
+  font-size:.69rem;
+  text-align:right;
+}
+.diagnostics-panel{padding:0;overflow:hidden}
+.diagnostics-summary{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:16px;
+  padding:18px 22px;
+  cursor:pointer;
+  list-style:none;
+}
+.diagnostics-summary::-webkit-details-marker{display:none}
+.diagnostics-summary>span:first-child{min-width:0}
+.diagnostics-summary .eyebrow{display:block;margin-bottom:4px}
+.diagnostics-summary strong{display:block;color:#e8ebf0;font-size:.96rem}
+.diagnostics-summary::after{
+  content:"＋";
+  color:#707b8c;
+  font-size:1rem;
+  order:3;
+}
+.diagnostics-panel[open]>.diagnostics-summary::after{content:"−"}
+.diagnostics-body{
+  padding:0 22px 22px;
+  border-top:1px solid #292e37;
+}
+.diagnostics-body>.capability-grid{margin-top:18px}
+
+@media(max-width:760px){
+  .target-shortcuts{gap:6px;margin-top:8px}
+  .target-shortcut{min-height:34px;padding:0 10px;font-size:.72rem}
+  .shortcut-hint{display:none}
+  .diagnostics-summary{padding:14px}
+  .diagnostics-body{padding:0 14px 14px}
+}
