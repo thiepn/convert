@@ -9,16 +9,17 @@ const MIME:Record<string,string>={
   ttf:"font/ttf",otf:"font/otf",woff:"font/woff",woff2:"font/woff2",eot:"application/vnd.ms-fontobject"
 };
 
-function copyBytes(value:ArrayBuffer|Uint8Array):Uint8Array{
+function copyBytes(
+  value:ArrayBufferLike|Uint8Array<ArrayBufferLike>
+):Uint8Array<ArrayBuffer>{
   const source=value instanceof Uint8Array?value:new Uint8Array(value);
-  const copy=new Uint8Array(source.byteLength);
+  const copy=new Uint8Array(new ArrayBuffer(source.byteLength));
   copy.set(source);
   return copy;
 }
 
-function asArrayBuffer(bytes:Uint8Array):ArrayBuffer{
-  const copy=copyBytes(bytes);
-  return copy.buffer;
+function asArrayBuffer(bytes:Uint8Array<ArrayBufferLike>):ArrayBuffer{
+  return copyBytes(bytes).buffer;
 }
 
 function sfntType(bytes:Uint8Array):"ttf"|"otf"{
@@ -58,7 +59,7 @@ export class FontEngine implements ConversionEngine{
     if(request.signal.aborted) throw new DOMException("Font conversion cancelled.","AbortError");
 
     request.onProgress?.(.18,"Reading font container");
-    let inputBytes=new Uint8Array(await request.source.arrayBuffer());
+    let inputBytes:Uint8Array<ArrayBuffer>=copyBytes(new Uint8Array(await request.source.arrayBuffer()));
     let inputType=request.sourceFormatId;
 
     if(request.sourceFormatId==="woff2"&&request.targetFormatId==="woff2"){
@@ -82,7 +83,7 @@ export class FontEngine implements ConversionEngine{
     } as any);
 
     request.onProgress?.(.65,"Writing font container");
-    let outputBytes:Uint8Array;
+    let outputBytes:Uint8Array<ArrayBuffer>;
 
     if(request.targetFormatId==="woff2"){
       const sfnt=font.write({
