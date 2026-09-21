@@ -268,14 +268,15 @@ export class App {
       this.archiveAbort?.abort();
     });
 
-    this.bindKeyboardShortcuts(input);
+    this.bindKeyboardShortcuts();
   }
 
-  private bindKeyboardShortcuts(input:HTMLInputElement){
+  private bindKeyboardShortcuts(){
     document.addEventListener("keydown",event=>{
       if(event.defaultPrevented) return;
-      const target=event.target as HTMLElement|null;
-      const editing=Boolean(target&&(target.matches("input, textarea, select")||target.isContentEditable));
+      const target=event.target;
+      const editing=target instanceof HTMLElement
+        &&(target.matches("input, textarea, select")||target.isContentEditable);
       const command=event.ctrlKey||event.metaKey;
 
       if(command&&event.key==="Enter"&&!editing){
@@ -294,11 +295,6 @@ export class App {
           cancel.click();
         }
         return;
-      }
-
-      if(command&&event.key.toLowerCase()==="o"&&!editing){
-        event.preventDefault();
-        input.click();
       }
     });
   }
