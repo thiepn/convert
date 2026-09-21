@@ -22,6 +22,7 @@ import {
   normalizeArchivePath
 } from "../../core/archive/security";
 import { getDeviceProfile } from "../../core/performance/DeviceProfile";
+import { createUstar } from "../../core/archive/tar";
 import type {
   ArchiveConversionOptions,
   ArchiveEntryInfo,
@@ -179,6 +180,18 @@ export class ArchiveEngine implements ConversionEngine{
     const merged={...defaultOptions(),...options};
     if(targetFormatId==="zip"){
       return this.createZip(normalized,merged,outputHandle,onProgress,signal);
+    }
+    if(targetFormatId==="tar"){
+      onProgress?.(.08,"Writing deterministic USTAR archive");
+      let blob=await createUstar(normalized,signal);
+      if(outputHandle){
+        const writer=await outputHandle.createWritable();
+        await writer.write(blob);
+        await writer.close();
+        blob=await outputHandle.getFile();
+      }
+      onProgress?.(1,"TAR archive complete");
+      return {blob,outputInWorkspace:Boolean(outputHandle)};
     }
     return this.createLibarchive(normalized,targetFormatId,outputHandle,onProgress,signal);
   }

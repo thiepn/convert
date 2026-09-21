@@ -4,7 +4,7 @@ A local-first universal browser file-conversion platform.
 
 ## Current status
 
-Thiepn Convert v1.0.0 is release-certified. Phase 10 — Universal UX, Hardening & Release completes the Phase 0–10 roadmap.
+Thiepn Convert v1.0.1 is the post-v1 production-hardened release. Phase 10 completed the Phase 0–10 roadmap; Maintenance Pass 1 adds deployment and real-browser certification.
 
 ### Images
 
@@ -72,7 +72,7 @@ Phase 7 adds deliberately bounded specialist packs:
 
 - PSD → flattened PNG / JPEG / WebP
 - Camera RAW families → embedded JPEG preview (not RAW development)
-- TTF / OTF / WOFF / WOFF2 / EOT font conversion
+- TTF / WOFF / EOT font conversion plus OTF → TTF; WOFF2 recognition-only after strict-CSP browser certification
 - SRT / WebVTT / ASS subtitle conversion
 - AVI / FLV / ASF / WMV / WMA through a lazy local FFmpeg WASM fallback
 - FB2 → semantic HTML → existing document routes

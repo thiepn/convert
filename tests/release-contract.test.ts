@@ -2,9 +2,9 @@ import fs from "node:fs";
 import { describe,expect,it } from "vitest";
 
 describe("Phase 10 release contract",()=>{
-  it("pins the production package to v1.0.0",()=>{
+  it("pins the production package to v1.0.1",()=>{
     const pkg=JSON.parse(fs.readFileSync("package.json","utf8"));
-    expect(pkg.version).toBe("1.0.0");
+    expect(pkg.version).toBe("1.0.1");
   });
 
   it("keeps production CSP local-only for network connections",()=>{

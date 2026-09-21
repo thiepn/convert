@@ -57,7 +57,6 @@ export default defineConfig({
         flatCopy("node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.js","engines/ffmpeg"),
         flatCopy("node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.wasm","engines/ffmpeg"),
 
-        flatCopy("node_modules/fonteditor-core/woff2/woff2.wasm","engines/font")
       ]
     })
   ],
@@ -77,5 +76,5 @@ export default defineConfig({
   },
   build: { target: "es2022" },
   worker: { format: "es" },
-  test: { environment: "node" }
+  test: { environment: "node", include: ["tests/**/*.test.ts"] }
 });

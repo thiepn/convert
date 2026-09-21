@@ -5,11 +5,14 @@ function updateButton():HTMLButtonElement|null {
   return document.getElementById("update-button") as HTMLButtonElement|null;
 }
 
+let updateReloadRequested=false;
+
 function offerUpdate(worker:ServiceWorker){
   const button=updateButton();
   if(!button) return;
   button.classList.remove("hidden");
   button.onclick=()=>{
+    updateReloadRequested=true;
     button.disabled=true;
     button.textContent="Updating…";
     worker.postMessage({type:"SKIP_WAITING"});
@@ -22,6 +25,7 @@ async function registerServiceWorker() {
   let reloading=false;
   navigator.serviceWorker.addEventListener("controllerchange",()=>{
     if(reloading) return;
+    if(globalThis.crossOriginIsolated&&!updateReloadRequested) return;
     reloading=true;
     location.reload();
   });
@@ -45,7 +49,9 @@ async function registerServiceWorker() {
 
     await navigator.serviceWorker.ready;
 
-    if(!navigator.serviceWorker.controller&&!sessionStorage.getItem("coi-reload")){
+    if(!globalThis.crossOriginIsolated
+      &&!navigator.serviceWorker.controller
+      &&!sessionStorage.getItem("coi-reload")){
       sessionStorage.setItem("coi-reload","1");
       location.reload();
     }

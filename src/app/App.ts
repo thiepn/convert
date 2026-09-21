@@ -9,6 +9,7 @@ import { createDefaultFormatRegistry } from "../core/formats/defaultFormats";
 import type { DetailedImageInspection, ImageConversionOptions } from "../core/image/types";
 import type { DetailedDocumentInspection, DocumentConversionOptions } from "../core/document/types";
 import type { ArchiveConversionOptions, DetailedArchiveInspection } from "../core/archive/types";
+import { validateLocalSelectQuery } from "../core/data/querySecurity";
 import type {
   DataConversionOptions,
   DetailedDataInspection,
@@ -288,9 +289,12 @@ export class App {
     this.jobs.cancelAll();
     this.pdfEngine.cancelActive();
     this.archiveAbort?.abort();
-    await this.batchRunner.releaseSession();
-    await this.releaseResults();
 
+    // Invalidate and clear visible selection state synchronously. Cleanup may
+    // await active workers/workspaces; it must never erase a new selection
+    // the user makes immediately after pressing Start over.
+    this.routeRevision++;
+    this.selectionRevision++;
     this.files=[];
     this.inspections=[];
     this.imageDetail=null;
@@ -301,10 +305,7 @@ export class App {
     this.spreadsheetDetail=null;
     this.dataDetail=null;
     this.databaseDetail=null;
-    this.archiveDetail=null;
     this.kind=null;
-    this.routeRevision++;
-    this.selectionRevision++;
 
     const input=element<HTMLInputElement>("file-input");
     input.value="";
@@ -323,6 +324,11 @@ export class App {
     element<HTMLButtonElement>("convert-button").disabled=false;
     element<HTMLButtonElement>("cancel-button").classList.add("hidden");
     element<HTMLLabelElement>("drop-zone").focus();
+
+    await Promise.all([
+      this.batchRunner.releaseSession(),
+      this.releaseResults()
+    ]);
   }
 
   private getKind(inspection:FileInspection):SelectionKind {
@@ -415,11 +421,17 @@ export class App {
       element<HTMLSelectElement>("archive-operation").value="repack";
     }
 
+    // Show planner-derived targets immediately. Detailed inspection can lazy-load
+    // large WASM engines, so target discovery must not appear broken while that
+    // richer inspection is still warming up.
+    this.populateTargets();
+
     if(files.length===1&&known.length===1){
       try{
         if(this.kind==="image"&&this.imageEngine.isAvailable()){
-          this.imageDetail=await this.imageEngine.inspect(files[0],known[0].detection.format!.id);
-          warnings.push(...this.imageDetail.warnings);
+          // Shallow inspectFile() already gives safe signature/dimension facts
+          // for common images. Keep libvips lazy so the first conversion is
+          // the only cold-WASM consumer instead of racing a background probe.
         }else if(this.kind==="media"&&this.mediaEngine.isAvailable()){
           this.mediaDetail=await this.mediaEngine.inspect(files[0]);
           warnings.push(...this.mediaDetail.warnings);
@@ -477,7 +489,6 @@ export class App {
     this.renderArchiveEntries();
     this.renderDataPreview();
     this.renderWarnings("inspection-warnings",warnings);
-    this.populateTargets();
     this.updatePdfOptionVisibility();
     this.updateArchiveOptionVisibility();
     this.updateDataOptionVisibility();
@@ -1454,7 +1465,12 @@ export class App {
           warnings.push("The SQL transform is ignored by this route. Choose a DuckDB-backed target, or export a SQLite table to a flat/data target first.");
         }
         if(query&&queryApplied){
-          warnings.push("The optional SQL transform runs locally and is restricted to one SELECT/WITH query.");
+          try{
+            validateLocalSelectQuery(query);
+            warnings.push("The optional SQL transform runs locally and is restricted to one SELECT/WITH query.");
+          }catch(error){
+            warnings.push(error instanceof Error?error.message:String(error));
+          }
         }
 
         if(this.kind==="spreadsheet"){
@@ -1612,6 +1628,17 @@ export class App {
     const documentOptions=this.kind==="document"?await this.readDocumentOptions():null;
     const spreadsheetOptions=this.kind==="spreadsheet"?this.readSpreadsheetOptions():null;
     const dataOptions=(this.kind==="data"||this.kind==="database")?this.readDataOptions():null;
+
+    const query=(spreadsheetOptions?.query??dataOptions?.query)?.trim();
+    if(query){
+      try{
+        validateLocalSelectQuery(query);
+      }catch(error){
+        this.renderWarnings("loss-warnings",[error instanceof Error?error.message:String(error)]);
+        return;
+      }
+    }
+
     if(spreadsheetOptions?.sheetPolicy==="all"&&["parquet","arrow","sqlite","jsonl"].includes(targetId)){
       this.renderWarnings("loss-warnings",[
         "This target represents one logical table. Choose First sheet or Selected sheet instead of All sheets."
@@ -2134,7 +2161,7 @@ export class App {
       &&this.sqliteEngine.isAvailable()
       &&this.subtitleEngine.isAvailable()
       &&this.meshEngine.isAvailable()
-      ?"v1.0 runtime ready"
+      ?"v1.0.1 runtime ready"
       :"One or more local engines degraded";
     element("capability-json").textContent=JSON.stringify({
       ...profile,
@@ -2149,7 +2176,7 @@ export class App {
       sqliteEngine:this.sqliteEngine.isAvailable()?"sql.js 1.14.2":"unavailable",
       psdEngine:this.layeredImageEngine.isAvailable()?"ag-psd 31.0.2":"unavailable",
       legacyMediaEngine:this.legacyMediaEngine.isAvailable()?"FFmpeg WASM 0.12.10 (lazy)":"unavailable",
-      fontEngine:this.fontEngine.isAvailable()?"fonteditor-core 2.6.3":"unavailable",
+      fontEngine:this.fontEngine.isAvailable()?"fonteditor-core 2.6.3 · WOFF2 recognition-only":"unavailable",
       specialistNativeEngines:"subtitles + meshes + RAW preview + FITS metadata + FB2",
       batchScheduler:"capability-aware + sequential + in-session resume",
       deviceProfile:this.deviceProfile

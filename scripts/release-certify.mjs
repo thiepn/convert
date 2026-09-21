@@ -31,7 +31,7 @@ function directoryHas(rel,predicate,label){
 }
 
 const pkg=JSON.parse(read("package.json")||"{}");
-ok("Package version is v1.0.0",pkg.version==="1.0.0",String(pkg.version??"missing"));
+ok("Package version is v1.0.1",pkg.version==="1.0.1",String(pkg.version??"missing"));
 
 const manifest=JSON.parse(read("public/manifest.webmanifest")||"{}");
 ok("Manifest has stable app id",manifest.id==="./");
@@ -57,7 +57,7 @@ ok("Headers deny framing",headers.includes("frame-ancestors 'none'"));
 ok("Headers restrict connections",headers.includes("connect-src 'self'"));
 
 const sw=read("public/sw.js");
-ok("Service worker uses v1 cache",sw.includes('thiepn-convert-v1-0-0'));
+ok("Service worker uses v1.0.1 cache",sw.includes('thiepn-convert-v1-0-1'));
 ok("Service worker supports explicit update activation",sw.includes('type==="SKIP_WAITING"'));
 const installBody=sw.match(/self\.addEventListener\("install"[\s\S]*?\n}\);/)?.[0]??"";
 ok("Service worker does not force updates during install",!installBody.includes("skipWaiting"));
@@ -84,7 +84,6 @@ ok("Privacy model covers same-origin engine assets",/same origin|same-origin/i.t
   "dist/engines/duckdb/duckdb-mvp.wasm",
   "dist/engines/sqlite/sql-wasm.wasm",
   "dist/engines/ffmpeg/ffmpeg-core.wasm",
-  "dist/engines/font/woff2.wasm",
   "dist/engines/tesseract/worker.min.js",
   "dist/engines/tesseract/lang/eng.traineddata.gz",
   "dist/engines/libreoffice/browser.worker.global.js"
@@ -99,6 +98,17 @@ directoryHas(
   "dist/engines/libreoffice/wasm",
   name=>name.endsWith(".wasm"),
   "Build contains LibreOffice WASM runtime"
+);
+
+const libreOfficeWorker=read("dist/engines/libreoffice/browser.worker.global.js");
+const libreOfficeTimeoutAt=libreOfficeWorker.indexOf("WASM initialization timeout");
+const libreOfficeTimeoutWindow=libreOfficeTimeoutAt>=0
+  ?libreOfficeWorker.slice(libreOfficeTimeoutAt,libreOfficeTimeoutAt+500)
+  :"";
+ok(
+  "LibreOffice uses the upstream initialization deadline",
+  libreOfficeTimeoutAt>=0&&/(?:120000|12e4)/.test(libreOfficeTimeoutWindow)
+    &&!/(?:360000|36e4)/.test(libreOfficeTimeoutWindow)
 );
 
 for(const check of checks){

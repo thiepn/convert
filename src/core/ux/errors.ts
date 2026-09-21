@@ -18,10 +18,10 @@ const RULES:Array<{
     recovery:"Check the file extension or try another copy of the file."
   },
   {
-    codes:["FORMAT_UNSUPPORTED","ENGINE_UNAVAILABLE","IMAGE_ENGINE_UNAVAILABLE","NO_LOCAL_ROUTE"],
+    codes:["FORMAT_UNSUPPORTED","ENGINE_UNAVAILABLE","IMAGE_ENGINE_UNAVAILABLE","OFFICE_ENGINE_UNAVAILABLE","NO_LOCAL_ROUTE"],
     title:"Conversion unavailable",
     message:"This browser does not currently have a safe local route for the selected conversion.",
-    recovery:"Choose another output format or use a browser with the required local engine support."
+    recovery:"Choose another output format, use Semantic structure mode where available, or try a browser with the required local engine support."
   },
   {
     codes:["MEMORY_BUDGET_EXCEEDED","DEVICE_MEMORY_LIMIT","PDF_MEMORY_LIMIT","PDF_QPDF_MEMORY_LIMIT",
@@ -66,6 +66,12 @@ const RULES:Array<{
     title:"Unsafe archive content blocked",
     message:"The archive/package triggered a security guard and was not expanded.",
     recovery:"Inspect the source archive with a trusted desktop tool before trying it again."
+  },
+  {
+    codes:["DATA_QUERY_RESTRICTED"],
+    title:"Query blocked",
+    message:"This SQL query is outside the converter's read-only local query policy.",
+    recovery:"Use one SELECT or WITH query without mutations, extensions, attachments, URLs, or external file-reader functions."
   },
   {
     codes:["RAW_PREVIEW_NOT_FOUND"],

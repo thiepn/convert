@@ -24,8 +24,9 @@ describe("ConversionPlanner",()=>{
   ].forEach(id=>engines.register(engine(id)));
   const planner=new ConversionPlanner(createConversionGraph(),createDefaultFormatRegistry(),engines);
 
-  it("prefers the production image engine",()=>{
-    expect(planner.plan("png","webp").edges[0].engineId).toBe("vips-image");
+  it("uses the certified native browser engine for common image formats",()=>{
+    expect(planner.plan("png","webp").edges[0].engineId).toBe("browser-image-proof");
+    expect(planner.plan("jpeg","jpeg").edges[0].engineId).toBe("browser-image-proof");
   });
 
   it("routes MP4 to WebM through the media engine",()=>{
@@ -139,7 +140,7 @@ describe("ConversionPlanner",()=>{
     expect(planner.plan("camera-raw","jpeg").edges[0].engineId).toBe("raw-preview");
     expect(planner.plan("ass","vtt").edges[0].engineId).toBe("subtitle-compat");
     expect(planner.plan("obj","stl").edges[0].engineId).toBe("mesh-compat");
-    expect(planner.plan("otf","woff2").edges.map(edge=>edge.engineId)).toEqual(["font-compat","font-compat"]);
+    expect(planner.plan("otf","ttf").edges[0].engineId).toBe("font-compat");
     expect(planner.plan("fits","json-data").edges[0].engineId).toBe("scientific-metadata");
   });
 
@@ -155,5 +156,6 @@ describe("ConversionPlanner",()=>{
     expect(planner.availableTargets("dwg")).toEqual([]);
     expect(planner.availableTargets("hdf5")).toEqual([]);
     expect(planner.availableTargets("glb")).toEqual([]);
+    expect(planner.availableTargets("woff2")).toEqual([]);
   });
 });

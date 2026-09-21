@@ -1,6 +1,6 @@
 {
   "name": "thiepn-convert",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,7 +9,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "release:certify": "npm test && npm run typecheck && npm run build && node --check public/sw.js && node scripts/release-certify.mjs"
+    "release:certify": "npm test && npm run typecheck && npm run build && node --check public/sw.js && node scripts/release-certify.mjs",
+    "preview": "vite preview",
+    "test:e2e": "npm run build && playwright test",
+    "test:e2e:run": "playwright test",
+    "maintenance:certify": "npm run release:certify && npm run test:e2e:run"
   },
   "dependencies": {
     "@bjorn3/browser_wasi_shim": "0.4.2",
@@ -49,6 +53,7 @@
     "vite": "8.3.0",
     "vite-plugin-static-copy": "4.1.1",
     "vitest": "5.0.1",
-    "@types/sql.js": "1.4.11"
+    "@types/sql.js": "1.4.11",
+    "@playwright/test": "1.63.0"
   }
 }

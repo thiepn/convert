@@ -8,7 +8,7 @@ Phase 7 extends Thiepn Convert only where a browser-local implementation has a t
 | --- | --- | --- | --- | --- |
 | Layered graphics | PSD | PNG, JPEG, WebP | ag-psd 31.0.2 | Flattened composite only. Layers and Photoshop editing semantics are not preserved. |
 | Camera RAW | CR2, CR3, NEF/NRW, ARW/SR2, DNG, RW2, ORF, RAF, PEF | JPEG | Native embedded-preview extractor | Extracts the largest embedded JPEG. This is not a RAW demosaic/development engine. |
-| Fonts | TTF, WOFF, WOFF2, EOT; OTF input | TTF, WOFF, WOFF2, EOT | fonteditor-core 2.6.3 + self-hosted WOFF2 WASM | OTF is read-only and first converts to TTF. Font licensing/embedding rights remain the user's responsibility. |
+| Fonts | TTF, WOFF, EOT; OTF input | TTF, WOFF, EOT | fonteditor-core 2.6.3 | OTF is read-only and converts to TTF. WOFF2 is recognized but has no v1.0.1 conversion route after strict-CSP/real-browser codec certification failures. Font licensing/embedding rights remain the user's responsibility. |
 | Subtitles | SRT, WebVTT, ASS/SSA | SRT, WebVTT, ASS | Native parser/serializer | Cue timing and readable text are preserved. ASS styles/effects and WebVTT style/region metadata can be lost. |
 | Legacy media | AVI, FLV, ASF/WMV/WMA | MP4, WebM, MP3, WAV, FLAC, Ogg | lazy @ffmpeg/core 0.12.10 | Full memory-backed transcode; slower and heavier than the primary Mediabunny/WebCodecs engine. |
 | FictionBook | FB2 | semantic HTML, then existing document routes | Native XML extraction + Pandoc pipeline | Readable text/structure first; FB2-specific metadata and embedded images can be reduced. |
@@ -26,6 +26,7 @@ The following formats are identified so the application can state a precise boun
 - DXF / DWG: recognized, but no CAD-semantic converter is enabled.
 - glTF / GLB: recognized, but the triangle-only mesh converter is not used because that would silently discard scene hierarchy, materials, textures, animation, and extensions.
 - HDF5 / NetCDF: recognized, but no general scientific-array conversion is enabled.
+- WOFF2: recognized, but conversion is disabled in v1.0.1 because the tested browser-local codecs either violated the strict CSP or failed to complete reliably in the production browser gate.
 
 These formats intentionally produce no destination choices.
 

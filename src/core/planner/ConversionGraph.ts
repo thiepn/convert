@@ -40,7 +40,7 @@ const DATA_FORMATS=["csv","tsv","json-data","jsonl","parquet","arrow"];
 const SQLITE_OUTPUTS=["csv","tsv","json-data","jsonl"];
 const SUBTITLE_FORMATS=["srt","vtt","ass"];
 const MESH_FORMATS=["obj","stl","ply"];
-const FONT_COMMON=["ttf","woff","woff2","eot"];
+const FONT_COMMON=["ttf","woff","eot"];
 const LEGACY_MEDIA_INPUTS=["avi","flv","asf"];
 const LEGACY_MEDIA_OUTPUTS=["mp4","webm-media","mp3","wav","flac","ogg"];
 
@@ -62,27 +62,28 @@ function semanticCost(target:string):number{
 export function createConversionGraph():ConversionGraph {
   const edges:ConversionEdge[]=[];
 
+  const nativeImageFormats=new Set(["jpeg","png","webp"]);
   for(const from of IMAGE_INPUTS){
     for(const to of IMAGE_OUTPUTS){
+      if(nativeImageFormats.has(from)&&nativeImageFormats.has(to)) continue;
       edges.push({
         from,to,engineId:"vips-image",
         qualityLoss:imageQualityLoss(to),
         metadataLoss:from==="heic"?["EXIF","XMP","ICC"]:[],
-        temporaryMultiplier:2,streaming:false,baseCost:0,mode:"neutral"
+        temporaryMultiplier:2,streaming:false,baseCost:0,mode:"neutral",rootOnly:true
       });
     }
   }
 
-  for(const [from,to] of [
-    ["jpeg","png"],["jpeg","webp"],["png","jpeg"],["png","webp"],
-    ["webp","jpeg"],["webp","png"]
-  ]){
-    edges.push({
-      from,to,engineId:"browser-image-proof",
-      qualityLoss:imageQualityLoss(to)+.15,
-      metadataLoss:["EXIF","XMP","ICC"],
-      temporaryMultiplier:3,streaming:false,baseCost:500,mode:"neutral"
-    });
+  for(const from of nativeImageFormats){
+    for(const to of nativeImageFormats){
+      edges.push({
+        from,to,engineId:"browser-image-proof",
+        qualityLoss:imageQualityLoss(to),
+        metadataLoss:["EXIF","XMP","ICC"],
+        temporaryMultiplier:3,streaming:false,baseCost:4,mode:"neutral",rootOnly:true
+      });
+    }
   }
 
   for(const from of MEDIA_INPUTS){

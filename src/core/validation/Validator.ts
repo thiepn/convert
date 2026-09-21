@@ -6,6 +6,7 @@ import type { DetailedDocumentInspection } from "../document/types";
 import type { DetailedArchiveInspection } from "../archive/types";
 import { parseSubtitle } from "../specialist/subtitles";
 import { parseMesh } from "../specialist/mesh";
+import { parseJsonTabular } from "../data/jsonBridge";
 import type {
   DetailedSpreadsheetInspection,
   DetailedDataInspection,
@@ -31,8 +32,9 @@ export class ImageOutputValidator implements OutputValidator {
   async validate(blob:Blob,targetFormatId:string,_options:Record<string,unknown>={}):Promise<ValidationResult>{
     const target=this.formats.get(targetFormatId);
     const inspection=await inspectFile(
-      Object.assign(blob,{name:"output."+(target?.extensions[0]??"bin")}),
-      this.formats
+      blob,
+      this.formats,
+      "output."+(target?.extensions[0]??"bin")
     );
     const errors:string[]=[];
     if(inspection.detection.format?.id!==targetFormatId) errors.push("Output signature does not match requested format.");
@@ -61,6 +63,26 @@ export class ImageOutputValidator implements OutputValidator {
   }
 }
 
+function mediaMagicMatches(bytes:Uint8Array,target:string):boolean {
+  if(target==="flac"){
+    return bytes.length>=4
+      &&bytes[0]===0x66&&bytes[1]===0x4c&&bytes[2]===0x61&&bytes[3]===0x43;
+  }
+  if(target==="wav"){
+    return bytes.length>=12
+      &&bytes[0]===0x52&&bytes[1]===0x49&&bytes[2]===0x46&&bytes[3]===0x46
+      &&bytes[8]===0x57&&bytes[9]===0x41&&bytes[10]===0x56&&bytes[11]===0x45;
+  }
+  if(target==="aac"){
+    return bytes.length>=2&&bytes[0]===0xff&&(bytes[1]&0xf6)===0xf0;
+  }
+  if(target==="mp3"){
+    if(bytes.length>=3&&bytes[0]===0x49&&bytes[1]===0x44&&bytes[2]===0x33) return true;
+    return bytes.length>=2&&bytes[0]===0xff&&(bytes[1]&0xe0)===0xe0;
+  }
+  return true;
+}
+
 export class MediaOutputValidator implements OutputValidator {
   constructor(
     private readonly formats:FormatRegistry,
@@ -73,10 +95,18 @@ export class MediaOutputValidator implements OutputValidator {
     if(blob.size===0) errors.push("Output is empty.");
 
     const shallow=await inspectFile(
-      Object.assign(blob,{name:"output."+(target?.extensions[0]??"bin")}),
-      this.formats
+      blob,
+      this.formats,
+      "output."+(target?.extensions[0]??"bin")
     );
     if(shallow.detection.format?.id!==targetFormatId) errors.push("Output container signature does not match requested format.");
+
+    if(["mp3","wav","aac","flac"].includes(targetFormatId)){
+      const bytes=new Uint8Array(await blob.slice(0,16).arrayBuffer());
+      if(!mediaMagicMatches(bytes,targetFormatId)){
+        errors.push("Output magic bytes do not match the requested audio format.");
+      }
+    }
 
     let media:DetailedMediaInspection|null=null;
     try{media=await this.probe(blob);}catch{errors.push("Output could not be reopened by the media parser.");}
@@ -100,7 +130,7 @@ export class PdfOutputValidator implements OutputValidator {
 
   async validate(blob:Blob,targetFormatId:string,options:Record<string,unknown>={}):Promise<ValidationResult>{
     const errors:string[]=[];
-    const shallow=await inspectFile(Object.assign(blob,{name:"output.pdf"}),this.formats);
+    const shallow=await inspectFile(blob,this.formats,"output.pdf");
     if(shallow.detection.format?.id!=="pdf") errors.push("Output signature is not PDF.");
     if(blob.size===0) errors.push("Output is empty.");
 
@@ -131,8 +161,9 @@ export class DocumentOutputValidator implements OutputValidator {
     if(blob.size===0) errors.push("Output is empty.");
 
     const shallow=await inspectFile(
-      Object.assign(blob,{name:"output."+(target?.extensions[0]??"bin")}),
-      this.formats
+      blob,
+      this.formats,
+      "output."+(target?.extensions[0]??"bin")
     );
     if(shallow.detection.format?.id!==targetFormatId){
       errors.push("Output format does not match the requested document type.");
@@ -169,8 +200,9 @@ export class ArchiveOutputValidator implements OutputValidator {
     if(blob.size===0) errors.push("Output is empty.");
 
     const shallow=await inspectFile(
-      Object.assign(blob,{name:"output."+(target?.extensions[0]??"bin")}),
-      this.formats
+      blob,
+      this.formats,
+      "output."+(target?.extensions[0]??"bin")
     );
     if(shallow.detection.format?.id!==targetFormatId){
       errors.push("Output archive signature/format does not match the requested target.");
@@ -207,8 +239,9 @@ export class SpreadsheetOutputValidator implements OutputValidator {
     const errors:string[]=[];
     if(blob.size===0) errors.push("Output is empty.");
     const shallow=await inspectFile(
-      Object.assign(blob,{name:"output."+(target?.extensions[0]??"bin")}),
-      this.formats
+      blob,
+      this.formats,
+      "output."+(target?.extensions[0]??"bin")
     );
     if(shallow.detection.format?.id!==targetFormatId){
       errors.push("Output workbook format does not match requested target.");
@@ -236,12 +269,29 @@ export class DataOutputValidator implements OutputValidator {
     const errors:string[]=[];
     if(blob.size===0) errors.push("Output is empty.");
     const shallow=await inspectFile(
-      Object.assign(blob,{name:"output."+(target?.extensions[0]??"bin")}),
-      this.formats
+      blob,
+      this.formats,
+      "output."+(target?.extensions[0]??"bin")
     );
     if(shallow.detection.format?.id!==targetFormatId){
       errors.push("Output data format does not match requested target.");
     }
+    if(targetFormatId==="json-data"||targetFormatId==="jsonl"){
+      let rows:number|null=null,columns:number|null=null;
+      try{
+        const parsed=parseJsonTabular(await blob.text(),targetFormatId==="jsonl");
+        rows=parsed.rows.length;
+        columns=parsed.columns.length;
+      }catch(error){
+        errors.push("Output JSON could not be reparsed: "+(error instanceof Error?error.message:String(error)));
+      }
+      return {
+        valid:errors.length===0,
+        errors,
+        properties:{format:shallow.detection.format?.id,size:blob.size,rows,columns}
+      };
+    }
+
     let data:DetailedDataInspection|null=null;
     try{data=await this.probe(blob,targetFormatId,options);}
     catch(error){errors.push("Output data could not be reopened: "+(error instanceof Error?error.message:String(error)));}
@@ -262,7 +312,7 @@ export class DatabaseOutputValidator implements OutputValidator {
   async validate(blob:Blob,targetFormatId:string,_options:Record<string,unknown>={}):Promise<ValidationResult>{
     const errors:string[]=[];
     if(blob.size===0) errors.push("Output is empty.");
-    const shallow=await inspectFile(Object.assign(blob,{name:"output.sqlite"}),this.formats);
+    const shallow=await inspectFile(blob,this.formats,"output.sqlite");
     if(shallow.detection.format?.id!=="sqlite") errors.push("Output signature is not SQLite.");
     let database:DetailedDatabaseInspection|null=null;
     try{database=await this.probe(blob);}
@@ -284,8 +334,9 @@ export class SpecialistOutputValidator implements OutputValidator {
     const errors:string[]=[];
     if(blob.size===0) errors.push("Output is empty.");
     const shallow=await inspectFile(
-      Object.assign(blob,{name:"output."+(target?.extensions[0]??"bin")}),
-      this.formats
+      blob,
+      this.formats,
+      "output."+(target?.extensions[0]??"bin")
     );
     if(shallow.detection.format?.id!==targetFormatId){
       errors.push("Output format does not match requested specialist target.");
