@@ -9,6 +9,7 @@ import { createDefaultFormatRegistry } from "../core/formats/defaultFormats";
 import type { DetailedImageInspection, ImageConversionOptions } from "../core/image/types";
 import type { DetailedDocumentInspection, DocumentConversionOptions } from "../core/document/types";
 import type { ArchiveConversionOptions, DetailedArchiveInspection } from "../core/archive/types";
+import { validateLocalSelectQuery } from "../core/data/querySecurity";
 import type {
   DataConversionOptions,
   DetailedDataInspection,
@@ -1622,6 +1623,17 @@ export class App {
     const documentOptions=this.kind==="document"?await this.readDocumentOptions():null;
     const spreadsheetOptions=this.kind==="spreadsheet"?this.readSpreadsheetOptions():null;
     const dataOptions=(this.kind==="data"||this.kind==="database")?this.readDataOptions():null;
+
+    const query=(spreadsheetOptions?.query??dataOptions?.query)?.trim();
+    if(query){
+      try{
+        validateLocalSelectQuery(query);
+      }catch(error){
+        this.renderWarnings("loss-warnings",[error instanceof Error?error.message:String(error)]);
+        return;
+      }
+    }
+
     if(spreadsheetOptions?.sheetPolicy==="all"&&["parquet","arrow","sqlite","jsonl"].includes(targetId)){
       this.renderWarnings("loss-warnings",[
         "This target represents one logical table. Choose First sheet or Selected sheet instead of All sheets."
@@ -2159,7 +2171,7 @@ export class App {
       sqliteEngine:this.sqliteEngine.isAvailable()?"sql.js 1.14.2":"unavailable",
       psdEngine:this.layeredImageEngine.isAvailable()?"ag-psd 31.0.2":"unavailable",
       legacyMediaEngine:this.legacyMediaEngine.isAvailable()?"FFmpeg WASM 0.12.10 (lazy)":"unavailable",
-      fontEngine:this.fontEngine.isAvailable()?"fonteditor-core 2.6.3 + woff2-encoder 2.0.0":"unavailable",
+      fontEngine:this.fontEngine.isAvailable()?"fonteditor-core 2.6.3 · WOFF2 recognition-only":"unavailable",
       specialistNativeEngines:"subtitles + meshes + RAW preview + FITS metadata + FB2",
       batchScheduler:"capability-aware + sequential + in-session resume",
       deviceProfile:this.deviceProfile
