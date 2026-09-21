@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased — Maintenance Pass 2
+
+### Improved
+- add one-click quick output targets for the most useful destination formats while keeping the full target selector
+- add keyboard workflow: Ctrl/Cmd+Enter runs the current conversion and Esc cancels active work
+- collapse runtime diagnostics by default so the primary conversion task remains visually dominant
+- tighten the desktop/mobile presentation for quick targets and diagnostics
+
+### Corrected
+- mark WOFF2 as recognition-only/experimental instead of advertising it as a production conversion format
+- add regression coverage that keeps WOFF2 out of the active conversion graph until a browser-local codec passes the project certification gates
+
+
 ## 1.0.1 — 2026-09-21
 
 Post-v1 production hardening release.
