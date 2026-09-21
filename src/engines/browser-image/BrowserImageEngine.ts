@@ -8,9 +8,9 @@ import type { WorkerResponse } from "../../core/workers/WorkerProtocol";
 import { assertMemoryBackedSource } from "../../core/performance/Budget";
 
 const SUPPORTED = new Set([
-  "jpeg>png", "jpeg>webp",
-  "png>jpeg", "png>webp",
-  "webp>jpeg", "webp>png"
+  "jpeg>jpeg","jpeg>png","jpeg>webp",
+  "png>jpeg","png>png","png>webp",
+  "webp>jpeg","webp>png","webp>webp"
 ]);
 
 const MIME_BY_FORMAT: Record<string, string> = {
@@ -21,7 +21,7 @@ const MIME_BY_FORMAT: Record<string, string> = {
 
 export class BrowserImageEngine implements ConversionEngine {
   readonly id = "browser-image-proof";
-  readonly version = "phase0";
+  readonly version = "native-browser-1";
   private workers = new Set<Worker>();
   private encodableTargets = new Set<string>();
   private prepared = false;
@@ -63,7 +63,7 @@ export class BrowserImageEngine implements ConversionEngine {
       outputBytes:null,
       sourceAccess:"buffered",
       outputAccess:"buffered",
-      notes:["Browser canvas fallback is memory-backed and used only when the production image engine is unavailable."]
+      notes:["Browser-native image conversion is memory-backed and is the certified production path for JPEG, PNG, and WebP."]
     };
   }
 
