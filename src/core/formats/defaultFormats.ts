@@ -459,7 +459,7 @@ export const WOFF:FormatDefinition={
 };
 export const WOFF2:FormatDefinition={
   id:"woff2",name:"WOFF2 Font",category:"font",extensions:["woff2"],mimeTypes:["font/woff2"],
-  signatures:[[{offset:0,bytes:[0x77,0x4f,0x46,0x32]}]],capabilities:{metadata:true,vector:true},status:"production"
+  signatures:[[{offset:0,bytes:[0x77,0x4f,0x46,0x32]}]],capabilities:{metadata:true,vector:true},readOnly:true,status:"experimental"
 };
 export const EOT:FormatDefinition={
   id:"eot",name:"Embedded OpenType",category:"font",extensions:["eot"],mimeTypes:["application/vnd.ms-fontobject"],
