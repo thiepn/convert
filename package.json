@@ -47,7 +47,8 @@
     "tesseract.js": "7.0.0",
     "wasm-vips": "0.0.18",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
-    "apache-arrow": "17.0.0"
+    "apache-arrow": "17.0.0",
+    "woff2-encoder": "2.0.0"
   },
   "devDependencies": {
     "typescript": "^5.9.2",
