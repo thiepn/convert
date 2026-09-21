@@ -8,27 +8,36 @@ const scope = globalThis as unknown as {
   onmessage:((event:MessageEvent<ImageWorkerRequest>)=>void)|null;
 };
 
-let vipsPromise: Promise<any> | null = null;
-let loadedBase = "";
+const vipsPromises=new Map<string,Promise<any>>();
 
 function send(message:ImageWorkerResponse) { scope.postMessage(message); }
 
-async function getVips(assetBase:string):Promise<any> {
-  if (vipsPromise && loadedBase === assetBase) return vipsPromise;
-  loadedBase = assetBase;
-  vipsPromise = (async () => {
-    const moduleUrl = new URL("vips-es6.js",assetBase).href;
-    const imported = await import(/* @vite-ignore */ moduleUrl);
-    const Vips = imported.default;
-    const vips = await Vips({
-      locateFile:(path:string) => new URL(path,assetBase).href,
-      dynamicLibraries:[
+function needsOptionalCodecs(sourceFormatId?:string,targetFormatId?:string):boolean {
+  return ["svg","avif","jxl"].includes(sourceFormatId??"")
+    ||["avif","jxl"].includes(targetFormatId??"");
+}
+
+async function getVips(assetBase:string,optionalCodecs=false):Promise<any> {
+  const key=assetBase+"|"+(optionalCodecs?"extended":"core");
+  const existing=vipsPromises.get(key);
+  if(existing) return existing;
+
+  const promise=(async()=>{
+    const moduleUrl=new URL("vips-es6.js",assetBase).href;
+    const imported=await import(/* @vite-ignore */ moduleUrl);
+    const Vips=imported.default;
+    const dynamicLibraries=optionalCodecs
+      ?[
         new URL("vips-heif.wasm",assetBase).href,
         new URL("vips-jxl.wasm",assetBase).href,
         new URL("vips-resvg.wasm",assetBase).href
-      ],
-      print:() => {},
-      printErr:() => {}
+      ]
+      :[];
+    const vips=await Vips({
+      locateFile:(path:string)=>new URL(path,assetBase).href,
+      dynamicLibraries,
+      print:()=>{},
+      printErr:()=>{}
     });
     vips.blockUntrusted?.(true);
     const profile=getDeviceProfile();
@@ -44,7 +53,13 @@ async function getVips(assetBase:string):Promise<any> {
     vips.Cache?.maxMem?.(cacheBytes);
     return vips;
   })();
-  return vipsPromise;
+  vipsPromises.set(key,promise);
+  try{
+    return await promise;
+  }catch(error){
+    vipsPromises.delete(key);
+    throw error;
+  }
 }
 
 function fields(image:any):string[] {
@@ -237,7 +252,15 @@ async function inspectSource(vips:any,source:Blob,sourceFormatId:string):Promise
 scope.onmessage=async(event:MessageEvent<ImageWorkerRequest>)=>{
   const request=event.data;
   try {
-    const vips=await getVips(request.assetBase);
+    if(request.type==="convert"){
+      send({type:"progress",requestId:request.requestId,progress:.02,stage:"Loading image engine"});
+    }
+    const optionalCodecs=request.type==="convert"
+      ?needsOptionalCodecs(request.sourceFormatId,request.targetFormatId)
+      :request.type==="inspect"
+        ?needsOptionalCodecs(request.sourceFormatId)
+        :false;
+    const vips=await getVips(request.assetBase,optionalCodecs);
     if (request.type==="ping") { send({type:"ready",requestId:request.requestId}); return; }
     if (request.type==="inspect") {
       const inspection=await inspectSource(vips,request.source,request.sourceFormatId);
