@@ -45,7 +45,9 @@ async function registerServiceWorker() {
 
     await navigator.serviceWorker.ready;
 
-    if(!navigator.serviceWorker.controller&&!sessionStorage.getItem("coi-reload")){
+    if(!globalThis.crossOriginIsolated
+      &&!navigator.serviceWorker.controller
+      &&!sessionStorage.getItem("coi-reload")){
       sessionStorage.setItem("coi-reload","1");
       location.reload();
     }
