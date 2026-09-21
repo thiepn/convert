@@ -13,8 +13,7 @@
     "preview": "vite preview",
     "test:e2e": "npm run build && playwright test",
     "test:e2e:run": "playwright test",
-    "maintenance:certify": "npm run release:certify && npm run test:e2e:run",
-    "postinstall": "node scripts/patch-libreoffice-worker.mjs"
+    "maintenance:certify": "npm run release:certify && npm run test:e2e:run"
   },
   "dependencies": {
     "@bjorn3/browser_wasi_shim": "0.4.2",
