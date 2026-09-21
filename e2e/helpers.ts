@@ -47,13 +47,15 @@ export async function runTarget(page:Page,target:string){
 export async function resultBytes(page:Page,namePart:string):Promise<Buffer>{
   const row=page.locator(".result-item").filter({hasText:namePart}).first();
   await expect(row).toBeVisible({timeout:120_000});
-  const href=await row.locator("a.download-link").getAttribute("href");
-  if(!href) throw new Error("Missing result blob URL for "+namePart);
-  const values=await page.evaluate(async url=>{
-    const response=await fetch(url);
-    return Array.from(new Uint8Array(await response.arrayBuffer()));
-  },href);
-  return Buffer.from(values);
+  const link=row.locator("a.download-link");
+  const downloadPromise=page.waitForEvent("download");
+  await link.click();
+  const download=await downloadPromise;
+  const stream=await download.createReadStream();
+  if(!stream) throw new Error("Browser did not expose download bytes for "+namePart);
+  const chunks:Buffer[]=[];
+  for await(const chunk of stream) chunks.push(Buffer.from(chunk));
+  return Buffer.concat(chunks);
 }
 
 export async function resultText(page:Page,namePart:string):Promise<string>{
