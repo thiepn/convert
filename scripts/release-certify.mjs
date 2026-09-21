@@ -84,7 +84,6 @@ ok("Privacy model covers same-origin engine assets",/same origin|same-origin/i.t
   "dist/engines/duckdb/duckdb-mvp.wasm",
   "dist/engines/sqlite/sql-wasm.wasm",
   "dist/engines/ffmpeg/ffmpeg-core.wasm",
-  "dist/engines/font/woff2.wasm",
   "dist/engines/tesseract/worker.min.js",
   "dist/engines/tesseract/lang/eng.traineddata.gz",
   "dist/engines/libreoffice/browser.worker.global.js"
