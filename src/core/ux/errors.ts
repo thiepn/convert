@@ -68,6 +68,12 @@ const RULES:Array<{
     recovery:"Inspect the source archive with a trusted desktop tool before trying it again."
   },
   {
+    codes:["DATA_QUERY_RESTRICTED"],
+    title:"Query blocked",
+    message:"This SQL query is outside the converter's read-only local query policy.",
+    recovery:"Use one SELECT or WITH query without mutations, extensions, attachments, URLs, or external file-reader functions."
+  },
+  {
     codes:["RAW_PREVIEW_NOT_FOUND"],
     title:"No embedded RAW preview found",
     message:"This RAW file does not contain a usable embedded JPEG preview.",
