@@ -70,7 +70,7 @@ export function createConversionGraph():ConversionGraph {
         from,to,engineId:"vips-image",
         qualityLoss:imageQualityLoss(to),
         metadataLoss:from==="heic"?["EXIF","XMP","ICC"]:[],
-        temporaryMultiplier:2,streaming:false,baseCost:0,mode:"neutral"
+        temporaryMultiplier:2,streaming:false,baseCost:0,mode:"neutral",rootOnly:true
       });
     }
   }
@@ -81,7 +81,7 @@ export function createConversionGraph():ConversionGraph {
         from,to,engineId:"browser-image-proof",
         qualityLoss:imageQualityLoss(to),
         metadataLoss:["EXIF","XMP","ICC"],
-        temporaryMultiplier:3,streaming:false,baseCost:4,mode:"neutral"
+        temporaryMultiplier:3,streaming:false,baseCost:4,mode:"neutral",rootOnly:true
       });
     }
   }
