@@ -1,6 +1,7 @@
 import type { FormatDetection } from "../formats/types";
 import { FormatRegistry } from "../formats/FormatRegistry";
 import { detectPackagedDocument } from "../document/PackageInspector";
+import { sourceIntegrityWarnings } from "./sourceIntegrity";
 
 export interface FileInspection {
   name: string;
@@ -97,6 +98,11 @@ export async function inspectFile(
         warnings:detection.warnings
       };
     }
+  }
+
+  const integrityWarnings=await sourceIntegrityWarnings(file,detection.format?.id);
+  if(integrityWarnings.length){
+    detection={...detection,warnings:[...detection.warnings,...integrityWarnings]};
   }
 
   const size = dimensions(detection.format?.id, bytes);
