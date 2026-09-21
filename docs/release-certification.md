@@ -1,4 +1,4 @@
-# v1.0 Release Certification
+# v1.0.1 Release Certification
 
 Phase 10 is the final Universal UX, Hardening & Release phase.
 
@@ -30,7 +30,7 @@ The certification command requires all of the following to pass:
 4. service-worker JavaScript syntax check
 5. release-contract audit
 6. critical copied engine assets present in dist/
-7. v1.0 package/manifest/security/privacy metadata consistent
+7. v1.0.1 package/manifest/security/privacy metadata consistent
 
 CI runs the same command for pull requests, phase branches, main, and version tags.
 
@@ -67,8 +67,8 @@ The stable UI must provide:
 
 ## Known stable-release boundaries
 
-v1.0 intentionally does not claim perfect conversion for every file extension.
+v1.0.1 intentionally does not claim perfect conversion for every file extension.
 
-Recognition-only formats remain recognition-only where fidelity/security requirements are not met. Memory-backed engines remain device-budgeted. Camera RAW support is embedded-preview extraction, not sensor development. PSD output is flattened. FITS conversion exports header metadata only.
+Recognition-only formats remain recognition-only where fidelity/security/reliability requirements are not met. WOFF2 is one such boundary in v1.0.1 after browser codec certification failures. Memory-backed engines remain device-budgeted. Camera RAW support is embedded-preview extraction, not sensor development. PSD output is flattened. FITS conversion exports header metadata only.
 
 These are product boundaries, not unfinished release blockers.
