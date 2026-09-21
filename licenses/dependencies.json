@@ -126,7 +126,7 @@
       "name": "fonteditor-core",
       "version": "2.6.3",
       "declared_license": "MIT",
-      "notes": "Font parsing/conversion; WOFF2 codec is self-hosted as WASM."
+      "notes": "Font parsing/conversion for TTF/WOFF/EOT/OTF. WOFF2 is handled by a separate CSP-safe WASM codec."
     },
     {
       "name": "@ffmpeg/ffmpeg",
@@ -145,6 +145,12 @@
       "version": "1.63.0",
       "license": "Apache-2.0",
       "role": "development/browser production smoke testing"
+    },
+    {
+      "name": "woff2-encoder",
+      "version": "2.0.0",
+      "declared_license": "MIT",
+      "notes": "CSP-safe local WebAssembly WOFF2 compression/decompression."
     }
   ]
 }
