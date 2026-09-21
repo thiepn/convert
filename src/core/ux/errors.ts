@@ -136,6 +136,27 @@ export function presentIssue(input:unknown):PresentedIssue {
   };
 }
 
+const NON_RETRYABLE_CODES=new Set([
+  "FORMAT_UNKNOWN","FORMAT_UNSUPPORTED","NO_LOCAL_ROUTE",
+  "MEMORY_BUDGET_EXCEEDED","DEVICE_MEMORY_LIMIT","PDF_MEMORY_LIMIT","PDF_QPDF_MEMORY_LIMIT",
+  "SPREADSHEET_MEMORY_LIMIT","SQLITE_MEMORY_LIMIT","LEGACY_MEDIA_MEMORY_LIMIT","RAW_PREVIEW_MEMORY_LIMIT",
+  "DOCUMENT_SEMANTIC_MEMORY_LIMIT","OFFICE_MEMORY_LIMIT","PSD_SIZE_LIMIT","MESH_SIZE_LIMIT","FONT_SIZE_LIMIT",
+  "STORAGE_INSUFFICIENT","ARCHIVE_CREATE_BUDGET","ARCHIVE_EXTRACTION_BUDGET",
+  "PDF_PASSWORD_REQUIRED","PDF_PASSWORD_INCORRECT","ARCHIVE_PASSWORD_REQUIRED",
+  "OUTPUT_INVALID","NETWORK_PRIVACY_VIOLATION",
+  "ARCHIVE_BOMB_SUSPECTED","DOCUMENT_PACKAGE_UNSAFE","ARCHIVE_PATH_UNSAFE",
+  "DATA_QUERY_RESTRICTED","RAW_PREVIEW_NOT_FOUND",
+  "PDF_PAGE_RANGE_INVALID","PDF_OPERATION_REQUIRES_SINGLE_FILE"
+]);
+
+export function isRetryableIssue(input:unknown):boolean {
+  const issue=presentIssue(input);
+  if(issue.code==="CANCELLED") return true;
+  if(issue.code&&NON_RETRYABLE_CODES.has(issue.code)) return false;
+  if(issue.code==="NO_LOCAL_ROUTE") return false;
+  return true;
+}
+
 export function friendlyIssueText(input:unknown):string {
   const issue=presentIssue(input);
   return issue.title+". "+issue.message+(issue.recovery?" "+issue.recovery:"");
