@@ -1,5 +1,5 @@
 import { EngineRegistry } from "../engines/EngineRegistry";
-import type { ConversionEstimate } from "../engines/Engine";
+import type { ConversionEstimate,EngineConvertResult } from "../engines/Engine";
 import { FormatRegistry } from "../formats/FormatRegistry";
 import { inspectFile } from "../inspection/inspectFile";
 import { ConversionPlanner } from "../planner/ConversionPlanner";
@@ -186,7 +186,7 @@ export class JobManager {
         const edge=route.edges[index];
         const isLast=index===route.edges.length-1;
         let usedEdge=edge;
-        let result;
+        let result:EngineConvertResult;
         try{
           result=await runEdge(edge,index,current);
         }catch(error){
