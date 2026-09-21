@@ -41,6 +41,15 @@ test("production shell is isolated, local-only, and free of horizontal overflow"
   }
 });
 
+test("isolated production host does not force a first-load service-worker reload",async({page},testInfo)=>{
+  test.skip(testInfo.project.name!=="chromium","reload-race regression runs once in Chromium");
+  let navigations=0;
+  page.on("framenavigated",frame=>{if(frame===page.mainFrame()) navigations++;});
+  await openApp(page);
+  await page.waitForTimeout(1500);
+  expect(navigations).toBe(1);
+});
+
 test("Pages-like host becomes cross-origin isolated through the service worker fallback",async({page},testInfo)=>{
   test.skip(testInfo.project.name!=="chromium","fallback certification is run once in Chromium");
   await page.goto("http://127.0.0.1:4174/",{waitUntil:"domcontentloaded"});
