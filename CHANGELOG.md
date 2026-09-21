@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased — Maintenance Pass 3
+
+### Reliability
+- detect likely truncation/incompleteness for common image, PDF, ZIP, RIFF, and SQLite inputs during normal inspection
+- retain libvips as a slower certified fallback for common JPEG/PNG/WebP direct conversions
+- retry eligible direct conversions through same-mode alternate engines after engine failure
+- retry eligible direct conversions when the first output fails independent validation
+- re-run memory/storage preflight before any alternate engine is used
+- never silently cross semantic/fidelity route modes during recovery
+- classify batch failures as retryable or deterministic so resume no longer repeats known-bad jobs
+- keep successful batch outputs intact while retryable failures are resumed
+- surface retryable versus input/settings-required failure counts in the batch UI
+- add regression coverage for truncation detection, retry policy, fallback ordering, engine-crash recovery, validation recovery, and route-mode isolation
+
+
 ## Unreleased — Maintenance Pass 2
 
 ### Improved
