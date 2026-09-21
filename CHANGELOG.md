@@ -8,6 +8,15 @@ Post-v1 production hardening release.
 - add an official certified GitHub Pages deployment workflow for the Vite production build
 - add real-browser production smoke testing across Chromium, Firefox, WebKit, and mobile emulation
 - certify the GitHub Pages service-worker cross-origin-isolation fallback
+- avoid first-install service-worker reloads on hosts that are already cross-origin isolated
+- preserve the user's selected target while optional deep inspection continues
+- use the certified browser-native engine for common JPEG/PNG/WebP conversion instead of blocking on libvips cold startup
+- validate media container magic independently so mislabeled outputs cannot pass
+- validate JSON/JSONL outputs locally without unnecessarily loading DuckDB
+- reject unsafe SQL before starting DuckDB WASM
+- add local JSON bridges and deterministic TAR writing where appropriate
+- make LibreOffice fidelity initialization fail closed with an actionable semantic fallback instead of extending a broken cold-start timeout
+- keep strict CSP intact; downgrade WOFF2 to recognition-only after tested codecs failed browser/CSP certification
 - add real-file conversion smoke coverage across major engine families
 
 ## 1.0.0 — 2026-09-20
