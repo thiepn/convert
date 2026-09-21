@@ -75,6 +75,10 @@ export async function runTarget(page:Page,target:string){
   while(Date.now()<deadline){
     if(await page.locator("#results .result-item").count()) return;
     if(!(await button.isDisabled())){
+      // UI completion and result insertion happen in adjacent microtasks.
+      // Re-check after a short settle period before declaring a failure.
+      await page.waitForTimeout(100);
+      if(await page.locator("#results .result-item").count()) return;
       throw new Error(
         "Conversion to "+target+" ended without an output. Diagnostics: "
         +JSON.stringify(await appDiagnostics(page))
