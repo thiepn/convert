@@ -13,7 +13,7 @@ describe("USTAR writer",()=>{
   });
 
   it("supports USTAR prefix paths",()=>{
-    const path="folder/".repeat(12)+"file.txt";
+    const path="folder/".repeat(20)+"file.txt";
     const header=createUstarHeader({blob:new Blob(["x"]),path,lastModified:0});
     expect(new TextDecoder().decode(header.slice(257,262))).toBe("ustar");
     expect(header[345]).not.toBe(0);
