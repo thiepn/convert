@@ -3,7 +3,7 @@ import { createDefaultFormatRegistry } from "../src/core/formats/defaultFormats"
 import { inspectFile } from "../src/core/inspection/inspectFile";
 import { sourceIntegrityWarnings } from "../src/core/inspection/sourceIntegrity";
 
-function pngWithoutIend():Uint8Array{
+function pngWithoutIend(){
   return new Uint8Array([
     137,80,78,71,13,10,26,10,
     0,0,0,13,73,72,68,82,
