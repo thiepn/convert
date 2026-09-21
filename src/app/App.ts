@@ -288,9 +288,12 @@ export class App {
     this.jobs.cancelAll();
     this.pdfEngine.cancelActive();
     this.archiveAbort?.abort();
-    await this.batchRunner.releaseSession();
-    await this.releaseResults();
 
+    // Invalidate and clear visible selection state synchronously. Cleanup may
+    // await active workers/workspaces; it must never erase a new selection
+    // the user makes immediately after pressing Start over.
+    this.routeRevision++;
+    this.selectionRevision++;
     this.files=[];
     this.inspections=[];
     this.imageDetail=null;
@@ -301,10 +304,7 @@ export class App {
     this.spreadsheetDetail=null;
     this.dataDetail=null;
     this.databaseDetail=null;
-    this.archiveDetail=null;
     this.kind=null;
-    this.routeRevision++;
-    this.selectionRevision++;
 
     const input=element<HTMLInputElement>("file-input");
     input.value="";
@@ -323,6 +323,11 @@ export class App {
     element<HTMLButtonElement>("convert-button").disabled=false;
     element<HTMLButtonElement>("cancel-button").classList.add("hidden");
     element<HTMLLabelElement>("drop-zone").focus();
+
+    await Promise.all([
+      this.batchRunner.releaseSession(),
+      this.releaseResults()
+    ]);
   }
 
   private getKind(inspection:FileInspection):SelectionKind {
@@ -423,8 +428,9 @@ export class App {
     if(files.length===1&&known.length===1){
       try{
         if(this.kind==="image"&&this.imageEngine.isAvailable()){
-          this.imageDetail=await this.imageEngine.inspect(files[0],known[0].detection.format!.id);
-          warnings.push(...this.imageDetail.warnings);
+          // Shallow inspectFile() already gives safe signature/dimension facts
+          // for common images. Keep libvips lazy so the first conversion is
+          // the only cold-WASM consumer instead of racing a background probe.
         }else if(this.kind==="media"&&this.mediaEngine.isAvailable()){
           this.mediaDetail=await this.mediaEngine.inspect(files[0]);
           warnings.push(...this.mediaDetail.warnings);
