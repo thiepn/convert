@@ -6,6 +6,7 @@ import type { DetailedDocumentInspection } from "../document/types";
 import type { DetailedArchiveInspection } from "../archive/types";
 import { parseSubtitle } from "../specialist/subtitles";
 import { parseMesh } from "../specialist/mesh";
+import { parseJsonTabular } from "../data/jsonBridge";
 import type {
   DetailedSpreadsheetInspection,
   DetailedDataInspection,
@@ -248,6 +249,22 @@ export class DataOutputValidator implements OutputValidator {
     if(shallow.detection.format?.id!==targetFormatId){
       errors.push("Output data format does not match requested target.");
     }
+    if(targetFormatId==="json-data"||targetFormatId==="jsonl"){
+      let rows:number|null=null,columns:number|null=null;
+      try{
+        const parsed=parseJsonTabular(await blob.text(),targetFormatId==="jsonl");
+        rows=parsed.rows.length;
+        columns=parsed.columns.length;
+      }catch(error){
+        errors.push("Output JSON could not be reparsed: "+(error instanceof Error?error.message:String(error)));
+      }
+      return {
+        valid:errors.length===0,
+        errors,
+        properties:{format:shallow.detection.format?.id,size:blob.size,rows,columns}
+      };
+    }
+
     let data:DetailedDataInspection|null=null;
     try{data=await this.probe(blob,targetFormatId,options);}
     catch(error){errors.push("Output data could not be reopened: "+(error instanceof Error?error.message:String(error)));}
