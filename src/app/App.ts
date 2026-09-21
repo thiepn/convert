@@ -2144,7 +2144,7 @@ export class App {
       &&this.sqliteEngine.isAvailable()
       &&this.subtitleEngine.isAvailable()
       &&this.meshEngine.isAvailable()
-      ?"v1.0 runtime ready"
+      ?"v1.0.1 runtime ready"
       :"One or more local engines degraded";
     element("capability-json").textContent=JSON.stringify({
       ...profile,
@@ -2159,7 +2159,7 @@ export class App {
       sqliteEngine:this.sqliteEngine.isAvailable()?"sql.js 1.14.2":"unavailable",
       psdEngine:this.layeredImageEngine.isAvailable()?"ag-psd 31.0.2":"unavailable",
       legacyMediaEngine:this.legacyMediaEngine.isAvailable()?"FFmpeg WASM 0.12.10 (lazy)":"unavailable",
-      fontEngine:this.fontEngine.isAvailable()?"fonteditor-core 2.6.3":"unavailable",
+      fontEngine:this.fontEngine.isAvailable()?"fonteditor-core 2.6.3 + woff2-encoder 2.0.0":"unavailable",
       specialistNativeEngines:"subtitles + meshes + RAW preview + FITS metadata + FB2",
       batchScheduler:"capability-aware + sequential + in-session resume",
       deviceProfile:this.deviceProfile
