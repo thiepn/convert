@@ -63,6 +63,26 @@ export class ImageOutputValidator implements OutputValidator {
   }
 }
 
+function mediaMagicMatches(bytes:Uint8Array,target:string):boolean {
+  if(target==="flac"){
+    return bytes.length>=4
+      &&bytes[0]===0x66&&bytes[1]===0x4c&&bytes[2]===0x61&&bytes[3]===0x43;
+  }
+  if(target==="wav"){
+    return bytes.length>=12
+      &&bytes[0]===0x52&&bytes[1]===0x49&&bytes[2]===0x46&&bytes[3]===0x46
+      &&bytes[8]===0x57&&bytes[9]===0x41&&bytes[10]===0x56&&bytes[11]===0x45;
+  }
+  if(target==="aac"){
+    return bytes.length>=2&&bytes[0]===0xff&&(bytes[1]&0xf6)===0xf0;
+  }
+  if(target==="mp3"){
+    if(bytes.length>=3&&bytes[0]===0x49&&bytes[1]===0x44&&bytes[2]===0x33) return true;
+    return bytes.length>=2&&bytes[0]===0xff&&(bytes[1]&0xe0)===0xe0;
+  }
+  return true;
+}
+
 export class MediaOutputValidator implements OutputValidator {
   constructor(
     private readonly formats:FormatRegistry,
@@ -80,6 +100,13 @@ export class MediaOutputValidator implements OutputValidator {
       "output."+(target?.extensions[0]??"bin")
     );
     if(shallow.detection.format?.id!==targetFormatId) errors.push("Output container signature does not match requested format.");
+
+    if(["mp3","wav","aac","flac"].includes(targetFormatId)){
+      const bytes=new Uint8Array(await blob.slice(0,16).arrayBuffer());
+      if(!mediaMagicMatches(bytes,targetFormatId)){
+        errors.push("Output magic bytes do not match the requested audio format.");
+      }
+    }
 
     let media:DetailedMediaInspection|null=null;
     try{media=await this.probe(blob);}catch{errors.push("Output could not be reopened by the media parser.");}
