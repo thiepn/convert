@@ -4,6 +4,7 @@ import { JobManager } from "../jobs/JobManager";
 import type { ConversionOutput,JobSnapshot } from "../jobs/types";
 import { ConversionPlanner } from "../planner/ConversionPlanner";
 import { getDeviceProfile } from "../performance/DeviceProfile";
+import { isRetryableIssue } from "../ux/errors";
 import { recommendedBatchParallelism } from "../performance/Budget";
 import { renderBatchName,uniqueBatchName } from "./naming";
 import type {
@@ -47,7 +48,7 @@ export class BatchRunner {
     return Boolean(this.session?.tasks.some(task=>
       task.state==="cancelled"
       ||task.state==="pending"
-      ||(task.state==="failed"&&task.stage!=="Cannot plan")
+      ||(task.state==="failed"&&task.retryable!==false)
     ));
   }
 
@@ -109,12 +110,13 @@ export class BatchRunner {
       if(
         task.state==="cancelled"
         ||task.state==="pending"
-        ||(retryFailed&&task.state==="failed"&&task.stage!=="Cannot plan")
+        ||(retryFailed&&task.state==="failed"&&task.retryable!==false)
       ){
         task.state="pending";
         task.progress=0;
         task.stage="Queued for resume";
         task.error=undefined;
+        task.retryable=undefined;
       }
     }
     const execution=this.execute(session,onUpdate);
@@ -167,6 +169,7 @@ export class BatchRunner {
         task.progress=1;
         task.stage="Cannot plan";
         task.error=error instanceof Error?error.message:String(error);
+        task.retryable=false;
       }
       onUpdate?.(this.snapshot(session));
     }
@@ -281,11 +284,13 @@ export class BatchRunner {
       task.state="completed";
       task.progress=1;
       task.stage="Complete";
+      task.retryable=undefined;
     }catch(error){
       const cancelled=this.stopRequested||(error instanceof DOMException&&error.name==="AbortError");
       task.state=cancelled?"cancelled":"failed";
       task.progress=cancelled?task.progress:1;
-      task.stage=cancelled?"Cancelled":"Failed";
+      task.retryable=cancelled?true:isRetryableIssue(error);
+      task.stage=cancelled?"Cancelled":task.retryable?"Failed · retry available":"Failed · needs changes";
       task.error=cancelled?undefined:(error instanceof Error?error.message:String(error));
     }
     onUpdate?.(this.snapshot(session));
@@ -314,7 +319,7 @@ export class BatchRunner {
       resumable:tasks.some(task=>
         task.state==="cancelled"
         ||task.state==="pending"
-        ||(task.state==="failed"&&task.stage!=="Cannot plan")
+        ||(task.state==="failed"&&task.retryable!==false)
       ),
       tasks
     };
