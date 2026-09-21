@@ -175,7 +175,7 @@ test("invalid data query fails safely with a human-readable recovery message",as
   await page.locator("#data-query").fill("DELETE FROM data");
   await page.locator("#convert-button").click();
 
-  const warning=page.locator("#loss-warnings .warning").last();
+  const warning=page.locator("#loss-warnings .warning").filter({hasText:/Query blocked|SELECT|WITH/i}).first();
   await expect(warning).toBeVisible({timeout:10_000});
   const text=(await warning.textContent())??"";
   expect(text).not.toMatch(/[A-Z]{3,}_[A-Z_]+:/);
