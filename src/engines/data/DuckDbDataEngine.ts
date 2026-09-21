@@ -8,6 +8,7 @@ import type {
 } from "../../core/engines/Engine";
 import type { DataColumnInfo, DataConversionOptions, DetailedDataInspection } from "../../core/data/types";
 import { validateLocalSelectQuery } from "../../core/data/querySecurity";
+import { jsonTextToCsv } from "../../core/data/jsonBridge";
 import { assertMemoryBackedSource } from "../../core/performance/Budget";
 import { getDeviceProfile } from "../../core/performance/DeviceProfile";
 
@@ -72,8 +73,9 @@ export class DuckDbDataEngine implements ConversionEngine{
     const profile=getDeviceProfile();
     const arrowInput=from==="arrow";
     const arrowOutput=to==="arrow";
+    const jsonInput=from==="json-data"||from==="jsonl";
     const flatOutput=["csv","tsv","json-data","jsonl"].includes(to);
-    const materializationFactor=arrowInput||arrowOutput
+    const materializationFactor=arrowInput||arrowOutput||jsonInput
       ?2
       :flatOutput
         ?1.75
@@ -87,12 +89,14 @@ export class DuckDbDataEngine implements ConversionEngine{
       memoryBytes,
       workspaceBytes:Math.max(96*1024*1024,Math.ceil(source.size*1.25)),
       outputBytes:null,
-      sourceAccess:arrowInput?"buffered":"streaming",
+      sourceAccess:arrowInput||jsonInput?"buffered":"streaming",
       outputAccess:"buffered",
       notes:[
         arrowInput
           ?"Arrow IPC parsing is memory-backed."
-          :"CSV/JSON/Parquet source access uses DuckDB's lazy browser file reader.",
+          :jsonInput
+            ?"JSON/JSONL is parsed locally and bridged to CSV before DuckDB; no DuckDB JSON extension is loaded."
+            :"CSV/TSV/Parquet source access uses DuckDB's lazy browser file reader.",
         profile.opfs
           ?"Final output is staged in the local workspace after DuckDB export."
           :"DuckDB export is materialized in browser memory on this runtime."
@@ -144,6 +148,24 @@ export class DuckDbDataEngine implements ConversionEngine{
           await writer.write(blob);await writer.close();
           blob=await request.outputHandle.getFile();
         }
+        return {blob,warnings:[],outputInWorkspace:Boolean(request.outputHandle)};
+      }
+
+      if(request.targetFormatId==="json-data"||request.targetFormatId==="jsonl"){
+        request.onProgress?.(.45,"Executing local data transform");
+        const result=await conn.query(query);
+        request.signal.throwIfAborted?.();
+        const rows=tablePreview(result as any,Number.MAX_SAFE_INTEGER);
+        const text=request.targetFormatId==="jsonl"
+          ?rows.map(row=>JSON.stringify(row)).join("\n")+(rows.length?"\n":"")
+          :JSON.stringify(rows,null,2);
+        let blob:Blob=new Blob([text],{type:this.mimeFor(request.targetFormatId)});
+        if(request.outputHandle){
+          const writer=await request.outputHandle.createWritable();
+          await writer.write(blob);await writer.close();
+          blob=await request.outputHandle.getFile();
+        }
+        request.onProgress?.(.95,"Finalizing JSON output");
         return {blob,warnings:[],outputInWorkspace:Boolean(request.outputHandle)};
       }
 
@@ -222,9 +244,19 @@ export class DuckDbDataEngine implements ConversionEngine{
         const table=tableFromIPC(new Uint8Array(await source.arrayBuffer()));
         await conn.insertArrowTable(table as any,{name:"data"});
       }else{
-        const file=source instanceof File?source:new File([source],fileName,{type:source.type});
+        let file:File;
+        let sourceFormat=formatId;
+        let sourceOptions=options;
+        if(formatId==="json-data"||formatId==="jsonl"){
+          const csv=jsonTextToCsv(await source.text(),formatId==="jsonl");
+          file=new File([csv],fileName+".csv",{type:"text/csv"});
+          sourceFormat="csv";
+          sourceOptions={...options,delimiter:",",header:true};
+        }else{
+          file=source instanceof File?source:new File([source],fileName,{type:source.type});
+        }
         await db.registerFileHandle(fileName,file,duckdb.DuckDBDataProtocol.BROWSER_FILEREADER,true);
-        const sourceExpr=this.sourceExpression(formatId,fileName,options);
+        const sourceExpr=this.sourceExpression(sourceFormat,fileName,sourceOptions);
         await conn.query("CREATE OR REPLACE TEMP VIEW data AS SELECT * FROM "+sourceExpr);
       }
       return await task(conn,db);
@@ -243,8 +275,6 @@ export class DuckDbDataEngine implements ConversionEngine{
       return "read_csv_auto("+file+delimiter+", header="+(options.header?"true":"false")+")";
     }
     if(formatId==="tsv") return "read_csv_auto("+file+", delim='\\t', header="+(options.header?"true":"false")+")";
-    if(formatId==="json-data") return "read_json_auto("+file+", format='auto')";
-    if(formatId==="jsonl") return "read_json_auto("+file+", format='newline_delimited')";
     if(formatId==="parquet") return "read_parquet("+file+")";
     throw new Error("DATA_SOURCE_UNSUPPORTED: "+formatId);
   }
@@ -257,8 +287,6 @@ export class DuckDbDataEngine implements ConversionEngine{
     if(target==="tsv"){
       return "COPY ("+query+") TO "+out+" (FORMAT CSV, HEADER "+(options.header?"TRUE":"FALSE")+", DELIMITER '\\t')";
     }
-    if(target==="json-data") return "COPY ("+query+") TO "+out+" (FORMAT JSON, ARRAY TRUE)";
-    if(target==="jsonl") return "COPY ("+query+") TO "+out+" (FORMAT JSON, ARRAY FALSE)";
     if(target==="parquet") return "COPY ("+query+") TO "+out+" (FORMAT PARQUET, COMPRESSION ZSTD)";
     throw new Error("DATA_TARGET_UNSUPPORTED: "+target);
   }
