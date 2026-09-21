@@ -76,6 +76,41 @@ describe("Phase 8 BatchRunner",()=>{
     expect(runner.hasResumable()).toBe(false);
   });
 
+  it("does not offer deterministic runtime failures for retry",async()=>{
+    const formats=createDefaultFormatRegistry();
+    const planner={
+      plan:()=>({
+        edges:[{
+          from:"srt",to:"vtt",engineId:"subtitle-compat",qualityLoss:0,
+          metadataLoss:[],temporaryMultiplier:1,streaming:false
+        }],
+        score:1,
+        warnings:[]
+      })
+    } as unknown as ConversionPlanner;
+    const jobs={
+      cancelAll:()=>{},
+      convert:async()=>{throw new Error("OUTPUT_INVALID: synthetic invalid output");}
+    } as unknown as JobManager;
+    const runner=new BatchRunner(formats,planner,jobs);
+
+    const result=await runner.start(
+      [subtitleFile("broken.srt")],
+      buildBatchPipeline({
+        targetFormatId:"vtt",
+        quality:1,
+        options:{},
+        executionMode:"sequential",
+        packageResults:false
+      })
+    );
+
+    expect(result.tasks[0].state).toBe("failed");
+    expect(result.tasks[0].retryable).toBe(false);
+    expect(result.tasks[0].stage).toMatch(/needs changes/i);
+    expect(runner.hasResumable()).toBe(false);
+  });
+
   it("does not offer deterministic planning failures for retry",async()=>{
     const formats=createDefaultFormatRegistry();
     const planner={
