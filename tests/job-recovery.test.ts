@@ -79,6 +79,37 @@ describe("direct conversion recovery",()=>{
     expect(output.warnings.some(warning=>/alternate certified local engine/i.test(warning))).toBe(true);
   });
 
+  it("does not silently cross route modes during recovery",async()=>{
+    const formats=createDefaultFormatRegistry();
+    const engines=new EngineRegistry();
+    let semanticCalls=0;
+    engines.register(engine("fidelity",async()=>{throw new Error("WORKER_CRASH: fidelity engine exited");}));
+    engines.register(engine("semantic",async()=>{
+      semanticCalls++;
+      return {blob:new Blob(["semantic"])};
+    }));
+    const graph=new ConversionGraph([
+      {
+        from:"png",to:"jpeg",engineId:"fidelity",
+        qualityLoss:0,metadataLoss:[],temporaryMultiplier:1,
+        streaming:false,baseCost:0,mode:"fidelity",rootOnly:true
+      },
+      {
+        from:"png",to:"jpeg",engineId:"semantic",
+        qualityLoss:0,metadataLoss:[],temporaryMultiplier:1,
+        streaming:false,baseCost:1,mode:"semantic",rootOnly:true
+      }
+    ]);
+    const planner=new ConversionPlanner(graph,formats,engines);
+    const jobs=new JobManager(formats,engines,planner,{
+      validate:async()=>({valid:true,errors:[],properties:{}})
+    });
+
+    await expect(jobs.convert(sourcePng(),"jpeg",.82,{routePreference:"fidelity"}))
+      .rejects.toThrow(/WORKER_CRASH/);
+    expect(semanticCalls).toBe(0);
+  });
+
   it("recovers when the primary output fails independent validation",async()=>{
     let fallbackCalls=0;
     const jobs=setup(
