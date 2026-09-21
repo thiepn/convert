@@ -35,6 +35,7 @@ export interface BatchTaskSnapshot {
   attempts:number;
   outputName?:string;
   error?:string;
+  retryable?:boolean;
   warnings:string[];
   exclusive:boolean;
 }
