@@ -1,37 +1,23 @@
 import { createFont } from "fonteditor-core";
-import { compress as compressWoff2,decompress as decompressWoff2 } from "woff2-encoder";
 import { unzlibSync,zlibSync } from "fflate";
 import type { ConversionEngine,ConversionEstimate,EngineConvertRequest,EngineConvertResult } from "../../core/engines/Engine";
 import { assertMemoryBackedSource } from "../../core/performance/Budget";
 
-const COMMON=new Set(["ttf","woff","woff2","eot"]);
+const COMMON=new Set(["ttf","woff","eot"]);
 const MIME:Record<string,string>={
-  ttf:"font/ttf",otf:"font/otf",woff:"font/woff",woff2:"font/woff2",eot:"application/vnd.ms-fontobject"
+  ttf:"font/ttf",otf:"font/otf",woff:"font/woff",eot:"application/vnd.ms-fontobject"
 };
 
-function copyBytes(
-  value:ArrayBufferLike|Uint8Array<ArrayBufferLike>
-):Uint8Array<ArrayBuffer>{
+function ownedBuffer(value:ArrayBuffer|Uint8Array):ArrayBuffer{
   const source=value instanceof Uint8Array?value:new Uint8Array(value);
   const copy=new Uint8Array(new ArrayBuffer(source.byteLength));
   copy.set(source);
-  return copy;
-}
-
-function asArrayBuffer(bytes:Uint8Array<ArrayBufferLike>):ArrayBuffer{
-  return copyBytes(bytes).buffer;
-}
-
-function sfntType(bytes:Uint8Array):"ttf"|"otf"{
-  return bytes.length>=4
-    &&bytes[0]===0x4f&&bytes[1]===0x54&&bytes[2]===0x54&&bytes[3]===0x4f
-    ?"otf"
-    :"ttf";
+  return copy.buffer;
 }
 
 export class FontEngine implements ConversionEngine{
   readonly id="font-compat";
-  readonly version="fonteditor-core-2.6.3 + woff2-encoder-2.0.0";
+  readonly version="fonteditor-core-2.6.3";
 
   async prepare():Promise<void>{}
 
@@ -47,73 +33,40 @@ export class FontEngine implements ConversionEngine{
       temporaryBytes:memoryBytes,memoryBytes,
       workspaceBytes:32*1024*1024,outputBytes:null,
       sourceAccess:"buffered",outputAccess:"buffered",
-      notes:["Font tables and glyph outlines are materialized in memory. WOFF2 uses a CSP-safe local WebAssembly codec."]
+      notes:["Font tables and glyph outlines are materialized in memory. WOFF2 is recognized but intentionally has no v1.0.1 conversion route after browser/CSP certification failures."]
     };
   }
 
   async convert(request:EngineConvertRequest):Promise<EngineConvertResult>{
     if(!this.canConvert(request.sourceFormatId,request.targetFormatId)){
-      throw new Error("FONT_ROUTE_UNSUPPORTED: Unsupported font conversion route.");
+      throw new Error("FONT_ROUTE_UNSUPPORTED: Unsupported or uncertified font conversion route.");
     }
     assertMemoryBackedSource(request.source.size,"font conversion",12,96*1024*1024);
     if(request.signal.aborted) throw new DOMException("Font conversion cancelled.","AbortError");
 
-    request.onProgress?.(.18,"Reading font container");
-    let inputBytes:Uint8Array<ArrayBuffer>=copyBytes(new Uint8Array(await request.source.arrayBuffer()));
-    let inputType=request.sourceFormatId;
-
-    if(request.sourceFormatId==="woff2"&&request.targetFormatId==="woff2"){
-      const copy=copyBytes(inputBytes);
-      return {
-        blob:new Blob([asArrayBuffer(copy)],{type:MIME.woff2}),
-        warnings:["WOFF2 input was preserved without re-encoding."]
-      };
-    }
-
-    if(request.sourceFormatId==="woff2"){
-      request.onProgress?.(.32,"Decompressing WOFF2 locally");
-      inputBytes=copyBytes(await decompressWoff2(inputBytes));
-      inputType=sfntType(inputBytes);
-      if(request.signal.aborted) throw new DOMException("Font conversion cancelled.","AbortError");
-    }
-
-    const font=createFont(asArrayBuffer(inputBytes),{
-      type:inputType,
+    request.onProgress?.(.25,"Reading font tables");
+    const buffer=await request.source.arrayBuffer();
+    const font=createFont(buffer,{
+      type:request.sourceFormatId,
       inflate:(data:Uint8Array)=>unzlibSync(new Uint8Array(data))
     } as any);
 
-    request.onProgress?.(.65,"Writing font container");
-    let outputBytes:Uint8Array<ArrayBuffer>;
-
-    if(request.targetFormatId==="woff2"){
-      const sfnt=font.write({
-        type:"ttf",
-        hinting:true,
-        kerning:true,
-        deflate:(data:Uint8Array)=>zlibSync(new Uint8Array(data))
-      } as any) as ArrayBuffer|Uint8Array;
-      request.onProgress?.(.8,"Compressing WOFF2 locally");
-      outputBytes=copyBytes(await compressWoff2(copyBytes(sfnt)));
-    }else{
-      const output=font.write({
-        type:request.targetFormatId,
-        hinting:true,
-        kerning:true,
-        deflate:(data:Uint8Array)=>zlibSync(new Uint8Array(data))
-      } as any) as ArrayBuffer|Uint8Array;
-      outputBytes=copyBytes(output);
-    }
-
-    if(request.signal.aborted) throw new DOMException("Font conversion cancelled.","AbortError");
+    request.onProgress?.(.7,"Writing font container");
+    const output=font.write({
+      type:request.targetFormatId,
+      hinting:true,
+      kerning:true,
+      deflate:(data:Uint8Array)=>zlibSync(new Uint8Array(data))
+    } as any) as ArrayBuffer|Uint8Array;
 
     const warnings:string[]=[];
-    if(request.sourceFormatId==="otf"||inputType==="otf"){
-      warnings.push("OpenType/CFF-specific features may be reduced when converting through a TrueType-compatible target.");
+    if(request.sourceFormatId==="otf"){
+      warnings.push("OTF is read-only in the compatibility engine and converts through a TrueType outline path; OpenType/CFF-specific features may be reduced.");
     }
     warnings.push("Font conversion does not grant redistribution rights. Preserve the source font's embedding and licensing terms.");
 
     return {
-      blob:new Blob([asArrayBuffer(outputBytes)],{type:MIME[request.targetFormatId]??"application/octet-stream"}),
+      blob:new Blob([ownedBuffer(output)],{type:MIME[request.targetFormatId]??"application/octet-stream"}),
       warnings
     };
   }
