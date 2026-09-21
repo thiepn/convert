@@ -36,12 +36,57 @@ export async function selectFixtures(page:Page,fixtures:Fixture[]){
   await expect(page.locator("#file-panel")).toBeVisible({timeout:120_000});
 }
 
+export async function appDiagnostics(page:Page){
+  return page.evaluate(()=>{
+    const text=(id:string)=>document.getElementById(id)?.textContent?.trim()??"";
+    const select=document.getElementById("target-format") as HTMLSelectElement|null;
+    return {
+      href:location.href,
+      isolated:globalThis.crossOriginIsolated,
+      runtime:text("runtime-status"),
+      capabilities:text("capability-json"),
+      targets:select?[...select.options].map(option=>({value:option.value,label:option.textContent??""})):[],
+      inspectionWarnings:text("inspection-warnings"),
+      lossWarnings:text("loss-warnings"),
+      jobStage:text("job-stage"),
+      jobProgress:text("job-progress"),
+      results:text("results")
+    };
+  });
+}
+
 export async function runTarget(page:Page,target:string){
-  await expect(page.locator(`#target-format option[value="${target}"]`)).toHaveCount(1,{timeout:120_000});
+  const option=page.locator(`#target-format option[value="${target}"]`);
+  try{
+    await expect(option).toHaveCount(1,{timeout:15_000});
+  }catch(error){
+    throw new Error(
+      "Target "+target+" is unavailable. Diagnostics: "
+      +JSON.stringify(await appDiagnostics(page))
+      +"\n"+String(error)
+    );
+  }
+
   await page.locator("#target-format").selectOption(target);
-  await page.locator("#convert-button").click();
-  await expect(page.locator("#results")).toBeVisible({timeout:180_000});
-  await expect(page.locator("#results .result-item").first()).toBeVisible({timeout:180_000});
+  const button=page.locator("#convert-button");
+  await button.click();
+
+  const deadline=Date.now()+120_000;
+  while(Date.now()<deadline){
+    if(await page.locator("#results .result-item").count()) return;
+    if(!(await button.isDisabled())){
+      throw new Error(
+        "Conversion to "+target+" ended without an output. Diagnostics: "
+        +JSON.stringify(await appDiagnostics(page))
+      );
+    }
+    await page.waitForTimeout(250);
+  }
+
+  throw new Error(
+    "Conversion to "+target+" timed out. Diagnostics: "
+    +JSON.stringify(await appDiagnostics(page))
+  );
 }
 
 export async function resultBytes(page:Page,namePart:string):Promise<Buffer>{
