@@ -368,3 +368,58 @@ export function messyHtmlFixture():Fixture {
     )
   };
 }
+
+
+export function flattenCollisionZipFixture():Fixture {
+  const bytes=zipSync({
+    "folder-a/readme.txt":strToU8("first\n"),
+    "folder-b/readme.txt":strToU8("second\n"),
+    "folder-c/README.txt":strToU8("case distinct\n")
+  },{level:6});
+  return {name:"flatten-collisions.zip",mimeType:"application/zip",buffer:Buffer.from(bytes)};
+}
+
+export function wavWithJunkFixture():Fixture {
+  const sampleRate=16_000;
+  const channels=2;
+  const seconds=.12;
+  const samples=Math.floor(sampleRate*seconds);
+  const blockAlign=channels*2;
+  const dataBytes=samples*blockAlign;
+  const junkSize=18;
+  const fmtSize=16;
+  const riffPayload=
+    4
+    +(8+junkSize+(junkSize%2))
+    +(8+fmtSize)
+    +(8+dataBytes);
+  const buffer=Buffer.alloc(8+riffPayload);
+  let offset=0;
+  buffer.write("RIFF",offset,"ascii");offset+=4;
+  buffer.writeUInt32LE(riffPayload,offset);offset+=4;
+  buffer.write("WAVE",offset,"ascii");offset+=4;
+
+  buffer.write("JUNK",offset,"ascii");offset+=4;
+  buffer.writeUInt32LE(junkSize,offset);offset+=4;
+  buffer.fill(0x4a,offset,offset+junkSize);offset+=junkSize;
+  if(junkSize%2) offset++;
+
+  buffer.write("fmt ",offset,"ascii");offset+=4;
+  buffer.writeUInt32LE(fmtSize,offset);offset+=4;
+  buffer.writeUInt16LE(1,offset);offset+=2;
+  buffer.writeUInt16LE(channels,offset);offset+=2;
+  buffer.writeUInt32LE(sampleRate,offset);offset+=4;
+  buffer.writeUInt32LE(sampleRate*blockAlign,offset);offset+=4;
+  buffer.writeUInt16LE(blockAlign,offset);offset+=2;
+  buffer.writeUInt16LE(16,offset);offset+=2;
+
+  buffer.write("data",offset,"ascii");offset+=4;
+  buffer.writeUInt32LE(dataBytes,offset);offset+=4;
+  for(let i=0;i<samples;i++){
+    const left=Math.round(Math.sin(2*Math.PI*440*i/sampleRate)*10_000);
+    const right=Math.round(Math.sin(2*Math.PI*660*i/sampleRate)*8_000);
+    buffer.writeInt16LE(left,offset);offset+=2;
+    buffer.writeInt16LE(right,offset);offset+=2;
+  }
+  return {name:"stereo-junk.wav",mimeType:"audio/wav",buffer};
+}
