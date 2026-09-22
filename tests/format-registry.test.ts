@@ -83,9 +83,11 @@ describe("FormatRegistry",()=>{
     expect(registry.detect(bmff("heic"),"x.bin").format?.id).toBe("heic");
   });
 
-  it("recognizes common audio signatures",()=>{
+  it("recognizes common audio signatures without confusing UTF-16 BOMs for MP3",()=>{
     expect(registry.detect(new Uint8Array([0x66,0x4c,0x61,0x43]),"x.bin").format?.id).toBe("flac");
     expect(registry.detect(new Uint8Array([0x49,0x44,0x33,4,0]),"x.bin").format?.id).toBe("mp3");
+    expect(registry.detect(new Uint8Array([0xff,0xfb,0x90,0x64]),"x.bin").format?.id).toBe("mp3");
+    expect(registry.detect(new Uint8Array([0xff,0xfe,0x7b,0x00]),"x.bin").format?.id).not.toBe("mp3");
     expect(registry.detect(new Uint8Array([0xff,0xf1,0x50]),"x.bin").format?.id).toBe("aac");
   });
 
