@@ -4,6 +4,7 @@ import {
   adversarialCsvFixture,
   bomJsonFixture,
   complexXlsxFixture,
+  flattenCollisionZipFixture,
   messyHtmlFixture,
   openApp,
   pdfWithTrailingJunkFixture,
@@ -13,7 +14,8 @@ import {
   runTarget,
   selectFixture,
   unicodeZipFixture,
-  utf16SrtFixture
+  utf16SrtFixture,
+  wavWithJunkFixture
 } from "./helpers";
 
 function tarPaths(bytes:Buffer):string[]{
@@ -134,6 +136,27 @@ test("archive repacking preserves Unicode paths and case-colliding entries",asyn
   expect(paths).toContain("Case.txt");
   expect(paths).toContain("case.txt");
   expect(paths).toContain("nested/deep/한글.txt");
+});
+
+test("flattened archive creation applies path policy before duplicate-name handling",async({page})=>{
+  await selectFixture(page,flattenCollisionZipFixture());
+  await page.locator("#archive-preserve-paths").uncheck();
+  await runTarget(page,"tar");
+
+  const tar=await resultBytes(page,"flatten-collisions-converted");
+  const paths=tarPaths(tar);
+  expect(paths).toContain("readme.txt");
+  expect(paths).toContain("readme (2).txt");
+  expect(paths).toContain("README.txt");
+  expect(paths.every(path=>!path.includes("/"))).toBe(true);
+});
+
+test("noncanonical PCM WAV with a JUNK chunk remains convertible",async({page})=>{
+  await selectFixture(page,wavWithJunkFixture());
+  await runTarget(page,"flac");
+  const flac=await resultBytes(page,"stereo-junk-converted");
+  expect(flac.subarray(0,4).toString("ascii")).toBe("fLaC");
+  expect(flac.length).toBeGreaterThan(100);
 });
 
 test("PDF optimization accepts ordinary trailing transport junk after a valid EOF",async({page})=>{
