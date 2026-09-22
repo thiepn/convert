@@ -49,6 +49,10 @@ ok("CSP does not allow global ws/wss",!/(?:^|\s)(?:ws:|wss:)/.test(csp));
 ok("Converter has skip navigation",index.includes('class="skip-link"'));
 ok("Converter exposes accessible progressbar",index.includes('role="progressbar"'));
 ok("Converter exposes Start over recovery",index.includes('id="start-over-button"'));
+ok("Viewport allows safe-area coverage",/viewport-fit=cover/.test(index));
+ok("HTML declares Apple touch icon",index.includes('rel="apple-touch-icon"'));
+ok("HTML declares iOS standalone capability",index.includes('apple-mobile-web-app-capable'));
+
 
 const styles=read("src/styles.css");
 for(const side of ["top","right","bottom","left"]){
