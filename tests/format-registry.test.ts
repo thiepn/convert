@@ -1,6 +1,17 @@
 import { describe,expect,it } from "vitest";
 import { createDefaultFormatRegistry } from "../src/core/formats/defaultFormats";
 
+function utf16le(text:string):Uint8Array{
+  const bytes=new Uint8Array(text.length*2+2);
+  bytes[0]=0xff;bytes[1]=0xfe;
+  for(let i=0;i<text.length;i++){
+    const code=text.charCodeAt(i);
+    bytes[2+i*2]=code&0xff;
+    bytes[3+i*2]=code>>>8;
+  }
+  return bytes;
+}
+
 function bmff(brand:string){
   const bytes=new Uint8Array(32);
   bytes.set([0,0,0,24,0x66,0x74,0x79,0x70],0);
@@ -35,6 +46,26 @@ describe("FormatRegistry",()=>{
 
   it("recognizes JSON from content",()=>{
     expect(registry.detect(new TextEncoder().encode('{"name":"Jonathan"}'),"x.bin").format?.id).toBe("json-data");
+  });
+
+  it("recognizes UTF-16 text formats from content without useful file hints",()=>{
+    expect(
+      registry.detect(utf16le('{"name":"München","city":"서울"}'),"x.bin","application/octet-stream").format?.id
+    ).toBe("json-data");
+    expect(
+      registry.detect(
+        utf16le("1\r\n00:00:01,000 --> 00:00:02,000\r\nGrüße\r\n"),
+        "x.bin",
+        "application/octet-stream"
+      ).format?.id
+    ).toBe("srt");
+    expect(
+      registry.detect(
+        utf16le("[Script Info]\r\n[Events]\r\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\r\nDialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,안녕하세요"),
+        "x.bin",
+        "application/octet-stream"
+      ).format?.id
+    ).toBe("ass");
   });
 
   it("detects PDF by its file header",()=>{
