@@ -28,6 +28,14 @@ jobs:
           node-version: 22
       - run: npm install --no-audit --no-fund
       - run: npm run release:certify
+      - name: Upload static performance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: static-performance-report
+          path: .performance/static-report.json
+          if-no-files-found: ignore
+          retention-days: 14
 
   browser-smoke:
     runs-on: ubuntu-latest
@@ -43,6 +51,14 @@ jobs:
         run: npx playwright install --with-deps chromium firefox webkit
       - run: npm run build
       - run: npm run test:e2e:run
+      - name: Upload runtime performance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-performance-report
+          path: test-results/performance-report.json
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Upload Playwright failure artifacts
         if: failure()
         uses: actions/upload-artifact@v4
