@@ -1,5 +1,5 @@
 import { describe,expect,it } from "vitest";
-import { friendlyIssueText,presentIssue } from "../src/core/ux/errors";
+import { friendlyIssueText,isRetryableIssue,presentIssue } from "../src/core/ux/errors";
 
 describe("Phase 10 user-facing error presentation",()=>{
   it("turns memory guard codes into actionable language",()=>{
@@ -27,5 +27,13 @@ describe("Phase 10 user-facing error presentation",()=>{
 
   it("recognizes planner no-route wording",()=>{
     expect(presentIssue("No local conversion route is available on this browser.").code).toBe("NO_LOCAL_ROUTE");
+  });
+
+  it("distinguishes deterministic failures from transient failures",()=>{
+    expect(isRetryableIssue("OUTPUT_INVALID: parser mismatch")).toBe(false);
+    expect(isRetryableIssue("MEMORY_BUDGET_EXCEEDED: too large")).toBe(false);
+    expect(isRetryableIssue("PDF_PASSWORD_REQUIRED: locked")).toBe(false);
+    expect(isRetryableIssue("WORKER_CRASH: worker exited")).toBe(true);
+    expect(isRetryableIssue(new DOMException("cancelled","AbortError"))).toBe(true);
   });
 });

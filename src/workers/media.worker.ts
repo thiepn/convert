@@ -39,7 +39,9 @@ async function ensureEncoders(){
   encodersReady=(async()=>{
     if(!(await canEncodeAudio("aac"))) registerAacEncoder();
     if(!(await canEncodeAudio("mp3"))) registerMp3Encoder();
-    if(!(await canEncodeAudio("flac"))) registerFlacEncoder();
+    // The bundled FLAC encoder is the certified cross-browser path. Some
+    // WebKit builds advertise FLAC encodability but fail to emit packets.
+    registerFlacEncoder();
   })();
   return encodersReady;
 }
@@ -157,6 +159,10 @@ function conversionOptions(input:any,targetId:string,options:MediaConversionOpti
   }
 
   if(options.audioCodec) audio.codec=options.audioCodec;
+  if(targetId==="flac"){
+    audio.codec="flac";
+    audio.forceTranscode=true;
+  }
   if(options.audioBitrate) audio.bitrate=options.audioBitrate;
 
   return {

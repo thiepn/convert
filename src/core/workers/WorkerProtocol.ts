@@ -4,6 +4,8 @@ export interface ConvertImageMessage {
   source: Blob;
   targetMime: string;
   quality: number;
+  maxDimension?: number;
+  background?: string;
 }
 
 export interface CancelMessage {

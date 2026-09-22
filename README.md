@@ -4,7 +4,15 @@ A local-first universal browser file-conversion platform.
 
 ## Current status
 
-Thiepn Convert v1.0.1 is the post-v1 production-hardened release. Phase 10 completed the Phase 0–10 roadmap; Maintenance Pass 1 adds deployment and real-browser certification.
+Thiepn Convert v1.0.1 is the post-v1 production-hardened release. Phase 10 completed the Phase 0–10 roadmap; Maintenance Passes 1–7 now cover deployment, recovery, adversarial real-file compatibility, long-session resource ownership, performance budgets, cross-browser conversion parity, and mobile/PWA hardening.
+
+### Browser & mobile certification
+
+Representative image, subtitle, mesh, spreadsheet, structured-data, semantic-document, PDF, archive, and primary-audio conversion routes are certified in Chromium desktop, Chromium mobile emulation, Firefox, and WebKit mobile emulation.
+
+Mobile CI additionally covers touch selection, 44 px interaction targets, portrait/landscape rotation, safe-area layout, and cached/offline behavior. Chromium mobile exercises a full offline subtitle conversion. Physical Android/iOS installed-PWA acceptance remains an explicit device checklist rather than being inferred from emulation.
+
+See `docs/cross-browser-mobile-certification.md` and `docs/real-device-mobile-checklist.md`.
 
 ### Images
 

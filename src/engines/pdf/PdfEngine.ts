@@ -29,6 +29,7 @@ export class PdfEngine implements ConversionEngine {
   private ocr=new PdfOcrEngine();
   private qpdfRunner:Awaited<ReturnType<typeof createQpdfRunner>>|null=null;
   private cancelEpoch=0;
+  private workerUses=0;
 
   async prepare():Promise<void>{
     this.pdfWorkerUrl=new URL("engines/pdfjs/pdf.worker.min.mjs",document.baseURI).href;
@@ -292,6 +293,7 @@ export class PdfEngine implements ConversionEngine {
     this.cancelEpoch++;
     this.worker?.terminate();
     this.worker=null;
+    this.workerUses=0;
     const error=new DOMException("PDF operation cancelled.","AbortError");
     for(const pending of this.pending.values()) pending.reject(error);
     this.pending.clear();
@@ -367,12 +369,19 @@ export class PdfEngine implements ConversionEngine {
       else if(message.type==="text") pending.resolve(message.result);
       else if(message.type==="pdf") pending.resolve(message.blob);
       else pending.resolve(message.outputs);
+      this.workerUses++;
+      if(this.workerUses>=24&&this.pending.size===0&&this.worker===worker){
+        worker.terminate();
+        this.worker=null;
+        this.workerUses=0;
+      }
     };
     worker.onerror=event=>{
       const error=new Error(event.message||"PDF worker crashed.");
       for(const pending of this.pending.values()) pending.reject(error);
       this.pending.clear();
       this.worker=null;
+      this.workerUses=0;
       worker.terminate();
     };
     this.worker=worker;
@@ -382,7 +391,12 @@ export class PdfEngine implements ConversionEngine {
   private request(request:PdfWorkerRequest):Promise<unknown>{
     return new Promise((resolve,reject)=>{
       this.pending.set(request.requestId,{resolve,reject});
-      this.getWorker().postMessage(request);
+      try{
+        this.getWorker().postMessage(request);
+      }catch(error){
+        this.pending.delete(request.requestId);
+        reject(error instanceof Error?error:new Error(String(error)));
+      }
     });
   }
 }

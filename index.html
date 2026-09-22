@@ -9,6 +9,9 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'self'; manifest-src 'self'">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" sizes="192x192" href="./icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Convert">
   <title>Thiepn Convert</title>
 </head>
 <body>
@@ -64,6 +67,8 @@
         </label>
       </div>
 
+      <div id="target-shortcuts" class="target-shortcuts hidden" role="group" aria-label="Quick output formats"></div>
+
       <div id="image-controls" class="control-section hidden">
         <div class="control-title">Image options</div>
         <div class="convert-grid phase-controls">
@@ -84,6 +89,9 @@
               <option value="2560">2560 px</option>
               <option value="1920">1920 px</option>
               <option value="1280">1280 px</option>
+              <option value="640">640 px</option>
+              <option value="320">320 px</option>
+              <option value="128">128 px</option>
             </select>
           </label>
           <label>
@@ -541,10 +549,11 @@
 
       <div class="action-row">
         <button id="archive-pack-selection-button" class="secondary-button hidden" type="button">Pack these files</button>
-        <button id="convert-button" class="primary-button" type="button">Run locally</button>
-        <button id="cancel-button" class="secondary-button hidden" type="button">Cancel</button>
+        <button id="convert-button" class="primary-button" type="button" title="Run locally (Ctrl/Cmd+Enter)">Run locally</button>
+        <button id="cancel-button" class="secondary-button hidden" type="button" title="Cancel active work (Esc)">Cancel</button>
         <button id="start-over-button" class="secondary-button" type="button">Start over</button>
       </div>
+      <div class="shortcut-hint" aria-hidden="true">Ctrl/Cmd+Enter to run · Esc to cancel</div>
 
       <div id="job-panel" class="job-panel hidden" role="status" aria-live="polite">
         <div id="job-progress-track" class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="job-stage"><div id="progress-bar" class="progress-bar"></div></div>
@@ -557,20 +566,22 @@
       <div id="results" class="results hidden" role="region" aria-live="polite" aria-label="Conversion results"></div>
     </section>
 
-    <section class="panel">
-      <div class="section-heading">
-        <div>
-          <div class="eyebrow">RUNTIME</div>
-          <h2>Capability diagnostics</h2>
-        </div>
+    <details class="panel diagnostics-panel">
+      <summary class="diagnostics-summary">
+        <span>
+          <span class="eyebrow">RUNTIME</span>
+          <strong>Capability diagnostics</strong>
+        </span>
         <span id="runtime-status" class="chip">Probing…</span>
+      </summary>
+      <div class="diagnostics-body">
+        <div id="capabilities" class="capability-grid"></div>
+        <details>
+          <summary>Technical details</summary>
+          <pre id="capability-json"></pre>
+        </details>
       </div>
-      <div id="capabilities" class="capability-grid"></div>
-      <details>
-        <summary>Technical details</summary>
-        <pre id="capability-json"></pre>
-      </details>
-    </section>
+    </details>
 
     <section class="panel compact-panel">
       <h2>Privacy model</h2>

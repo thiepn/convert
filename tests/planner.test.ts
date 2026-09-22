@@ -29,6 +29,12 @@ describe("ConversionPlanner",()=>{
     expect(planner.plan("jpeg","jpeg").edges[0].engineId).toBe("browser-image-proof");
   });
 
+  it("retains libvips as a lower-priority same-mode recovery route",()=>{
+    const routes=planner.directAlternatives("png","webp");
+    expect(routes.map(route=>route.edges[0].engineId).slice(0,2))
+      .toEqual(["browser-image-proof","vips-image"]);
+  });
+
   it("routes MP4 to WebM through the media engine",()=>{
     expect(planner.plan("mp4","webm-media").edges[0].engineId).toBe("mediabunny");
   });

@@ -62,3 +62,4 @@ async function registerServiceWorker() {
 
 await registerServiceWorker();
 await new App().start();
+performance.mark("convert:runtime-ready");

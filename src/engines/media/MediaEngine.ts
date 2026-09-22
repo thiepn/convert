@@ -23,6 +23,7 @@ export class MediaEngine implements ConversionEngine {
     reject:(error:Error)=>void;
     onProgress?:(progress:number,stage:string)=>void;
   }>();
+  private terminalRequests=0;
 
   async prepare():Promise<void> {}
 
@@ -74,9 +75,7 @@ export class MediaEngine implements ConversionEngine {
     const requestId=crypto.randomUUID();
     const options={...defaults(),...(request.options??{})} as MediaConversionOptions;
 
-    const abort=()=>{
-      this.getWorker().postMessage({type:"cancel",requestId:crypto.randomUUID(),jobId:request.jobId} satisfies MediaWorkerRequest);
-    };
+    const abort=()=>this.resetWorker();
     request.signal.addEventListener("abort",abort,{once:true});
     try {
       return await this.request({
@@ -93,6 +92,7 @@ export class MediaEngine implements ConversionEngine {
     }
   }
 
+  cancelActive():void { this.resetWorker(); }
   dispose():void { this.resetWorker(); }
 
   private getWorker():Worker {
@@ -117,12 +117,14 @@ export class MediaEngine implements ConversionEngine {
         details:message.details,
         outputInWorkspace:message.outputInWorkspace
       });
+      this.noteTerminal(worker);
     };
     worker.onerror=event=>{
       const error=new Error(event.message||"Media worker crashed.");
       for(const pending of this.pending.values()) pending.reject(error);
       this.pending.clear();
       this.worker=null;
+      this.terminalRequests=0;
       worker.terminate();
     };
     this.worker=worker;
@@ -132,13 +134,28 @@ export class MediaEngine implements ConversionEngine {
   private request(request:MediaWorkerRequest,onProgress?:(progress:number,stage:string)=>void):Promise<unknown>{
     return new Promise((resolve,reject)=>{
       this.pending.set(request.requestId,{resolve,reject,onProgress});
-      this.getWorker().postMessage(request);
+      try{
+        this.getWorker().postMessage(request);
+      }catch(error){
+        this.pending.delete(request.requestId);
+        reject(error instanceof Error?error:new Error(String(error)));
+      }
     });
+  }
+
+  private noteTerminal(worker:Worker){
+    this.terminalRequests++;
+    if(this.terminalRequests>=24&&this.pending.size===0&&this.worker===worker){
+      worker.terminate();
+      this.worker=null;
+      this.terminalRequests=0;
+    }
   }
 
   private resetWorker(){
     this.worker?.terminate();
     this.worker=null;
+    this.terminalRequests=0;
     const error=new DOMException("Media worker terminated.","AbortError");
     for(const pending of this.pending.values()) pending.reject(error);
     this.pending.clear();

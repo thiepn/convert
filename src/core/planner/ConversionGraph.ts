@@ -65,12 +65,12 @@ export function createConversionGraph():ConversionGraph {
   const nativeImageFormats=new Set(["jpeg","png","webp"]);
   for(const from of IMAGE_INPUTS){
     for(const to of IMAGE_OUTPUTS){
-      if(nativeImageFormats.has(from)&&nativeImageFormats.has(to)) continue;
+      const nativeFallback=nativeImageFormats.has(from)&&nativeImageFormats.has(to);
       edges.push({
         from,to,engineId:"vips-image",
         qualityLoss:imageQualityLoss(to),
         metadataLoss:from==="heic"?["EXIF","XMP","ICC"]:[],
-        temporaryMultiplier:2,streaming:false,baseCost:0,mode:"neutral",rootOnly:true
+        temporaryMultiplier:2,streaming:false,baseCost:nativeFallback?260:0,mode:"neutral",rootOnly:true
       });
     }
   }

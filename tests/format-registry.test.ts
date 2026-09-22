@@ -1,6 +1,17 @@
 import { describe,expect,it } from "vitest";
 import { createDefaultFormatRegistry } from "../src/core/formats/defaultFormats";
 
+function utf16le(text:string):Uint8Array{
+  const bytes=new Uint8Array(text.length*2+2);
+  bytes[0]=0xff;bytes[1]=0xfe;
+  for(let i=0;i<text.length;i++){
+    const code=text.charCodeAt(i);
+    bytes[2+i*2]=code&0xff;
+    bytes[3+i*2]=code>>>8;
+  }
+  return bytes;
+}
+
 function bmff(brand:string){
   const bytes=new Uint8Array(32);
   bytes.set([0,0,0,24,0x66,0x74,0x79,0x70],0);
@@ -37,6 +48,26 @@ describe("FormatRegistry",()=>{
     expect(registry.detect(new TextEncoder().encode('{"name":"Jonathan"}'),"x.bin").format?.id).toBe("json-data");
   });
 
+  it("recognizes UTF-16 text formats from content without useful file hints",()=>{
+    expect(
+      registry.detect(utf16le('{"name":"München","city":"서울"}'),"x.bin","application/octet-stream").format?.id
+    ).toBe("json-data");
+    expect(
+      registry.detect(
+        utf16le("1\r\n00:00:01,000 --> 00:00:02,000\r\nGrüße\r\n"),
+        "x.bin",
+        "application/octet-stream"
+      ).format?.id
+    ).toBe("srt");
+    expect(
+      registry.detect(
+        utf16le("[Script Info]\r\n[Events]\r\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\r\nDialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,안녕하세요"),
+        "x.bin",
+        "application/octet-stream"
+      ).format?.id
+    ).toBe("ass");
+  });
+
   it("detects PDF by its file header",()=>{
     const bytes=new TextEncoder().encode("%PDF-1.7\n1 0 obj");
     expect(registry.detect(bytes,"file.bin").format?.id).toBe("pdf");
@@ -52,9 +83,11 @@ describe("FormatRegistry",()=>{
     expect(registry.detect(bmff("heic"),"x.bin").format?.id).toBe("heic");
   });
 
-  it("recognizes common audio signatures",()=>{
+  it("recognizes common audio signatures without confusing UTF-16 BOMs for MP3",()=>{
     expect(registry.detect(new Uint8Array([0x66,0x4c,0x61,0x43]),"x.bin").format?.id).toBe("flac");
     expect(registry.detect(new Uint8Array([0x49,0x44,0x33,4,0]),"x.bin").format?.id).toBe("mp3");
+    expect(registry.detect(new Uint8Array([0xff,0xfb,0x90,0x64]),"x.bin").format?.id).toBe("mp3");
+    expect(registry.detect(new Uint8Array([0xff,0xfe,0x7b,0x00]),"x.bin").format?.id).not.toBe("mp3");
     expect(registry.detect(new Uint8Array([0xff,0xf1,0x50]),"x.bin").format?.id).toBe("aac");
   });
 
@@ -67,6 +100,10 @@ describe("FormatRegistry",()=>{
     expect(registry.detect(new Uint8Array([0x38,0x42,0x50,0x53,0,1]),"x.bin").format?.id).toBe("psd");
     expect(registry.detect(new Uint8Array([0x38,0x42,0x50,0x53,0,2]),"x.bin").format?.id).toBe("psb");
     expect(registry.detect(new TextEncoder().encode("WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nHi"),"x.bin").format?.id).toBe("vtt");
+    expect(registry.detect(
+      new TextEncoder().encode("[Script Info]\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Hello"),
+      "x.bin"
+    ).format?.id).toBe("ass");
     expect(registry.detect(new TextEncoder().encode("ply\nformat ascii 1.0\n"),"x.bin").format?.id).toBe("ply");
     expect(registry.detect(new TextEncoder().encode("SIMPLE  =                    T"),"x.bin").format?.id).toBe("fits");
   });

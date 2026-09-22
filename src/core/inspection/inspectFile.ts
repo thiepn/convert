@@ -1,6 +1,8 @@
 import type { FormatDetection } from "../formats/types";
 import { FormatRegistry } from "../formats/FormatRegistry";
 import { detectPackagedDocument } from "../document/PackageInspector";
+import { sourceIntegrityWarnings } from "./sourceIntegrity";
+import { inspectCommonImageSourceTraits } from "../image/sourceTraits";
 
 export interface FileInspection {
   name: string;
@@ -9,6 +11,9 @@ export interface FileInspection {
   detection: FormatDetection;
   width?: number;
   height?: number;
+  imageMetadata?: boolean;
+  imageAnimation?: boolean;
+  imageTraitsKnown?: boolean;
 }
 
 function pngDimensions(bytes: Uint8Array) {
@@ -99,6 +104,22 @@ export async function inspectFile(
     }
   }
 
+  const integrityWarnings=await sourceIntegrityWarnings(file,detection.format?.id);
+  if(integrityWarnings.length){
+    detection={...detection,warnings:[...detection.warnings,...integrityWarnings]};
+  }
+
+  const traits=await inspectCommonImageSourceTraits(file,detection.format?.id);
   const size = dimensions(detection.format?.id, bytes);
-  return { name, size:file.size, mime, detection, width:size?.width, height:size?.height };
+  return {
+    name,
+    size:file.size,
+    mime,
+    detection,
+    width:size?.width,
+    height:size?.height,
+    imageMetadata:traits?.metadata,
+    imageAnimation:traits?.animation,
+    imageTraitsKnown:traits?.known
+  };
 }

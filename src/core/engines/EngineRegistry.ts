@@ -30,6 +30,9 @@ export class EngineRegistry {
   }
 
   dispose(): void {
-    this.all().forEach(engine => engine.dispose());
+    for(const engine of this.all()){
+      try{engine.dispose();}
+      catch(error){console.warn("Engine disposal failed:",engine.id,error);}
+    }
   }
 }

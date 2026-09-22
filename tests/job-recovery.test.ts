@@ -1,0 +1,172 @@
+import { describe,expect,it } from "vitest";
+import type { ConversionEngine,EngineConvertResult } from "../src/core/engines/Engine";
+import { EngineRegistry } from "../src/core/engines/EngineRegistry";
+import { createDefaultFormatRegistry } from "../src/core/formats/defaultFormats";
+import { JobManager } from "../src/core/jobs/JobManager";
+import { ConversionGraph } from "../src/core/planner/ConversionGraph";
+import { ConversionPlanner } from "../src/core/planner/ConversionPlanner";
+import type { OutputValidator } from "../src/core/validation/Validator";
+
+function sourcePng():File{
+  const bytes=new Uint8Array([
+    137,80,78,71,13,10,26,10,
+    0,0,0,13,73,72,68,82,
+    0,0,0,1,0,0,0,1,
+    8,6,0,0,0,0,0,0,0,
+    0,0,0,0,73,69,78,68,174,66,96,130
+  ]);
+  return new File([bytes],"pixel.png",{type:"image/png"});
+}
+
+function engine(
+  id:string,
+  convert:()=>Promise<EngineConvertResult>
+):ConversionEngine{
+  return {
+    id,version:"test",
+    isAvailable:()=>true,
+    canConvert:(from,to)=>from==="png"&&to==="jpeg",
+    estimate:async()=>({
+      temporaryBytes:1,memoryBytes:1,workspaceBytes:1,outputBytes:4,
+      sourceAccess:"buffered",outputAccess:"buffered",notes:[]
+    }),
+    convert,
+    dispose:()=>{}
+  };
+}
+
+function setup(
+  primary:()=>Promise<EngineConvertResult>,
+  fallback:()=>Promise<EngineConvertResult>,
+  validator:OutputValidator
+){
+  const formats=createDefaultFormatRegistry();
+  const engines=new EngineRegistry();
+  engines.register(engine("primary",primary));
+  engines.register(engine("fallback",fallback));
+  const graph=new ConversionGraph([
+    {
+      from:"png",to:"jpeg",engineId:"primary",
+      qualityLoss:0,metadataLoss:[],temporaryMultiplier:1,
+      streaming:false,baseCost:0,mode:"neutral",rootOnly:true
+    },
+    {
+      from:"png",to:"jpeg",engineId:"fallback",
+      qualityLoss:0,metadataLoss:[],temporaryMultiplier:1,
+      streaming:false,baseCost:100,mode:"neutral",rootOnly:true
+    }
+  ]);
+  const planner=new ConversionPlanner(graph,formats,engines);
+  return new JobManager(formats,engines,planner,validator);
+}
+
+describe("direct conversion recovery",()=>{
+  it("recovers from a primary engine crash with a same-mode alternate engine",async()=>{
+    let fallbackCalls=0;
+    const jobs=setup(
+      async()=>{throw new Error("WORKER_CRASH: primary worker terminated");},
+      async()=>{
+        fallbackCalls++;
+        return {blob:new Blob([new Uint8Array([0xff,0xd8,0xff,0xd9])],{type:"image/jpeg"})};
+      },
+      {
+        validate:async()=>({valid:true,errors:[],properties:{}})
+      }
+    );
+
+    const output=await jobs.convert(sourcePng(),"jpeg",.82);
+    expect(fallbackCalls).toBe(1);
+    expect(output.warnings.some(warning=>/alternate certified local engine/i.test(warning))).toBe(true);
+  });
+
+  it("does not silently cross route modes during recovery",async()=>{
+    const formats=createDefaultFormatRegistry();
+    const engines=new EngineRegistry();
+    let semanticCalls=0;
+    engines.register(engine("fidelity",async()=>{throw new Error("WORKER_CRASH: fidelity engine exited");}));
+    engines.register(engine("semantic",async()=>{
+      semanticCalls++;
+      return {blob:new Blob(["semantic"])};
+    }));
+    const graph=new ConversionGraph([
+      {
+        from:"png",to:"jpeg",engineId:"fidelity",
+        qualityLoss:0,metadataLoss:[],temporaryMultiplier:1,
+        streaming:false,baseCost:0,mode:"fidelity",rootOnly:true
+      },
+      {
+        from:"png",to:"jpeg",engineId:"semantic",
+        qualityLoss:0,metadataLoss:[],temporaryMultiplier:1,
+        streaming:false,baseCost:1,mode:"semantic",rootOnly:true
+      }
+    ]);
+    const planner=new ConversionPlanner(graph,formats,engines);
+    const jobs=new JobManager(formats,engines,planner,{
+      validate:async()=>({valid:true,errors:[],properties:{}})
+    });
+
+    await expect(jobs.convert(sourcePng(),"jpeg",.82,{routePreference:"fidelity"}))
+      .rejects.toThrow(/WORKER_CRASH/);
+    expect(semanticCalls).toBe(0);
+  });
+
+  it("does not recover advanced image options through a semantics-incomplete browser route",async()=>{
+    const formats=createDefaultFormatRegistry();
+    const engines=new EngineRegistry();
+    let browserCalls=0;
+    engines.register(engine("browser-image-proof",async()=>{
+      browserCalls++;
+      return {blob:new Blob(["fast"])};
+    }));
+    engines.register(engine("vips-image",async()=>{
+      throw new Error("WORKER_CRASH: feature-complete engine exited");
+    }));
+    const graph=new ConversionGraph([
+      {
+        from:"png",to:"jpeg",engineId:"browser-image-proof",
+        qualityLoss:0,metadataLoss:[],temporaryMultiplier:1,
+        streaming:false,baseCost:0,mode:"neutral",rootOnly:true
+      },
+      {
+        from:"png",to:"jpeg",engineId:"vips-image",
+        qualityLoss:0,metadataLoss:[],temporaryMultiplier:1,
+        streaming:false,baseCost:100,mode:"neutral",rootOnly:true
+      }
+    ]);
+    const planner=new ConversionPlanner(graph,formats,engines);
+    const jobs=new JobManager(formats,engines,planner,{
+      validate:async()=>({valid:true,errors:[],properties:{}})
+    });
+
+    await expect(jobs.convert(sourcePng(),"jpeg",.82,{
+      metadataPolicy:"strip",
+      targetBytes:50_000,
+      background:"#ffffff",
+      lossless:false,
+      preserveAnimation:true
+    })).rejects.toThrow(/WORKER_CRASH/);
+    expect(browserCalls).toBe(0);
+  });
+
+  it("recovers when the primary output fails independent validation",async()=>{
+    let fallbackCalls=0;
+    const jobs=setup(
+      async()=>({blob:new Blob(["bad"],{type:"image/jpeg"})}),
+      async()=>{
+        fallbackCalls++;
+        return {blob:new Blob(["good"],{type:"image/jpeg"})};
+      },
+      {
+        validate:async blob=>{
+          const text=await blob.text();
+          return {valid:text==="good",errors:text==="good"?[]:["synthetic invalid output"],properties:{}};
+        }
+      }
+    );
+
+    const output=await jobs.convert(sourcePng(),"jpeg",.82);
+    expect(fallbackCalls).toBe(1);
+    expect(await output.blob.text()).toBe("good");
+    expect(output.warnings.some(warning=>/failed independent validation/i.test(warning))).toBe(true);
+  });
+});

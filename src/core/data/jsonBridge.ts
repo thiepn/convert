@@ -11,10 +11,11 @@ function normalizeRow(value:unknown,index:number):Record<string,unknown>{
 }
 
 export function parseJsonTabular(text:string,jsonl:boolean):JsonTabularBridge {
+  const normalized=text.replace(/^\uFEFF/,"");
   const values:unknown[]=jsonl
-    ?text.split(/\r?\n/).map(line=>line.trim()).filter(Boolean).map(line=>JSON.parse(line))
+    ?normalized.split(/\r?\n/).map(line=>line.trim()).filter(Boolean).map(line=>JSON.parse(line))
     :(()=>{
-      const parsed=JSON.parse(text);
+      const parsed=JSON.parse(normalized);
       return Array.isArray(parsed)?parsed:[parsed];
     })();
 

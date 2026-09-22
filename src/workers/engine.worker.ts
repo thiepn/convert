@@ -19,7 +19,7 @@ scope.onmessage = async event => {
     return;
   }
 
-  const { jobId, source, targetMime, quality } = message;
+  const { jobId, source, targetMime, quality, maxDimension, background } = message;
 
   try {
     send({ type: "progress", jobId, progress: 0.15, stage: "Decoding image" });
@@ -30,12 +30,22 @@ scope.onmessage = async event => {
     }
 
     send({ type: "progress", jobId, progress: 0.48, stage: "Rendering locally" });
-    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+    const longest=Math.max(bitmap.width,bitmap.height);
+    const scale=maxDimension&&maxDimension>0&&longest>maxDimension
+      ?maxDimension/longest
+      :1;
+    const width=Math.max(1,Math.round(bitmap.width*scale));
+    const height=Math.max(1,Math.round(bitmap.height*scale));
+    const canvas = new OffscreenCanvas(width, height);
     const context = canvas.getContext("2d");
     if (!context) throw new Error("2D canvas context unavailable.");
-    context.drawImage(bitmap, 0, 0);
-    const width = bitmap.width;
-    const height = bitmap.height;
+    context.imageSmoothingEnabled=true;
+    context.imageSmoothingQuality="high";
+    if(targetMime==="image/jpeg"){
+      context.fillStyle=background||"#ffffff";
+      context.fillRect(0,0,width,height);
+    }
+    context.drawImage(bitmap, 0, 0, width, height);
     bitmap.close();
 
     if (cancelled.has(jobId)) return;

@@ -1,4 +1,6 @@
 export class TempWorkspace {
+  private cleaned=false;
+
   private constructor(
     private readonly jobsRoot: FileSystemDirectoryHandle,
     readonly jobId: string,
@@ -92,6 +94,8 @@ export class TempWorkspace {
   }
 
   async cleanup(): Promise<void> {
+    if(this.cleaned) return;
+    this.cleaned=true;
     try {
       await this.jobsRoot.removeEntry(this.jobId, { recursive: true });
     } catch {}

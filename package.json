@@ -9,11 +9,12 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "release:certify": "npm test && npm run typecheck && npm run build && node --check public/sw.js && node scripts/release-certify.mjs",
+    "release:certify": "npm test && npm run typecheck && npm run build && node --check public/sw.js && node scripts/release-certify.mjs && npm run performance:static",
     "preview": "vite preview",
     "test:e2e": "npm run build && playwright test",
     "test:e2e:run": "playwright test",
-    "maintenance:certify": "npm run release:certify && npm run test:e2e:run"
+    "maintenance:certify": "npm run release:certify && npm run test:e2e:run",
+    "performance:static": "node scripts/performance-certify.mjs"
   },
   "dependencies": {
     "@bjorn3/browser_wasi_shim": "0.4.2",

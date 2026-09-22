@@ -123,10 +123,23 @@ export const OGG:FormatDefinition={
   signatures:[[{offset:0,bytes:[0x4f,0x67,0x67,0x53]}]],
   capabilities:{metadata:true,multipleStreams:true},status:"production"
 };
+const isMp3FrameHeader=(bytes:Uint8Array)=>{
+  if(bytes.length<4||bytes[0]!==0xff||(bytes[1]&0xe0)!==0xe0) return false;
+  const version=bytes[1]&0x18;
+  const layer=bytes[1]&0x06;
+  const bitrateIndex=(bytes[2]>>4)&0x0f;
+  const sampleRateIndex=(bytes[2]>>2)&0x03;
+  return version!==0x08
+    &&layer===0x02
+    &&bitrateIndex>0
+    &&bitrateIndex<0x0f
+    &&sampleRateIndex!==0x03;
+};
+
 export const MP3:FormatDefinition={
   id:"mp3",name:"MP3",category:"audio",extensions:["mp3"],mimeTypes:["audio/mpeg"],
   signatures:[[{offset:0,bytes:[0x49,0x44,0x33]}]],
-  matcher:bytes=>bytes.length>2&&bytes[0]===0xff&&(bytes[1]&0xe0)===0xe0&&(bytes[1]&0xf6)!==0xf0,
+  matcher:isMp3FrameHeader,
   capabilities:{metadata:true},status:"production"
 };
 export const WAV:FormatDefinition={
@@ -169,7 +182,7 @@ const isRtf=(bytes:Uint8Array)=>{
 };
 const isHtmlDocument=(bytes:Uint8Array)=>{
   try{
-    const text=new TextDecoder().decode(bytes.slice(0,Math.min(bytes.length,8192))).replace(/^\uFEFF/,"").trimStart();
+    const text=decodeProbeText(bytes,8192).trimStart();
     return /^(?:<!doctype\s+html|<html(?:\s|>))/i.test(text);
   }catch{return false;}
 };
@@ -308,9 +321,20 @@ export const CPIO:FormatDefinition={
 };
 
 
+const decodeProbeText=(bytes:Uint8Array,limit=16384)=>{
+  const slice=bytes.slice(0,Math.min(bytes.length,limit));
+  try{
+    const encoding=
+      slice.length>=2&&slice[0]===0xff&&slice[1]===0xfe?"utf-16le":
+      slice.length>=2&&slice[0]===0xfe&&slice[1]===0xff?"utf-16be":
+      "utf-8";
+    return new TextDecoder(encoding).decode(slice).replace(/^\uFEFF/,"");
+  }catch{return "";}
+};
+
 const isJsonLines=(bytes:Uint8Array)=>{
   try{
-    const text=new TextDecoder().decode(bytes.slice(0,Math.min(bytes.length,16384))).replace(/^\uFEFF/,"");
+    const text=decodeProbeText(bytes,16384);
     const lines=text.split(/\r?\n/).map(line=>line.trim()).filter(Boolean);
     if(lines.length<2) return false;
     return lines.slice(0,20).every(line=>{
@@ -321,18 +345,27 @@ const isJsonLines=(bytes:Uint8Array)=>{
     });
   }catch{return false;}
 };
+const JSON_PROBE_LIMIT=256*1024;
+const looksLikeJsonPrefix=(text:string)=>{
+  const value=text.trimStart();
+  if(value.startsWith("{")) return /^\{\s*(?:"|\})/.test(value);
+  if(value.startsWith("[")) return /^\[\s*(?:\[|\{|"|\]|-|[0-9]|t|f|n)/.test(value);
+  return false;
+};
 const isJsonDocument=(bytes:Uint8Array)=>{
   try{
-    const text=new TextDecoder().decode(bytes.slice(0,Math.min(bytes.length,8192))).replace(/^\uFEFF/,"").trimStart();
-    if(!(text.startsWith("{")||text.startsWith("["))) return false;
-    JSON.parse(text.length<bytes.length?"null":text);
-    return true;
-  }catch{
+    const probeLength=Math.min(bytes.length,JSON_PROBE_LIMIT);
+    const text=decodeProbeText(bytes,probeLength).trimStart();
+    if(!looksLikeJsonPrefix(text)) return false;
     try{
-      const text=new TextDecoder().decode(bytes.slice(0,Math.min(bytes.length,8192))).replace(/^\uFEFF/,"").trimStart();
-      return text.startsWith("{")||text.startsWith("[");
-    }catch{return false;}
-  }
+      JSON.parse(text);
+      return true;
+    }catch{
+      // inspectFile supplies at most 256 KiB. Only accept a JSON-looking
+      // incomplete prefix when the probe itself hit that ceiling.
+      return bytes.length>=JSON_PROBE_LIMIT;
+    }
+  }catch{return false;}
 };
 const isArrowFile=(bytes:Uint8Array)=>bytes.length>=6&&ascii(bytes,0,6)==="ARROW1";
 const isSqlite=(bytes:Uint8Array)=>bytes.length>=16&&ascii(bytes,0,15)==="SQLite format 3"&&bytes[15]===0;
@@ -400,10 +433,7 @@ export const SQLITE:FormatDefinition={
 };
 
 
-const textProbe=(bytes:Uint8Array,limit=16384)=>{
-  try{return new TextDecoder().decode(bytes.slice(0,Math.min(bytes.length,limit))).replace(/^\uFEFF/,"");}
-  catch{return "";}
-};
+const textProbe=(bytes:Uint8Array,limit=16384)=>decodeProbeText(bytes,limit);
 const psdVersion=(bytes:Uint8Array,version:number)=>
   bytes.length>=6&&ascii(bytes,0,4)==="8BPS"&&bytes[4]===0&&bytes[5]===version;
 const isCameraRaw=(bytes:Uint8Array)=>
@@ -459,7 +489,7 @@ export const WOFF:FormatDefinition={
 };
 export const WOFF2:FormatDefinition={
   id:"woff2",name:"WOFF2 Font",category:"font",extensions:["woff2"],mimeTypes:["font/woff2"],
-  signatures:[[{offset:0,bytes:[0x77,0x4f,0x46,0x32]}]],capabilities:{metadata:true,vector:true},status:"production"
+  signatures:[[{offset:0,bytes:[0x77,0x4f,0x46,0x32]}]],capabilities:{metadata:true,vector:true},readOnly:true,status:"experimental"
 };
 export const EOT:FormatDefinition={
   id:"eot",name:"Embedded OpenType",category:"font",extensions:["eot"],mimeTypes:["application/vnd.ms-fontobject"],

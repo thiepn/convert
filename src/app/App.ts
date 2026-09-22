@@ -7,6 +7,7 @@ import { detectCapabilities } from "../core/capabilities/detectCapabilities";
 import { EngineRegistry } from "../core/engines/EngineRegistry";
 import { createDefaultFormatRegistry } from "../core/formats/defaultFormats";
 import type { DetailedImageInspection, ImageConversionOptions } from "../core/image/types";
+import { requiresFeatureCompleteImageEngine } from "../core/image/routePolicy";
 import type { DetailedDocumentInspection, DocumentConversionOptions } from "../core/document/types";
 import type { ArchiveConversionOptions, DetailedArchiveInspection } from "../core/archive/types";
 import { validateLocalSelectQuery } from "../core/data/querySecurity";
@@ -147,6 +148,7 @@ export class App {
   private archiveAbort:AbortController|null=null;
   private kind:SelectionKind=null;
   private leases:ResultLease[]=[];
+  private resultGeneration=0;
   private routeRevision=0;
   private selectionRevision=0;
   private batchPackageResults=true;
@@ -197,6 +199,7 @@ export class App {
 
   async start():Promise<void>{
     this.bindInputs();
+    this.bindLifecycle();
     await TempWorkspace.cleanupOrphanedJobs();
     await this.engines.prepareAll();
     await this.renderCapabilities(await detectCapabilities());
@@ -247,6 +250,7 @@ export class App {
         if(id==="archive-operation") this.updateArchiveOptionVisibility();
         if(id==="data-sheet-policy") this.updateDataOptionVisibility();
         if(id==="data-table-select") void this.refreshDatabasePreview();
+        if(id==="target-format") this.syncTargetShortcuts();
         this.updateBatchControls();
         void this.renderRoute();
       });
@@ -263,9 +267,63 @@ export class App {
     element<HTMLButtonElement>("cancel-button").addEventListener("click",()=>{
       this.batchRunner.cancel();
       this.jobs.cancelAll();
+      this.mediaEngine.cancelActive();
       this.pdfEngine.cancelActive();
       this.archiveAbort?.abort();
     });
+
+    this.bindKeyboardShortcuts();
+  }
+
+  private bindKeyboardShortcuts(){
+    document.addEventListener("keydown",event=>{
+      if(event.defaultPrevented) return;
+      const target=event.target;
+      const editing=target instanceof HTMLElement
+        &&(target.matches("input, textarea, select")||target.isContentEditable);
+      const command=event.ctrlKey||event.metaKey;
+
+      if(command&&event.key==="Enter"&&!editing){
+        const button=element<HTMLButtonElement>("convert-button");
+        if(!button.disabled&&this.files.length){
+          event.preventDefault();
+          button.click();
+        }
+        return;
+      }
+
+      if(event.key==="Escape"){
+        const cancel=element<HTMLButtonElement>("cancel-button");
+        if(!cancel.classList.contains("hidden")){
+          event.preventDefault();
+          cancel.click();
+        }
+        return;
+      }
+    });
+  }
+
+  private bindLifecycle(){
+    window.addEventListener("pagehide",()=>{
+      this.routeRevision++;
+      this.selectionRevision++;
+      this.batchRunner.cancel();
+      this.jobs.dispose();
+      this.mediaEngine.cancelActive();
+      this.pdfEngine.cancelActive();
+      this.archiveAbort?.abort();
+
+      const leases=this.invalidateResultLeases();
+      for(const lease of leases){
+        try{void lease.release?.().catch(()=>{});}catch{}
+      }
+      const results=document.getElementById("results");
+      results?.replaceChildren();
+      results?.classList.add("hidden");
+
+      void this.batchRunner.releaseSession();
+      this.engines.dispose();
+    },{capture:true});
   }
 
   private bindFileLaunch(){
@@ -287,6 +345,7 @@ export class App {
   private async resetSelection(){
     this.batchRunner.cancel();
     this.jobs.cancelAll();
+    this.mediaEngine.cancelActive();
     this.pdfEngine.cancelActive();
     this.archiveAbort?.abort();
 
@@ -494,6 +553,10 @@ export class App {
     this.updateDataOptionVisibility();
     this.updateBatchControls();
     await this.renderRoute();
+    if(selectionRevision===this.selectionRevision){
+      performance.clearMarks("convert:selection-ready");
+      performance.mark("convert:selection-ready");
+    }
   }
 
   private async refreshPdfInspection(){
@@ -1023,8 +1086,12 @@ export class App {
     const renderLimit=this.deviceProfile.mobileLike
       ?(this.deviceProfile.tier==="constrained"?60:100)
       :250;
+    const retryableFailures=snapshot.tasks.filter(task=>task.state==="failed"&&task.retryable!==false).length;
+    const blockedFailures=snapshot.tasks.filter(task=>task.state==="failed"&&task.retryable===false).length;
     element("batch-status-detail").textContent=
       snapshot.running+" running · "+snapshot.pending+" queued · failures stay isolated"
+      +(retryableFailures?" · "+retryableFailures+" retryable":"")
+      +(blockedFailures?" · "+blockedFailures+" need changed input/settings":"")
       +(snapshot.tasks.length>renderLimit?" · showing "+renderLimit+"/"+snapshot.tasks.length:"");
     element<HTMLButtonElement>("batch-resume-button").classList.toggle("hidden",!snapshot.resumable||snapshot.running>0);
 
@@ -1054,21 +1121,31 @@ export class App {
 
   private async resumeBatch(){
     if(!this.batchRunner.hasResumable()) return;
+    const revision=this.selectionRevision;
     const button=element<HTMLButtonElement>("convert-button");
     const cancel=element<HTMLButtonElement>("cancel-button");
     button.disabled=true;cancel.classList.remove("hidden");
     try{
       const result=await this.batchRunner.resume(snapshot=>this.renderBatchSnapshot(snapshot),true);
-      await this.renderBatchResults(result,this.batchPackageResults);
+      if(revision!==this.selectionRevision) return;
+      await this.renderBatchResults(result,this.batchPackageResults,revision);
     }catch(error){
       this.renderWarnings("loss-warnings",[error instanceof Error?error.message:String(error)]);
     }finally{
-      button.disabled=false;cancel.classList.add("hidden");
+      if(revision===this.selectionRevision){
+        button.disabled=false;cancel.classList.add("hidden");
+      }
     }
   }
 
-  private async renderBatchResults(result:BatchRunResult,packageResults:boolean){
+  private async renderBatchResults(
+    result:BatchRunResult,
+    packageResults:boolean,
+    revision=this.selectionRevision
+  ){
+    if(revision!==this.selectionRevision) return;
     await this.releaseResults();
+    if(revision!==this.selectionRevision) return;
     const expanded:Array<{name:string;blob:Blob;warnings:string[];release?:()=>Promise<void>}>=[];
 
     for(const output of result.outputs){
@@ -1086,8 +1163,11 @@ export class App {
     const failures=[...result.failures];
     if(packageResults&&expanded.length>1){
       let packageWorkspace:TempWorkspace|null=null;
+      const controller=new AbortController();
+      this.archiveAbort=controller;
       try{
         packageWorkspace=await TempWorkspace.create("package-"+crypto.randomUUID());
+        if(revision!==this.selectionRevision) return;
         const handle=packageWorkspace
           ?await packageWorkspace.getFileHandle("converted-files.zip")
           :undefined;
@@ -1096,8 +1176,15 @@ export class App {
           "zip",
           {compressionLevel:6,preservePaths:false},
           handle,
-          (_progress,stage)=>this.setProgress(1,"Packaging results · "+stage)
+          (_progress,stage)=>{
+            if(revision===this.selectionRevision) this.setProgress(1,"Packaging results · "+stage);
+          },
+          controller.signal
         );
+        if(revision!==this.selectionRevision){
+          try{await packageWorkspace?.cleanup();}catch{}
+          return;
+        }
         const retainedPackageWorkspace=packageWorkspace;
         expanded.push({
           name:"converted-files.zip",
@@ -1114,13 +1201,17 @@ export class App {
         packageWorkspace=null;
       }catch(error){
         try{await packageWorkspace?.cleanup();}catch{}
+        if(revision!==this.selectionRevision) return;
         failures.push({
           name:"converted-files.zip",
           error:"Batch packaging failed: "+(error instanceof Error?error.message:String(error))
         });
+      }finally{
+        if(this.archiveAbort===controller) this.archiveAbort=null;
       }
     }
 
+    if(revision!==this.selectionRevision) return;
     this.showBlobResults(expanded,failures,false);
     this.setProgress(1,"Batch complete");
   }
@@ -1135,10 +1226,72 @@ export class App {
     return [...sets[0]].filter(target=>sets.every(set=>set.has(target)));
   }
 
+  private targetShortcutPreferences():string[]{
+    switch(this.kind){
+      case "image": return ["webp","jpeg","png","pdf","avif"];
+      case "media": return ["mp4","webm-media","mp3","flac","wav","ogg"];
+      case "document": return ["pdf","docx","markdown","html-doc","txt","odt"];
+      case "spreadsheet": return ["xlsx","csv","pdf","ods","json-data"];
+      case "data": return ["parquet","csv","json-data","jsonl","arrow","sqlite"];
+      case "database": return ["sqlite","csv","json-data","jsonl"];
+      case "archive":
+      case "archive-build": return ["zip","7z","tar","tar-gzip"];
+      case "specialist": return ["png","jpeg","webp","docx","html-doc","ttf","vtt","stl","json-data"];
+      default: return [];
+    }
+  }
+
+  private syncTargetShortcuts(){
+    const selected=element<HTMLSelectElement>("target-format").value;
+    document.querySelectorAll<HTMLButtonElement>("#target-shortcuts .target-shortcut").forEach(button=>{
+      const active=button.dataset.target===selected;
+      button.classList.toggle("active",active);
+      button.setAttribute("aria-pressed",String(active));
+    });
+  }
+
+  private renderTargetShortcuts(targets:string[]){
+    const container=element("target-shortcuts");
+    container.replaceChildren();
+    if(this.kind==="pdf"||targets.length<2){
+      container.classList.add("hidden");
+      return;
+    }
+
+    const targetSet=new Set(targets);
+    const selected=element<HTMLSelectElement>("target-format").value;
+    const ordered=[...new Set([
+      ...this.targetShortcutPreferences(),
+      selected,
+      ...targets
+    ])].filter(id=>targetSet.has(id)).slice(0,6);
+
+    for(const id of ordered){
+      const format=this.formats.get(id);
+      if(!format) continue;
+      const button=document.createElement("button");
+      button.type="button";
+      button.className="target-shortcut";
+      button.dataset.target=id;
+      button.textContent=format.name;
+      button.setAttribute("aria-pressed","false");
+      button.addEventListener("click",()=>{
+        const select=element<HTMLSelectElement>("target-format");
+        select.value=id;
+        select.dispatchEvent(new Event("change",{bubbles:true}));
+      });
+      container.append(button);
+    }
+
+    container.classList.toggle("hidden",container.childElementCount<2);
+    this.syncTargetShortcuts();
+  }
+
   private populateTargets(){
     const select=element<HTMLSelectElement>("target-format");
     select.replaceChildren();
     if(this.kind==="pdf"){
+      this.renderTargetShortcuts([]);
       element<HTMLButtonElement>("convert-button").disabled=false;
       return;
     }
@@ -1183,6 +1336,7 @@ export class App {
     else if(this.kind==="database"&&targets.includes("sqlite")) select.value="sqlite";
     else if((this.kind==="archive"||this.kind==="archive-build")&&targets.includes("zip")) select.value="zip";
 
+    this.renderTargetShortcuts(targets);
     element<HTMLButtonElement>("convert-button").disabled=targets.length===0;
   }
 
@@ -1411,7 +1565,31 @@ export class App {
           : this.kind==="data"||this.kind==="database"
             ? "semantic"
             : undefined;
-      const routes=uniqueSources.map(source=>this.planner.plan(source,targetId,routePreference));
+      const routes=uniqueSources.map(source=>{
+        let planned=this.planner.plan(source,targetId,routePreference);
+        const sourceInspections=this.inspections.filter(item=>item.detection.format?.id===source);
+        const imageTraits=sourceInspections.length
+          ?{
+            metadata:sourceInspections.some(item=>Boolean(item.imageMetadata)),
+            animation:sourceInspections.some(item=>Boolean(item.imageAnimation)),
+            known:sourceInspections.every(item=>item.imageTraitsKnown===true)
+          }
+          :undefined;
+        if(
+          this.kind==="image"
+          &&requiresFeatureCompleteImageEngine(
+            source,
+            targetId,
+            this.readImageOptions() as unknown as Record<string,unknown>,
+            imageTraits
+          )
+          &&planned.edges.some(edge=>edge.engineId==="browser-image-proof")
+        ){
+          planned=this.planner.directAlternatives(source,targetId,routePreference)
+            .find(candidate=>candidate.edges[0]?.engineId==="vips-image")??planned;
+        }
+        return planned;
+      });
       const warnings=[...new Set(routes.flatMap(route=>route.warnings.map(w=>w.message)))];
 
       if(this.kind==="document"){
@@ -1687,6 +1865,7 @@ export class App {
     options:Record<string,unknown>,
     quality:number
   ){
+    const revision=this.selectionRevision;
     const button=element<HTMLButtonElement>("convert-button");
     const cancel=element<HTMLButtonElement>("cancel-button");
     const panel=element("job-panel");
@@ -1719,24 +1898,32 @@ export class App {
       const result=await this.batchRunner.start(
         this.files,
         pipeline,
-        snapshot=>this.renderBatchSnapshot(snapshot)
+        snapshot=>{
+          if(revision===this.selectionRevision) this.renderBatchSnapshot(snapshot);
+        }
       );
-      await this.renderBatchResults(result,pipeline.packageResults);
-      if(result.cancelled){
+      if(revision!==this.selectionRevision) return;
+      await this.renderBatchResults(result,pipeline.packageResults,revision);
+      if(result.cancelled&&revision===this.selectionRevision){
         this.renderWarnings("loss-warnings",[
           "Batch stopped. Completed outputs are retained in this session; choose Resume / retry remaining to continue."
         ]);
       }
     }catch(error){
-      this.renderWarnings("loss-warnings",[error instanceof Error?error.message:String(error)]);
+      if(revision===this.selectionRevision){
+        this.renderWarnings("loss-warnings",[error instanceof Error?error.message:String(error)]);
+      }
     }finally{
-      button.disabled=false;
-      cancel.classList.add("hidden");
-      this.updateBatchControls();
+      if(revision===this.selectionRevision){
+        button.disabled=false;
+        cancel.classList.add("hidden");
+        this.updateBatchControls();
+      }
     }
   }
 
   private async runArchiveOperation(){
+    const revision=this.selectionRevision;
     const operation=element<HTMLSelectElement>("archive-operation").value;
     const targetId=element<HTMLSelectElement>("target-format").value;
     const options=this.readArchiveOptions();
@@ -1766,11 +1953,15 @@ export class App {
           targetId,
           options,
           undefined,
-          (progress,stage)=>this.setProgress(progress,stage),
+          (progress,stage)=>{
+            if(revision===this.selectionRevision) this.setProgress(progress,stage);
+          },
           controller.signal
         );
+        if(revision!==this.selectionRevision) return;
         const password=targetId==="zip"?options.outputPassword:undefined;
         await this.archiveEngine.inspect(created.blob,targetId,password);
+        if(revision!==this.selectionRevision) return;
         const extension=this.formats.get(targetId)?.extensions[0]??targetId;
         this.showBlobResults([{
           name:"archive."+extension,
@@ -1779,7 +1970,7 @@ export class App {
             ? ["Output password applies only to ZIP and was ignored."]
             : []
         }],[]);
-        this.setProgress(1,"Archive complete");
+        if(revision===this.selectionRevision) this.setProgress(1,"Archive complete");
         return;
       }
 
@@ -1807,9 +1998,12 @@ export class App {
         sourceFormat,
         options.inputPassword,
         selected,
-        (progress,stage)=>this.setProgress(progress,stage),
+        (progress,stage)=>{
+          if(revision===this.selectionRevision) this.setProgress(progress,stage);
+        },
         controller.signal
       );
+      if(revision!==this.selectionRevision) return;
 
       const counts=new Map<string,number>();
       const outputs=extracted.map(item=>{
@@ -1821,17 +2015,22 @@ export class App {
       this.showBlobResults(outputs,[]);
       this.setProgress(1,"Extraction complete");
     }catch(error){
-      this.renderWarnings("loss-warnings",[
-        error instanceof Error?error.message:String(error)
-      ]);
+      if(revision===this.selectionRevision){
+        this.renderWarnings("loss-warnings",[
+          error instanceof Error?error.message:String(error)
+        ]);
+      }
     }finally{
-      this.archiveAbort=null;
-      cancel.classList.add("hidden");
-      button.disabled=false;
+      if(this.archiveAbort===controller) this.archiveAbort=null;
+      if(revision===this.selectionRevision){
+        cancel.classList.add("hidden");
+        button.disabled=false;
+      }
     }
   }
 
   private async createCombinedImagePdf(){
+    const revision=this.selectionRevision;
     const button=element<HTMLButtonElement>("convert-button");
     const cancel=element<HTMLButtonElement>("cancel-button");
     button.disabled=true;cancel.classList.remove("hidden");
@@ -1848,27 +2047,37 @@ export class App {
           normalized.push({blob:file,format:sourceId,name:file.name});
         }else{
           const result=await this.jobs.convert(file,"png",1,options as unknown as Record<string,unknown>,snapshot=>{
-            this.setProgress((i+snapshot.progress)/this.files.length,"Normalizing image "+(i+1)+"/"+this.files.length);
+            if(revision===this.selectionRevision){
+              this.setProgress((i+snapshot.progress)/this.files.length,"Normalizing image "+(i+1)+"/"+this.files.length);
+            }
           });
+          if(revision!==this.selectionRevision) return;
           normalized.push({blob:result.blob,format:"png",name:file.name});
           if(result.release) releases.push(result.release);
         }
       }
-      this.setProgress(.9,"Building PDF");
+      if(revision===this.selectionRevision) this.setProgress(.9,"Building PDF");
       const blob=await this.pdfEngine.imagesToPdf(normalized,"auto",0);
+      if(revision!==this.selectionRevision) return;
       await this.pdfEngine.inspect(blob);
+      if(revision!==this.selectionRevision) return;
       this.showBlobResults([{name:"images-combined.pdf",blob,warnings:[]}],[]);
       this.setProgress(1,"Complete");
     }catch(error){
-      this.renderWarnings("loss-warnings",[error instanceof Error?error.message:String(error)]);
+      if(revision===this.selectionRevision){
+        this.renderWarnings("loss-warnings",[error instanceof Error?error.message:String(error)]);
+      }
     }finally{
       for(const release of releases){try{await release();}catch{}}
-      cancel.classList.add("hidden");
-      button.disabled=false;
+      if(revision===this.selectionRevision){
+        cancel.classList.add("hidden");
+        button.disabled=false;
+      }
     }
   }
 
   private async runPdfOperation(){
+    const revision=this.selectionRevision;
     const operation=element<HTMLSelectElement>("pdf-operation").value;
     const button=element<HTMLButtonElement>("convert-button");
     const cancel=element<HTMLButtonElement>("cancel-button");
@@ -2014,13 +2223,18 @@ export class App {
         }
       }
 
+      if(revision!==this.selectionRevision) return;
       this.setProgress(1,"Complete");
       this.showBlobResults(outputs,[]);
     }catch(error){
-      this.renderWarnings("loss-warnings",[error instanceof Error?error.message:String(error)]);
+      if(revision===this.selectionRevision){
+        this.renderWarnings("loss-warnings",[error instanceof Error?error.message:String(error)]);
+      }
     }finally{
-      cancel.classList.add("hidden");
-      button.disabled=false;
+      if(revision===this.selectionRevision){
+        cancel.classList.add("hidden");
+        button.disabled=false;
+      }
     }
   }
 
@@ -2059,6 +2273,7 @@ export class App {
     failed:Array<{name:string;error:string}>,
     autoPackage=true
   ){
+    const generation=++this.resultGeneration;
     const container=element("results");container.replaceChildren();container.classList.remove("hidden");
     for(const output of outputs) this.addResult(container,output.name,output.blob,output.warnings,output.release);
 
@@ -2071,8 +2286,13 @@ export class App {
       void (async()=>{
         try{
           const entries=Object.create(null) as Record<string,Uint8Array>;
-          for(const output of outputs) entries[output.name]=new Uint8Array(await output.blob.arrayBuffer());
+          for(const output of outputs){
+            if(generation!==this.resultGeneration) return;
+            entries[output.name]=new Uint8Array(await output.blob.arrayBuffer());
+          }
+          if(generation!==this.resultGeneration) return;
           const zipped=zipSync(entries,{level:0});
+          if(generation!==this.resultGeneration) return;
           this.addResult(
             container,
             "converted-files.zip",
@@ -2080,6 +2300,7 @@ export class App {
             ["Local convenience package."]
           );
         }catch(error){
+          if(generation!==this.resultGeneration) return;
           const node=document.createElement("div");node.className="warning";
           node.textContent="ZIP package: "+friendlyIssueText(error);
           container.append(node);
@@ -2104,12 +2325,20 @@ export class App {
     item.append(meta,link);container.append(item);
   }
 
-  private async releaseResults(){
+  private invalidateResultLeases():ResultLease[]{
+    this.resultGeneration++;
     const leases=this.leases.splice(0);
     for(const lease of leases){
-      URL.revokeObjectURL(lease.url);
-      try{await lease.release?.();}catch{}
+      try{URL.revokeObjectURL(lease.url);}catch{}
     }
+    return leases;
+  }
+
+  private async releaseResults(){
+    const leases=this.invalidateResultLeases();
+    await Promise.allSettled(leases.map(async lease=>{
+      try{await lease.release?.();}catch{}
+    }));
   }
 
   private async renderCapabilities(profile:CapabilityProfile){

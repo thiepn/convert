@@ -22,7 +22,7 @@ export class VipsImageEngine implements ConversionEngine {
   private available = false;
   private assetBase = "";
   private worker: Worker | null = null;
-  private jobs = 0;
+  private uses = 0;
   private pending = new Map<string, {
     resolve:(value:any)=>void;
     reject:(error:Error)=>void;
@@ -91,11 +91,6 @@ export class VipsImageEngine implements ConversionEngine {
         options,
         assetBase:this.assetBase
       } as ImageWorkerRequest, request.onProgress);
-      this.jobs += 1;
-      if (this.jobs >= 10) {
-        this.resetWorker();
-        this.jobs = 0;
-      }
       return result as EngineConvertResult;
     } finally {
       request.signal.removeEventListener("abort", abort);
@@ -130,6 +125,10 @@ export class VipsImageEngine implements ConversionEngine {
       } else {
         pending.resolve(undefined);
       }
+      this.uses++;
+      if(this.uses>=10&&this.pending.size===0&&this.worker===worker){
+        this.resetWorker();
+      }
     };
     worker.onerror = event => {
       const error = new Error(event.message || "Image worker crashed.");
@@ -144,13 +143,19 @@ export class VipsImageEngine implements ConversionEngine {
   private request(request:ImageWorkerRequest,onProgress?:(progress:number,stage:string)=>void):Promise<unknown> {
     return new Promise((resolve,reject) => {
       this.pending.set(request.requestId,{resolve,reject,onProgress});
-      this.getWorker().postMessage(request);
+      try{
+        this.getWorker().postMessage(request);
+      }catch(error){
+        this.pending.delete(request.requestId);
+        reject(error instanceof Error?error:new Error(String(error)));
+      }
     });
   }
 
   private resetWorker() {
     this.worker?.terminate();
     this.worker = null;
+    this.uses = 0;
     const error = new DOMException("Image worker was terminated.","AbortError");
     for (const pending of this.pending.values()) pending.reject(error);
     this.pending.clear();

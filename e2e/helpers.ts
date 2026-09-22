@@ -257,3 +257,169 @@ export function dngWithPreview(jpeg:Buffer):Fixture {
     buffer:Buffer.concat([tiff,addLargeJpegComment(jpeg)])
   };
 }
+
+
+export function utf16leBuffer(text:string):Buffer {
+  return Buffer.concat([Buffer.from([0xff,0xfe]),Buffer.from(text,"utf16le")]);
+}
+
+export function adversarialCsvFixture(utf16=false):Fixture {
+  const text=[
+    "name;note;amount",
+    "\"Alpha, Inc\";\"line one",
+    "line two\";12.5",
+    "\"München\";\"quoted \"\"value\"\"\";7"
+  ].join("\r\n")+"\r\n";
+  const buffer=utf16
+    ?utf16leBuffer(text)
+    :Buffer.concat([Buffer.from([0xef,0xbb,0xbf]),Buffer.from(text,"utf8")]);
+  return {
+    name:utf16?"edge-utf16.csv":"edge-semicolon.csv",
+    mimeType:"text/csv",
+    buffer
+  };
+}
+
+export function utf16SrtFixture():Fixture {
+  return {
+    name:"unicode-windows.srt",
+    mimeType:"application/x-subrip",
+    buffer:utf16leBuffer(
+      "1\r\n00:00:01,000 --> 00:00:03,000\r\nGrüße aus Köln — 안녕하세요\r\n\r\n"
+      +"2\r\n00:00:04,000 --> 00:00:05,500\r\nSecond line\r\n"
+    )
+  };
+}
+
+export function bomJsonFixture():Fixture {
+  const payload=JSON.stringify([
+    {name:"München",note:"comma, quote \" and newline\nkept",nested:{active:true}},
+    {name:"서울",note:"한글 데이터",nested:{active:false}}
+  ]);
+  return {
+    name:"unicode-bom.json",
+    mimeType:"application/json",
+    buffer:Buffer.concat([Buffer.from([0xef,0xbb,0xbf]),Buffer.from(payload,"utf8")])
+  };
+}
+
+export function complexXlsxFixture():Fixture {
+  const workbook=XLSX.utils.book_new();
+  const main=XLSX.utils.aoa_to_sheet([
+    ["Name","Amount","Computed","Note"],
+    ["München",3,null,"comma, newline\nand \"quotes\""],
+    ["서울",7,null,"한글"],
+    ["Merged title",null,null,null]
+  ]);
+  (main as any)["C2"]={t:"n",v:6,f:"B2*2"};
+  (main as any)["C3"]={t:"n",v:14,f:"B3*2"};
+  main["!merges"]=[XLSX.utils.decode_range("A4:B4")];
+  XLSX.utils.book_append_sheet(workbook,main,"Data ✓");
+
+  const hidden=XLSX.utils.aoa_to_sheet([
+    ["secret","value"],
+    ["hidden-row",42]
+  ]);
+  XLSX.utils.book_append_sheet(workbook,hidden,"Hidden");
+  workbook.Workbook={Sheets:[{Hidden:0},{Hidden:1}]} as any;
+  workbook.Props={
+    Title:"Adversarial workbook",
+    Author:"Compatibility Matrix",
+    Company:"Local Test"
+  };
+
+  const bytes=XLSX.write(workbook,{type:"buffer",bookType:"xlsx",compression:true});
+  return {
+    name:"workbook-unicode.xlsx",
+    mimeType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    buffer:Buffer.from(bytes)
+  };
+}
+
+export function unicodeZipFixture():Fixture {
+  const bytes=zipSync({
+    "资料/α.txt":strToU8("alpha unicode\n"),
+    "Case.txt":strToU8("upper\n"),
+    "case.txt":strToU8("lower\n"),
+    "nested/deep/한글.txt":strToU8("korean path\n")
+  },{level:6});
+  return {name:"unicode-paths.zip",mimeType:"application/zip",buffer:Buffer.from(bytes)};
+}
+
+export async function pdfWithTrailingJunkFixture():Promise<Fixture>{
+  const base=await pdfFixture();
+  const junk=Buffer.from("\n% trailing transport bytes that appear after a valid PDF EOF\n".repeat(8),"utf8");
+  return {
+    name:"trailing-junk.pdf",
+    mimeType:"application/pdf",
+    buffer:Buffer.concat([base.buffer,junk])
+  };
+}
+
+export function messyHtmlFixture():Fixture {
+  return {
+    name:"messy-unicode.html",
+    mimeType:"text/html",
+    buffer:Buffer.from(
+      "<!doctype html><meta charset=utf-8><title>Edge</title>"
+      +"<h1>München &amp; 서울</h1><p>Paragraph <strong>without closed parent tags"
+      +"<ul><li>one<li>two</ul><table><tr><th>A<th>B<tr><td>1<td>2</table>",
+      "utf8"
+    )
+  };
+}
+
+
+export function flattenCollisionZipFixture():Fixture {
+  const bytes=zipSync({
+    "folder-a/readme.txt":strToU8("first\n"),
+    "folder-b/readme.txt":strToU8("second\n"),
+    "folder-c/README.txt":strToU8("case distinct\n")
+  },{level:6});
+  return {name:"flatten-collisions.zip",mimeType:"application/zip",buffer:Buffer.from(bytes)};
+}
+
+export function wavWithJunkFixture():Fixture {
+  const sampleRate=16_000;
+  const channels=2;
+  const seconds=.12;
+  const samples=Math.floor(sampleRate*seconds);
+  const blockAlign=channels*2;
+  const dataBytes=samples*blockAlign;
+  const junkSize=18;
+  const fmtSize=16;
+  const riffPayload=
+    4
+    +(8+junkSize+(junkSize%2))
+    +(8+fmtSize)
+    +(8+dataBytes);
+  const buffer=Buffer.alloc(8+riffPayload);
+  let offset=0;
+  buffer.write("RIFF",offset,"ascii");offset+=4;
+  buffer.writeUInt32LE(riffPayload,offset);offset+=4;
+  buffer.write("WAVE",offset,"ascii");offset+=4;
+
+  buffer.write("JUNK",offset,"ascii");offset+=4;
+  buffer.writeUInt32LE(junkSize,offset);offset+=4;
+  buffer.fill(0x4a,offset,offset+junkSize);offset+=junkSize;
+  if(junkSize%2) offset++;
+
+  buffer.write("fmt ",offset,"ascii");offset+=4;
+  buffer.writeUInt32LE(fmtSize,offset);offset+=4;
+  buffer.writeUInt16LE(1,offset);offset+=2;
+  buffer.writeUInt16LE(channels,offset);offset+=2;
+  buffer.writeUInt32LE(sampleRate,offset);offset+=4;
+  buffer.writeUInt32LE(sampleRate*blockAlign,offset);offset+=4;
+  buffer.writeUInt16LE(blockAlign,offset);offset+=2;
+  buffer.writeUInt16LE(16,offset);offset+=2;
+
+  buffer.write("data",offset,"ascii");offset+=4;
+  buffer.writeUInt32LE(dataBytes,offset);offset+=4;
+  for(let i=0;i<samples;i++){
+    const left=Math.round(Math.sin(2*Math.PI*440*i/sampleRate)*10_000);
+    const right=Math.round(Math.sin(2*Math.PI*660*i/sampleRate)*8_000);
+    buffer.writeInt16LE(left,offset);offset+=2;
+    buffer.writeInt16LE(right,offset);offset+=2;
+  }
+  return {name:"stereo-junk.wav",mimeType:"audio/wav",buffer};
+}

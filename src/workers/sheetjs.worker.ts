@@ -1,6 +1,8 @@
 import * as XLSX from "xlsx";
 import type { DetailedSpreadsheetInspection, SpreadsheetConversionOptions, SpreadsheetSheetInfo } from "../core/data/types";
 import type { SheetJsWorkerRequest, SheetJsWorkerResponse } from "../engines/data/sheetjs-protocol";
+import { readTextBlob } from "../core/text/decodeText";
+import { detectDelimitedTextSeparator } from "../core/data/delimiter";
 
 const scope=globalThis as unknown as {
   postMessage(message:SheetJsWorkerResponse):void;
@@ -50,15 +52,21 @@ async function readWorkbook(
   formatId:string,
   options:Partial<SpreadsheetConversionOptions>={}
 ):Promise<XLSX.WorkBook>{
-  if(formatId==="json-data"||formatId==="jsonl") return workbookFromJson(await source.text(),formatId==="jsonl");
+  if(formatId==="json-data"||formatId==="jsonl"){
+    const {text}=await readTextBlob(source);
+    return workbookFromJson(text,formatId==="jsonl");
+  }
   if(formatId==="csv"||formatId==="tsv"){
-    const selectedDelimiter=options.delimiter&&options.delimiter!=="auto"?options.delimiter:",";
-    return XLSX.read(await source.text(),{
+    const {text}=await readTextBlob(source);
+    const readOptions:any={
       type:"string",
-      FS:formatId==="tsv"?"\t":selectedDelimiter,
       cellDates:true,
       cellFormula:true
-    } as any);
+    };
+    if(formatId==="tsv") readOptions.FS="\t";
+    else if(options.delimiter&&options.delimiter!=="auto") readOptions.FS=options.delimiter;
+    else readOptions.FS=detectDelimitedTextSeparator(text);
+    return XLSX.read(text,readOptions);
   }
   return XLSX.read(await source.arrayBuffer(),{
     type:"array",
