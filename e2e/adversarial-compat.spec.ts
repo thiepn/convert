@@ -53,6 +53,7 @@ test("image options are actually honored instead of falling through the fast pro
   await page.locator("#start-over-button").click();
   await selectFixture(page,pngFixture());
   await page.locator("#metadata-policy").selectOption("strip");
+  await page.locator("#max-dimension").selectOption("");
   await page.locator("#target-format").selectOption("webp");
   await expect(page.locator("#route-box")).toContainText(/browser fallback/i);
   await page.locator("#convert-button").click();
