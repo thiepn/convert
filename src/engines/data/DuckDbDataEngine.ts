@@ -11,6 +11,7 @@ import { validateLocalSelectQuery } from "../../core/data/querySecurity";
 import { jsonTextToCsv } from "../../core/data/jsonBridge";
 import { assertMemoryBackedSource } from "../../core/performance/Budget";
 import { getDeviceProfile } from "../../core/performance/DeviceProfile";
+import { detectTextEncoding,readTextBlob } from "../../core/text/decodeText";
 
 const INPUTS=new Set(["csv","tsv","json-data","jsonl","parquet","arrow"]);
 const OUTPUTS=new Set(["csv","tsv","json-data","jsonl","parquet","arrow"]);
@@ -247,10 +248,20 @@ export class DuckDbDataEngine implements ConversionEngine{
         let sourceFormat=formatId;
         let sourceOptions=options;
         if(formatId==="json-data"||formatId==="jsonl"){
-          const csv=jsonTextToCsv(await source.text(),formatId==="jsonl");
+          const {text}=await readTextBlob(source);
+          const csv=jsonTextToCsv(text,formatId==="jsonl");
           file=new File([csv],fileName+".csv",{type:"text/csv"});
           sourceFormat="csv";
           sourceOptions={...options,delimiter:",",header:true};
+        }else if(formatId==="csv"||formatId==="tsv"){
+          const encoding=await detectTextEncoding(source);
+          if(encoding==="utf-8"){
+            file=source instanceof File?source:new File([source],fileName,{type:source.type});
+          }else{
+            assertMemoryBackedSource(source.size,"UTF-16 structured-text decoding",2,256*1024*1024);
+            const decoded=await readTextBlob(source);
+            file=new File([decoded.text],fileName,{type:source.type||"text/plain"});
+          }
         }else{
           file=source instanceof File?source:new File([source],fileName,{type:source.type});
         }
