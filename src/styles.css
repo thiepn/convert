@@ -150,7 +150,11 @@ button,.download-link,label[for],select{touch-action:manipulation}
 @media(max-width:760px){
   .shell{
     width:100%;
-    padding:18px 10px calc(96px + env(safe-area-inset-bottom));
+    padding:
+      calc(18px + env(safe-area-inset-top))
+      calc(10px + env(safe-area-inset-right))
+      calc(96px + env(safe-area-inset-bottom))
+      calc(10px + env(safe-area-inset-left));
   }
   .hero{margin:0 5px 14px;gap:10px}
   .hero h1{font-size:clamp(1.75rem,9vw,2.45rem);margin:6px 0 9px;letter-spacing:-.04em}
@@ -367,4 +371,28 @@ button:disabled{cursor:not-allowed}
   .shortcut-hint{display:none}
   .diagnostics-summary{padding:14px}
   .diagnostics-body{padding:0 14px 14px}
+}
+
+
+@media(max-width:920px) and (orientation:landscape) and (max-height:520px){
+  .shell{
+    padding-top:calc(8px + env(safe-area-inset-top));
+    padding-bottom:calc(64px + env(safe-area-inset-bottom));
+  }
+  .hero{margin-bottom:8px}
+  .hero h1{font-size:clamp(1.45rem,5vw,2rem);margin:3px 0 6px}
+  .hero p{font-size:.78rem;line-height:1.35}
+  .privacy-badge{margin-top:6px}
+  .panel{margin:6px 0;padding:10px}
+  .drop-zone{min-height:92px}
+  .action-row{
+    bottom:max(3px,env(safe-area-inset-bottom));
+    padding:5px;
+    margin-top:8px;
+  }
+  .action-row .primary-button,.action-row .secondary-button{
+    min-height:44px;
+  }
+  .archive-entry-list,.batch-task-list{max-height:min(220px,40dvh)}
+  .data-preview-scroll{max-height:min(190px,34dvh)}
 }
