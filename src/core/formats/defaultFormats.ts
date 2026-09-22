@@ -334,7 +334,7 @@ const isJsonLines=(bytes:Uint8Array)=>{
 };
 const isJsonDocument=(bytes:Uint8Array)=>{
   try{
-    const text=new TextDecoder().decode(bytes.slice(0,Math.min(bytes.length,8192))).replace(/^\uFEFF/,"").trimStart();
+    const text=decodeProbeText(bytes,8192).trimStart();
     if(!(text.startsWith("{")||text.startsWith("["))) return false;
     JSON.parse(text.length<bytes.length?"null":text);
     return true;
