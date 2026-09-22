@@ -311,8 +311,8 @@ export function complexXlsxFixture():Fixture {
     ["서울",7,null,"한글"],
     ["Merged title",null,null,null]
   ]);
-  (main["C2"] as any)={t:"n",v:6,f:"B2*2"};
-  (main["C3"] as any)={t:"n",v:14,f:"B3*2"};
+  (main as any)["C2"]={t:"n",v:6,f:"B2*2"};
+  (main as any)["C3"]={t:"n",v:14,f:"B3*2"};
   main["!merges"]=[XLSX.utils.decode_range("A4:B4")];
   XLSX.utils.book_append_sheet(workbook,main,"Data ✓");
 
