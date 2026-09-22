@@ -52,7 +52,7 @@ test("touch file flow and primary controls meet mobile target floor",async({page
 
   await convert.tap();
   await expect(page.locator("#results .result-item")).toHaveCount(1,{timeout:60_000});
-  expect(await resultText(page,"mobile-offline-converted")).toContain("WEBVTT");
+  expect(await resultText(page,"mobile-touch-converted")).toContain("WEBVTT");
 
   const save=page.locator("#results .download-link").first();
   const saveBox=await save.boundingBox();
@@ -139,7 +139,7 @@ test("mobile cached shell remains available offline and local conversion still w
     await page.locator("#target-format").selectOption("vtt");
     await page.locator("#convert-button").tap();
     await expect(page.locator("#results .result-item")).toHaveCount(1,{timeout:60_000});
-    expect(await resultText(page,"mobile-touch-converted")).toContain("WEBVTT");
+    expect(await resultText(page,"mobile-offline-converted")).toContain("WEBVTT");
   }finally{
     await context.setOffline(false);
   }
