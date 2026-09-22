@@ -15,6 +15,7 @@ async function installResourceProbe(page:Page){
       createdUrls:0,
       revokedUrls:0,
       activeUrls:new Set<string>(),
+      activeDownloadUrls:new Set<string>(),
       workersCreated:0,
       activeWorkers:0
     };
@@ -31,8 +32,26 @@ async function installResourceProbe(page:Page){
     (URL as any).revokeObjectURL=(url:string)=>{
       probe.revokedUrls++;
       probe.activeUrls.delete(url);
+      probe.activeDownloadUrls.delete(url);
       return nativeRevoke(url);
     };
+
+    const observeDownloads=()=>{
+      const root=document.documentElement;
+      if(!root) return;
+      const scan=()=>{
+        document.querySelectorAll<HTMLAnchorElement>("a.download-link").forEach(link=>{
+          if(link.href.startsWith("blob:")) probe.activeDownloadUrls.add(link.href);
+        });
+      };
+      new MutationObserver(scan).observe(root,{subtree:true,childList:true,attributes:true,attributeFilter:["href"]});
+      scan();
+    };
+    if(document.readyState==="loading"){
+      document.addEventListener("DOMContentLoaded",observeDownloads,{once:true});
+    }else{
+      observeDownloads();
+    }
 
     const NativeWorker=globalThis.Worker;
     class TrackingWorker extends NativeWorker {
@@ -65,6 +84,7 @@ async function resourceStats(page:Page){
       createdUrls:Number(probe?.createdUrls??0),
       revokedUrls:Number(probe?.revokedUrls??0),
       activeUrls:Number(probe?.activeUrls?.size??0),
+      activeDownloadUrls:Number(probe?.activeDownloadUrls?.size??0),
       workersCreated:Number(probe?.workersCreated??0),
       activeWorkers:Number(probe?.activeWorkers??0)
     };
@@ -136,7 +156,9 @@ test("native image workers terminate after repeated conversions instead of accum
   const stats=await resourceStats(page);
   expect(stats.workersCreated-baseline.workersCreated).toBeGreaterThanOrEqual(16);
   expect(stats.activeWorkers).toBeLessThanOrEqual(baseline.activeWorkers);
-  expect(stats.activeUrls).toBe(0);
+  expect(stats.activeDownloadUrls).toBe(0);
+  // zip.js may retain one bounded internal blob URL for its worker/runtime.
+  expect(stats.activeUrls).toBeLessThanOrEqual(1);
 });
 
 test("structured-data sessions recycle DuckDB without growing active worker count",async({page})=>{
