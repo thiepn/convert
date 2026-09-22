@@ -267,6 +267,7 @@ export class App {
     element<HTMLButtonElement>("cancel-button").addEventListener("click",()=>{
       this.batchRunner.cancel();
       this.jobs.cancelAll();
+      this.mediaEngine.cancelActive();
       this.pdfEngine.cancelActive();
       this.archiveAbort?.abort();
     });
