@@ -157,8 +157,7 @@ test("native image workers terminate after repeated conversions instead of accum
   expect(stats.workersCreated-baseline.workersCreated).toBeGreaterThanOrEqual(16);
   expect(stats.activeWorkers).toBeLessThanOrEqual(baseline.activeWorkers);
   expect(stats.activeDownloadUrls).toBe(0);
-  // zip.js may retain one bounded internal blob URL for its worker/runtime.
-  expect(stats.activeUrls).toBeLessThanOrEqual(1);
+  expect(stats.activeUrls).toBe(0);
 });
 
 test("structured-data sessions recycle DuckDB without growing active worker count",async({page})=>{
@@ -215,5 +214,7 @@ test("clearing results during asynchronous convenience packaging cannot resurrec
     .toBe(0);
 
   const stats=await resourceStats(page);
-  expect(stats.activeUrls).toBe(0);
+  expect(stats.activeDownloadUrls).toBe(0);
+  // zip.js may retain one bounded internal blob URL for its worker/runtime.
+  expect(stats.activeUrls).toBeLessThanOrEqual(1);
 });
