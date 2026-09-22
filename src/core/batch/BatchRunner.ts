@@ -102,6 +102,9 @@ export class BatchRunner {
     onUpdate?:(snapshot:BatchSnapshot)=>void,
     retryFailed=true
   ):Promise<BatchRunResult>{
+    if(this.activeExecution){
+      throw new Error("BATCH_ALREADY_RUNNING: A batch execution is already active.");
+    }
     const session=this.session;
     if(!session) throw new Error("BATCH_NOT_RESUMABLE: No batch session exists.");
 
@@ -136,9 +139,11 @@ export class BatchRunner {
     const session=this.session;
     this.session=null;
     if(!session) return;
-    for(const output of session.outputs.values()){
-      try{await output.release?.();}catch{}
-    }
+    await Promise.allSettled(
+      [...session.outputs.values()].map(async output=>{
+        try{await output.release?.();}catch{}
+      })
+    );
   }
 
   private async prepareTasks(session:Session,onUpdate?:(snapshot:BatchSnapshot)=>void){
