@@ -65,11 +65,11 @@ function uniqueArchivePaths<T extends {path:string}>(items:T[]):T[]{
     const ext=dot>0?file.slice(dot):"";
     let candidate=path;
     let index=2;
-    while(used.has(candidate.toLocaleLowerCase("en-US"))){
+    while(used.has(candidate)){
       candidate=[...parts,stem+" ("+index+")"+ext].filter(Boolean).join("/");
       index++;
     }
-    used.add(candidate.toLocaleLowerCase("en-US"));
+    used.add(candidate);
     return {...item,path:candidate};
   });
 }
