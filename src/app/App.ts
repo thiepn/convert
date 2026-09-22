@@ -553,6 +553,10 @@ export class App {
     this.updateDataOptionVisibility();
     this.updateBatchControls();
     await this.renderRoute();
+    if(selectionRevision===this.selectionRevision){
+      performance.clearMarks("convert:selection-ready");
+      performance.mark("convert:selection-ready");
+    }
   }
 
   private async refreshPdfInspection(){
