@@ -140,7 +140,7 @@ describe("direct conversion recovery",()=>{
 
     await expect(jobs.convert(sourcePng(),"jpeg",.82,{
       metadataPolicy:"strip",
-      maxDimension:128,
+      targetBytes:50_000,
       background:"#ffffff",
       lossless:false,
       preserveAnimation:true
