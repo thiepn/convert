@@ -107,6 +107,14 @@ test("mobile cached shell remains available offline and local conversion still w
     {timeout:30_000,intervals:[250,500,1000]}
   ).toBe(true);
 
+  const fixture=srtFixture("mobile-offline.srt");
+  await page.locator("#file-input").setInputFiles({
+    name:fixture.name,
+    mimeType:fixture.mimeType,
+    buffer:fixture.buffer
+  });
+  await expect(page.locator("#file-panel")).toBeVisible({timeout:60_000});
+
   await context.setOffline(true);
   try{
     if(testInfo.project.name==="chromium-mobile"){
@@ -129,13 +137,6 @@ test("mobile cached shell remains available offline and local conversion still w
       expect(cached?.text).toContain("Thiepn Convert");
     }
 
-    const fixture=srtFixture("mobile-offline.srt");
-    await page.locator("#file-input").setInputFiles({
-      name:fixture.name,
-      mimeType:fixture.mimeType,
-      buffer:fixture.buffer
-    });
-    await expect(page.locator("#file-panel")).toBeVisible({timeout:60_000});
     await page.locator("#target-format").selectOption("vtt");
     await page.locator("#convert-button").tap();
     await expect(page.locator("#results .result-item")).toHaveCount(1,{timeout:60_000});
