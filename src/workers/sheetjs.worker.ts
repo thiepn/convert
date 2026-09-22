@@ -2,6 +2,7 @@ import * as XLSX from "xlsx";
 import type { DetailedSpreadsheetInspection, SpreadsheetConversionOptions, SpreadsheetSheetInfo } from "../core/data/types";
 import type { SheetJsWorkerRequest, SheetJsWorkerResponse } from "../engines/data/sheetjs-protocol";
 import { readTextBlob } from "../core/text/decodeText";
+import { detectDelimitedTextSeparator } from "../core/data/delimiter";
 
 const scope=globalThis as unknown as {
   postMessage(message:SheetJsWorkerResponse):void;
@@ -64,6 +65,7 @@ async function readWorkbook(
     };
     if(formatId==="tsv") readOptions.FS="\t";
     else if(options.delimiter&&options.delimiter!=="auto") readOptions.FS=options.delimiter;
+    else readOptions.FS=detectDelimitedTextSeparator(text);
     return XLSX.read(text,readOptions);
   }
   return XLSX.read(await source.arrayBuffer(),{
