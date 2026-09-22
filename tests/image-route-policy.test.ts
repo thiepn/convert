@@ -8,6 +8,15 @@ describe("image route option policy",()=>{
     })).toBe(true);
   });
 
+  it("does not invoke the heavy engine when preserve has nothing to preserve",()=>{
+    expect(requiresFeatureCompleteImageEngine("png","jpeg",{
+      metadataPolicy:"preserve",background:"#ffffff",lossless:false,preserveAnimation:true
+    },{metadata:false,animation:false,known:true})).toBe(false);
+    expect(requiresFeatureCompleteImageEngine("png","jpeg",{
+      metadataPolicy:"preserve",background:"#ffffff",lossless:false,preserveAnimation:true
+    },{metadata:true,animation:false,known:true})).toBe(true);
+  });
+
   it("keeps unsupported target-size, lossless WebP, and animation semantics on the full engine",()=>{
     expect(requiresFeatureCompleteImageEngine("jpeg","webp",{metadataPolicy:"strip",targetBytes:50_000})).toBe(true);
     expect(requiresFeatureCompleteImageEngine("jpeg","webp",{metadataPolicy:"strip",lossless:true})).toBe(true);
