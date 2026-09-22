@@ -78,6 +78,10 @@ export class BrowserImageEngine implements ConversionEngine {
     }
     assertMemoryBackedSource(request.source.size,"browser canvas image conversion",2,256*1024*1024);
 
+    const options=request.options??{};
+    const maxDimension=Number(options.maxDimension)>0?Number(options.maxDimension):undefined;
+    const background=typeof options.background==="string"?options.background:"#ffffff";
+
     const worker = new Worker(new URL("../../workers/engine.worker.ts", import.meta.url), { type: "module" });
     this.workers.add(worker);
 
@@ -129,7 +133,9 @@ export class BrowserImageEngine implements ConversionEngine {
         jobId: request.jobId,
         source: request.source,
         targetMime: request.targetMime,
-        quality: request.quality ?? 0.82
+        quality: request.quality ?? 0.82,
+        maxDimension,
+        background
       });
     });
   }
