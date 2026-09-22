@@ -7,6 +7,7 @@ import { detectCapabilities } from "../core/capabilities/detectCapabilities";
 import { EngineRegistry } from "../core/engines/EngineRegistry";
 import { createDefaultFormatRegistry } from "../core/formats/defaultFormats";
 import type { DetailedImageInspection, ImageConversionOptions } from "../core/image/types";
+import { requiresFeatureCompleteImageEngine } from "../core/image/routePolicy";
 import type { DetailedDocumentInspection, DocumentConversionOptions } from "../core/document/types";
 import type { ArchiveConversionOptions, DetailedArchiveInspection } from "../core/archive/types";
 import { validateLocalSelectQuery } from "../core/data/querySecurity";
@@ -1509,7 +1510,20 @@ export class App {
           : this.kind==="data"||this.kind==="database"
             ? "semantic"
             : undefined;
-      const routes=uniqueSources.map(source=>this.planner.plan(source,targetId,routePreference));
+      const routes=uniqueSources.map(source=>{
+        let planned=this.planner.plan(source,targetId,routePreference);
+        if(
+          this.kind==="image"
+          &&requiresFeatureCompleteImageEngine(
+            source,targetId,this.readImageOptions() as unknown as Record<string,unknown>
+          )
+          &&planned.edges.some(edge=>edge.engineId==="browser-image-proof")
+        ){
+          planned=this.planner.directAlternatives(source,targetId,routePreference)
+            .find(candidate=>candidate.edges[0]?.engineId==="vips-image")??planned;
+        }
+        return planned;
+      });
       const warnings=[...new Set(routes.flatMap(route=>route.warnings.map(w=>w.message)))];
 
       if(this.kind==="document"){
