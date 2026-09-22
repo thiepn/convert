@@ -12,16 +12,16 @@
     "distTotalBytes": 524288000
   },
   "runtime": {
-    "runtimeReadyMs": 8000,
-    "duckDbColdInspectionMs": 12000,
-    "duckDbWarmInspectionMs": 5000,
+    "runtimeReadyMs": 2000,
+    "duckDbColdInspectionMs": 5000,
+    "duckDbWarmInspectionMs": 1500,
     "duckDbWarmVsColdFactor": 1.75,
-    "pdfColdInspectionMs": 8000,
-    "pdfWarmInspectionMs": 4000,
+    "pdfColdInspectionMs": 3000,
+    "pdfWarmInspectionMs": 1000,
     "pdfWarmVsColdFactor": 1.75,
-    "subtitleBatch24Ms": 12000,
-    "heartbeatMaxGapMs": 750,
-    "rendererHeapPeakGrowthBytes": 100663296,
-    "rendererHeapRetainedGrowthBytes": 33554432
+    "subtitleBatch24Ms": 5000,
+    "heartbeatMaxGapMs": 250,
+    "rendererHeapPeakGrowthBytes": 50331648,
+    "rendererHeapRetainedGrowthBytes": 16777216
   }
 }
