@@ -75,9 +75,7 @@ export class MediaEngine implements ConversionEngine {
     const requestId=crypto.randomUUID();
     const options={...defaults(),...(request.options??{})} as MediaConversionOptions;
 
-    const abort=()=>{
-      this.getWorker().postMessage({type:"cancel",requestId:crypto.randomUUID(),jobId:request.jobId} satisfies MediaWorkerRequest);
-    };
+    const abort=()=>this.resetWorker();
     request.signal.addEventListener("abort",abort,{once:true});
     try {
       return await this.request({
@@ -94,6 +92,7 @@ export class MediaEngine implements ConversionEngine {
     }
   }
 
+  cancelActive():void { this.resetWorker(); }
   dispose():void { this.resetWorker(); }
 
   private getWorker():Worker {
