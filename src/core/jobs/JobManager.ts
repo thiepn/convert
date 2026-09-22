@@ -63,6 +63,13 @@ export class JobManager {
       const sourceFormat=inspection.detection.format;
       if(!sourceFormat) throw new Error("FORMAT_UNKNOWN: File format could not be identified.");
       if(sourceFormat.category==="image") assertSafeImageDimensions(inspection.width,inspection.height);
+      const sourceImageTraits=inspection.imageTraitsKnown==null
+        ?undefined
+        :{
+          metadata:Boolean(inspection.imageMetadata),
+          animation:Boolean(inspection.imageAnimation),
+          known:Boolean(inspection.imageTraitsKnown)
+        };
 
       this.emit(onUpdate,id,"PLANNING",0.08,"Planning safest local route");
       const routePreference=options.routePreference==="semantic"||options.routePreference==="fidelity"
@@ -71,7 +78,7 @@ export class JobManager {
       let route=this.planner.plan(sourceFormat.id,targetFormatId,routePreference);
       if(
         sourceFormat.category==="image"
-        &&requiresFeatureCompleteImageEngine(sourceFormat.id,targetFormatId,options)
+        &&requiresFeatureCompleteImageEngine(sourceFormat.id,targetFormatId,options,sourceImageTraits)
         &&route.edges.some(edge=>edge.engineId==="browser-image-proof")
       ){
         const featureComplete=this.planner.directAlternatives(
@@ -181,7 +188,7 @@ export class JobManager {
           if(
             sourceFormat.category==="image"
             &&edge.engineId==="browser-image-proof"
-            &&requiresFeatureCompleteImageEngine(sourceFormat.id,targetFormatId,options)
+            &&requiresFeatureCompleteImageEngine(sourceFormat.id,targetFormatId,options,sourceImageTraits)
           ) continue;
           const engine=this.engines.get(edge.engineId);
           if(!engine) continue;
