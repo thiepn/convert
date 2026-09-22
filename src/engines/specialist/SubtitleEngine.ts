@@ -1,5 +1,6 @@
 import type { ConversionEngine,ConversionEstimate,EngineConvertRequest,EngineConvertResult } from "../../core/engines/Engine";
 import { parseSubtitle,serializeSubtitle } from "../../core/specialist/subtitles";
+import { readTextBlob } from "../../core/text/decodeText";
 
 const FORMATS=new Set(["srt","vtt","ass"]);
 const MIME:Record<string,string>={
@@ -24,7 +25,8 @@ export class SubtitleEngine implements ConversionEngine{
     if(!this.canConvert(request.sourceFormatId,request.targetFormatId)) throw new Error("SUBTITLE_ROUTE_UNSUPPORTED: Unsupported subtitle route.");
     if(request.source.size>32*1024*1024) throw new Error("SUBTITLE_SIZE_LIMIT: Subtitle file exceeds the guarded 32 MiB text limit.");
     request.onProgress?.(.2,"Parsing subtitle cues");
-    const cues=parseSubtitle(await request.source.text(),request.sourceFormatId);
+    const {text}=await readTextBlob(request.source);
+    const cues=parseSubtitle(text,request.sourceFormatId);
     if(request.signal.aborted) throw new DOMException("Subtitle conversion cancelled.","AbortError");
     request.onProgress?.(.7,"Writing subtitle format");
     const text=serializeSubtitle(cues,request.targetFormatId);
