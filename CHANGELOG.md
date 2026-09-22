@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased — Maintenance Pass 4
+
+### Real-file compatibility
+- add a Chromium adversarial conversion matrix spanning images, CSV/data, workbooks, subtitles, archives, PDFs, and semantic documents
+- fix SheetJS CSV Auto mode so it genuinely auto-detects delimiters instead of forcing comma
+- add BOM-aware UTF-8/UTF-16LE/UTF-16BE text decoding
+- support UTF-16 CSV/TSV in DuckDB routes through guarded local transcoding
+- support UTF-16 subtitle files and BOM-prefixed JSON/JSONL
+- route common images to libvips whenever requested options exceed the browser proof engine's semantics
+- keep the fast browser image path for simple stripped conversions it can faithfully perform
+- certify quoted multiline semicolon CSV, multilingual data, hidden-sheet sidecars, cached formulas, Unicode archive paths, case collisions, trailing PDF bytes, and permissive HTML
+- document the permanent adversarial compatibility policy and matrix
+
+
 ## Unreleased — Maintenance Pass 3
 
 ### Reliability
