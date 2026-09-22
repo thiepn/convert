@@ -72,6 +72,7 @@ export class OfficeDocumentEngine implements ConversionEngine{
   private wasmBase="";
   private workerUrl="";
   private available=false;
+  private converterEpoch=0;
 
   async prepare():Promise<void>{
     this.wasmBase=new URL("engines/libreoffice/wasm/",document.baseURI).href;
@@ -154,50 +155,62 @@ export class OfficeDocumentEngine implements ConversionEngine{
     })) satisfies FontData[];
 
     this.currentProgress=request.onProgress;
-    const converter=await this.getConverter(fonts);
-    const inputFormat=INPUT_FORMAT[request.sourceFormatId];
-    const outputFormat=OUTPUT_FORMAT[request.targetFormatId];
-    if(!inputFormat||!outputFormat) throw new Error("OFFICE_ROUTE_UNSUPPORTED: Missing LibreOffice format mapping.");
-
-    const input=new Uint8Array(await request.source.arrayBuffer());
-    const fileName="input."+(request.sourceFormatId==="html-doc"?"html":request.sourceFormatId);
+    let abortHandler:()=>void=()=>{};
     const abortPromise=new Promise<never>((_,reject)=>{
-      request.signal.addEventListener("abort",()=>{
+      abortHandler=()=>{
         void this.resetConverter();
         reject(new DOMException("Office conversion cancelled.","AbortError"));
-      },{once:true});
+      };
+      request.signal.addEventListener("abort",abortHandler,{once:true});
     });
 
-    request.onProgress?.(.25,"Rendering with LibreOffice WASM");
-    const result=await Promise.race([
-      converter.convert(input,{outputFormat,inputFormat},fileName),
-      abortPromise
-    ]);
+    try{
+      request.signal.throwIfAborted?.();
+      const converter=await Promise.race([this.getConverter(fonts),abortPromise]);
+      request.signal.throwIfAborted?.();
 
-    const data=result.data instanceof Uint8Array?result.data:new Uint8Array(result.data);
-    const buffer=new ArrayBuffer(data.byteLength);
-    new Uint8Array(buffer).set(data);
-    let blob=new Blob([buffer],{type:result.mimeType||MIME[request.targetFormatId]||"application/octet-stream"});
+      const inputFormat=INPUT_FORMAT[request.sourceFormatId];
+      const outputFormat=OUTPUT_FORMAT[request.targetFormatId];
+      if(!inputFormat||!outputFormat) throw new Error("OFFICE_ROUTE_UNSUPPORTED: Missing LibreOffice format mapping.");
 
-    this.uses++;
-    if(request.outputHandle){
-      const writer=await request.outputHandle.createWritable();
-      await writer.write(blob);
-      await writer.close();
-      blob=await request.outputHandle.getFile();
+      const input=new Uint8Array(await request.source.arrayBuffer());
+      request.signal.throwIfAborted?.();
+      const fileName="input."+(request.sourceFormatId==="html-doc"?"html":request.sourceFormatId);
+
+      request.onProgress?.(.25,"Rendering with LibreOffice WASM");
+      const result=await Promise.race([
+        converter.convert(input,{outputFormat,inputFormat},fileName),
+        abortPromise
+      ]);
+
+      const data=result.data instanceof Uint8Array?result.data:new Uint8Array(result.data);
+      const buffer=new ArrayBuffer(data.byteLength);
+      new Uint8Array(buffer).set(data);
+      let blob=new Blob([buffer],{type:result.mimeType||MIME[request.targetFormatId]||"application/octet-stream"});
+
+      this.uses++;
+      if(request.outputHandle){
+        const writer=await request.outputHandle.createWritable();
+        await writer.write(blob);
+        await writer.close();
+        blob=await request.outputHandle.getFile();
+      }
+
+      request.onProgress?.(.96,"Finalizing fidelity output");
+      if(this.uses>=4){
+        await this.resetConverter();
+      }
+
+      return {
+        blob,
+        warnings,
+        details:{duration:result.duration,engine:"LibreOffice WASM"},
+        outputInWorkspace:Boolean(request.outputHandle)
+      };
+    }finally{
+      request.signal.removeEventListener("abort",abortHandler);
+      this.currentProgress=undefined;
     }
-
-    request.onProgress?.(.96,"Finalizing fidelity output");
-    if(this.uses>=4){
-      await this.resetConverter();
-    }
-
-    return {
-      blob,
-      warnings,
-      details:{duration:result.duration,engine:"LibreOffice WASM"},
-      outputInWorkspace:Boolean(request.outputHandle)
-    };
   }
 
   dispose():void{
@@ -213,6 +226,7 @@ export class OfficeDocumentEngine implements ConversionEngine{
     if(this.converter) return this.converter;
 
     this.fontSignature=signature;
+    const epoch=this.converterEpoch;
     const converter=new WorkerBrowserConverter({
       ...createWasmPaths(this.wasmBase),
       browserWorkerJs:this.workerUrl,
@@ -226,6 +240,10 @@ export class OfficeDocumentEngine implements ConversionEngine{
     });
     try{
       await converter.initialize();
+      if(epoch!==this.converterEpoch){
+        try{await converter.destroy();}catch{}
+        throw new DOMException("Office engine initialization was superseded.","AbortError");
+      }
       this.converter=converter;
       return converter;
     }catch(error){
@@ -241,6 +259,7 @@ export class OfficeDocumentEngine implements ConversionEngine{
   }
 
   private async resetConverter():Promise<void>{
+    this.converterEpoch++;
     const converter=this.converter;
     this.converter=null;
     this.fontSignature="";
