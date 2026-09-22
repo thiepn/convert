@@ -123,10 +123,23 @@ export const OGG:FormatDefinition={
   signatures:[[{offset:0,bytes:[0x4f,0x67,0x67,0x53]}]],
   capabilities:{metadata:true,multipleStreams:true},status:"production"
 };
+const isMp3FrameHeader=(bytes:Uint8Array)=>{
+  if(bytes.length<4||bytes[0]!==0xff||(bytes[1]&0xe0)!==0xe0) return false;
+  const version=bytes[1]&0x18;
+  const layer=bytes[1]&0x06;
+  const bitrateIndex=(bytes[2]>>4)&0x0f;
+  const sampleRateIndex=(bytes[2]>>2)&0x03;
+  return version!==0x08
+    &&layer===0x02
+    &&bitrateIndex>0
+    &&bitrateIndex<0x0f
+    &&sampleRateIndex!==0x03;
+};
+
 export const MP3:FormatDefinition={
   id:"mp3",name:"MP3",category:"audio",extensions:["mp3"],mimeTypes:["audio/mpeg"],
   signatures:[[{offset:0,bytes:[0x49,0x44,0x33]}]],
-  matcher:bytes=>bytes.length>2&&bytes[0]===0xff&&(bytes[1]&0xe0)===0xe0&&(bytes[1]&0xf6)!==0xf0,
+  matcher:isMp3FrameHeader,
   capabilities:{metadata:true},status:"production"
 };
 export const WAV:FormatDefinition={
