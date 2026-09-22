@@ -2,6 +2,7 @@ import { EngineRegistry } from "../engines/EngineRegistry";
 import type { ConversionEstimate,EngineConvertResult } from "../engines/Engine";
 import { FormatRegistry } from "../formats/FormatRegistry";
 import { inspectFile } from "../inspection/inspectFile";
+import { requiresFeatureCompleteImageEngine } from "../image/routePolicy";
 import { ConversionPlanner } from "../planner/ConversionPlanner";
 import type { ConversionEdge } from "../planner/ConversionGraph";
 import { NetworkGuard } from "../security/NetworkGuard";
@@ -67,7 +68,22 @@ export class JobManager {
       const routePreference=options.routePreference==="semantic"||options.routePreference==="fidelity"
         ? options.routePreference
         : undefined;
-      const route=this.planner.plan(sourceFormat.id,targetFormatId,routePreference);
+      let route=this.planner.plan(sourceFormat.id,targetFormatId,routePreference);
+      if(
+        sourceFormat.category==="image"
+        &&requiresFeatureCompleteImageEngine(sourceFormat.id,targetFormatId,options)
+        &&route.edges.some(edge=>edge.engineId==="browser-image-proof")
+      ){
+        const featureComplete=this.planner.directAlternatives(
+          sourceFormat.id,targetFormatId,routePreference
+        ).find(candidate=>candidate.edges[0]?.engineId==="vips-image");
+        if(!featureComplete){
+          throw new Error(
+            "IMAGE_ENGINE_UNAVAILABLE: The selected image options require the feature-complete local image engine."
+          );
+        }
+        route=featureComplete;
+      }
       warnings.push(...route.warnings.map(w=>w.message));
       const target=this.formats.get(targetFormatId);
       if(!target) throw new Error("FORMAT_UNSUPPORTED: Target format is unknown.");
