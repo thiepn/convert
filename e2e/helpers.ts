@@ -257,3 +257,114 @@ export function dngWithPreview(jpeg:Buffer):Fixture {
     buffer:Buffer.concat([tiff,addLargeJpegComment(jpeg)])
   };
 }
+
+
+export function utf16leBuffer(text:string):Buffer {
+  return Buffer.concat([Buffer.from([0xff,0xfe]),Buffer.from(text,"utf16le")]);
+}
+
+export function adversarialCsvFixture(utf16=false):Fixture {
+  const text=[
+    "name;note;amount",
+    "\"Alpha, Inc\";\"line one",
+    "line two\";12.5",
+    "\"München\";\"quoted \"\"value\"\"\";7"
+  ].join("\r\n")+"\r\n";
+  const buffer=utf16
+    ?utf16leBuffer(text)
+    :Buffer.concat([Buffer.from([0xef,0xbb,0xbf]),Buffer.from(text,"utf8")]);
+  return {
+    name:utf16?"edge-utf16.csv":"edge-semicolon.csv",
+    mimeType:"text/csv",
+    buffer
+  };
+}
+
+export function utf16SrtFixture():Fixture {
+  return {
+    name:"unicode-windows.srt",
+    mimeType:"application/x-subrip",
+    buffer:utf16leBuffer(
+      "1\r\n00:00:01,000 --> 00:00:03,000\r\nGrüße aus Köln — 안녕하세요\r\n\r\n"
+      +"2\r\n00:00:04,000 --> 00:00:05,500\r\nSecond line\r\n"
+    )
+  };
+}
+
+export function bomJsonFixture():Fixture {
+  const payload=JSON.stringify([
+    {name:"München",note:"comma, quote \" and newline\nkept",nested:{active:true}},
+    {name:"서울",note:"한글 데이터",nested:{active:false}}
+  ]);
+  return {
+    name:"unicode-bom.json",
+    mimeType:"application/json",
+    buffer:Buffer.concat([Buffer.from([0xef,0xbb,0xbf]),Buffer.from(payload,"utf8")])
+  };
+}
+
+export function complexXlsxFixture():Fixture {
+  const workbook=XLSX.utils.book_new();
+  const main=XLSX.utils.aoa_to_sheet([
+    ["Name","Amount","Computed","Note"],
+    ["München",3,null,"comma, newline\nand \"quotes\""],
+    ["서울",7,null,"한글"],
+    ["Merged title",null,null,null]
+  ]);
+  (main["C2"] as any)={t:"n",v:6,f:"B2*2"};
+  (main["C3"] as any)={t:"n",v:14,f:"B3*2"};
+  main["!merges"]=[XLSX.utils.decode_range("A4:B4")];
+  XLSX.utils.book_append_sheet(workbook,main,"Data ✓");
+
+  const hidden=XLSX.utils.aoa_to_sheet([
+    ["secret","value"],
+    ["hidden-row",42]
+  ]);
+  XLSX.utils.book_append_sheet(workbook,hidden,"Hidden");
+  workbook.Workbook={Sheets:[{Hidden:0},{Hidden:1}]} as any;
+  workbook.Props={
+    Title:"Adversarial workbook",
+    Author:"Compatibility Matrix",
+    Company:"Local Test"
+  };
+
+  const bytes=XLSX.write(workbook,{type:"buffer",bookType:"xlsx",compression:true});
+  return {
+    name:"workbook-unicode.xlsx",
+    mimeType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    buffer:Buffer.from(bytes)
+  };
+}
+
+export function unicodeZipFixture():Fixture {
+  const bytes=zipSync({
+    "资料/α.txt":strToU8("alpha unicode\n"),
+    "Case.txt":strToU8("upper\n"),
+    "case.txt":strToU8("lower\n"),
+    "nested/deep/한글.txt":strToU8("korean path\n")
+  },{level:6});
+  return {name:"unicode-paths.zip",mimeType:"application/zip",buffer:Buffer.from(bytes)};
+}
+
+export async function pdfWithTrailingJunkFixture():Promise<Fixture>{
+  const base=await pdfFixture();
+  const junk=Buffer.from("\n% trailing transport bytes that appear after a valid PDF EOF\n".repeat(8),"utf8");
+  return {
+    name:"trailing-junk.pdf",
+    mimeType:"application/pdf",
+    buffer:Buffer.concat([base.buffer,junk])
+  };
+}
+
+export function messyHtmlFixture():Fixture {
+  return {
+    name:"messy-unicode.html",
+    mimeType:"text/html",
+    buffer:Buffer.from(
+      "<!doctype html><meta charset=utf-8><title>Edge</title>"
+      +"<h1>München &amp; 서울</h1><p>Paragraph <strong>without closed parent tags"
+      +"<ul><li>one<li>two</ul><table><tr><th>A<th>B<tr><td>1<td>2</table>",
+      "utf8"
+    )
+  };
+}
