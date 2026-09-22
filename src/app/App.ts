@@ -1919,6 +1919,7 @@ export class App {
   }
 
   private async runArchiveOperation(){
+    const revision=this.selectionRevision;
     const operation=element<HTMLSelectElement>("archive-operation").value;
     const targetId=element<HTMLSelectElement>("target-format").value;
     const options=this.readArchiveOptions();
@@ -1948,11 +1949,15 @@ export class App {
           targetId,
           options,
           undefined,
-          (progress,stage)=>this.setProgress(progress,stage),
+          (progress,stage)=>{
+            if(revision===this.selectionRevision) this.setProgress(progress,stage);
+          },
           controller.signal
         );
+        if(revision!==this.selectionRevision) return;
         const password=targetId==="zip"?options.outputPassword:undefined;
         await this.archiveEngine.inspect(created.blob,targetId,password);
+        if(revision!==this.selectionRevision) return;
         const extension=this.formats.get(targetId)?.extensions[0]??targetId;
         this.showBlobResults([{
           name:"archive."+extension,
@@ -1961,7 +1966,7 @@ export class App {
             ? ["Output password applies only to ZIP and was ignored."]
             : []
         }],[]);
-        this.setProgress(1,"Archive complete");
+        if(revision===this.selectionRevision) this.setProgress(1,"Archive complete");
         return;
       }
 
@@ -1989,9 +1994,12 @@ export class App {
         sourceFormat,
         options.inputPassword,
         selected,
-        (progress,stage)=>this.setProgress(progress,stage),
+        (progress,stage)=>{
+          if(revision===this.selectionRevision) this.setProgress(progress,stage);
+        },
         controller.signal
       );
+      if(revision!==this.selectionRevision) return;
 
       const counts=new Map<string,number>();
       const outputs=extracted.map(item=>{
@@ -2003,17 +2011,22 @@ export class App {
       this.showBlobResults(outputs,[]);
       this.setProgress(1,"Extraction complete");
     }catch(error){
-      this.renderWarnings("loss-warnings",[
-        error instanceof Error?error.message:String(error)
-      ]);
+      if(revision===this.selectionRevision){
+        this.renderWarnings("loss-warnings",[
+          error instanceof Error?error.message:String(error)
+        ]);
+      }
     }finally{
-      this.archiveAbort=null;
-      cancel.classList.add("hidden");
-      button.disabled=false;
+      if(this.archiveAbort===controller) this.archiveAbort=null;
+      if(revision===this.selectionRevision){
+        cancel.classList.add("hidden");
+        button.disabled=false;
+      }
     }
   }
 
   private async createCombinedImagePdf(){
+    const revision=this.selectionRevision;
     const button=element<HTMLButtonElement>("convert-button");
     const cancel=element<HTMLButtonElement>("cancel-button");
     button.disabled=true;cancel.classList.remove("hidden");
@@ -2030,27 +2043,37 @@ export class App {
           normalized.push({blob:file,format:sourceId,name:file.name});
         }else{
           const result=await this.jobs.convert(file,"png",1,options as unknown as Record<string,unknown>,snapshot=>{
-            this.setProgress((i+snapshot.progress)/this.files.length,"Normalizing image "+(i+1)+"/"+this.files.length);
+            if(revision===this.selectionRevision){
+              this.setProgress((i+snapshot.progress)/this.files.length,"Normalizing image "+(i+1)+"/"+this.files.length);
+            }
           });
+          if(revision!==this.selectionRevision) return;
           normalized.push({blob:result.blob,format:"png",name:file.name});
           if(result.release) releases.push(result.release);
         }
       }
-      this.setProgress(.9,"Building PDF");
+      if(revision===this.selectionRevision) this.setProgress(.9,"Building PDF");
       const blob=await this.pdfEngine.imagesToPdf(normalized,"auto",0);
+      if(revision!==this.selectionRevision) return;
       await this.pdfEngine.inspect(blob);
+      if(revision!==this.selectionRevision) return;
       this.showBlobResults([{name:"images-combined.pdf",blob,warnings:[]}],[]);
       this.setProgress(1,"Complete");
     }catch(error){
-      this.renderWarnings("loss-warnings",[error instanceof Error?error.message:String(error)]);
+      if(revision===this.selectionRevision){
+        this.renderWarnings("loss-warnings",[error instanceof Error?error.message:String(error)]);
+      }
     }finally{
       for(const release of releases){try{await release();}catch{}}
-      cancel.classList.add("hidden");
-      button.disabled=false;
+      if(revision===this.selectionRevision){
+        cancel.classList.add("hidden");
+        button.disabled=false;
+      }
     }
   }
 
   private async runPdfOperation(){
+    const revision=this.selectionRevision;
     const operation=element<HTMLSelectElement>("pdf-operation").value;
     const button=element<HTMLButtonElement>("convert-button");
     const cancel=element<HTMLButtonElement>("cancel-button");
@@ -2196,13 +2219,18 @@ export class App {
         }
       }
 
+      if(revision!==this.selectionRevision) return;
       this.setProgress(1,"Complete");
       this.showBlobResults(outputs,[]);
     }catch(error){
-      this.renderWarnings("loss-warnings",[error instanceof Error?error.message:String(error)]);
+      if(revision===this.selectionRevision){
+        this.renderWarnings("loss-warnings",[error instanceof Error?error.message:String(error)]);
+      }
     }finally{
-      cancel.classList.add("hidden");
-      button.disabled=false;
+      if(revision===this.selectionRevision){
+        cancel.classList.add("hidden");
+        button.disabled=false;
+      }
     }
   }
 
