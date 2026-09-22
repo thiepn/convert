@@ -2,7 +2,7 @@
 
 Maintenance Pass 4 moves compatibility certification beyond happy-path fixtures.
 
-The matrix uses actual valid files produced by the same libraries and container structures encountered by the production engines, then deliberately adds characteristics that frequently break browser converters: BOMs, UTF-16, uncommon delimiters, embedded newlines, Unicode paths, case collisions, formulas, hidden sheets, trailing bytes, malformed-but-browser-tolerated HTML, and option combinations that require the full image engine.
+The matrix uses actual valid files produced by the same libraries and container structures encountered by the production engines, then deliberately adds characteristics that frequently break browser converters: BOMs, UTF-16, uncommon delimiters, embedded newlines, Unicode paths, case collisions, formulas, hidden sheets, trailing bytes, malformed-but-browser-tolerated HTML, and image options that must route to an engine capable of honoring their semantics.
 
 ## Certification principles
 
@@ -22,7 +22,7 @@ The matrix is additive to unit tests and the existing real-conversion smoke suit
 
 | Family | Adversarial case | Required invariant |
 | --- | --- | --- |
-| Image | PNG resized while metadata/options require the full engine | output dimensions are exactly the requested bound |
+| Image | real 512 px PNG → 320 px PNG | native-browser resize honors the requested bound without invoking the unreliable libvips cold path |
 | Image | stripped simple PNG → WebP | fast browser-native route remains usable |
 | CSV / Spreadsheet | UTF-8 BOM + semicolon delimiter + quoted comma + embedded newline | automatic delimiter detection and field boundaries survive XLSX conversion |
 | Structured data | UTF-16LE semicolon CSV | DuckDB route decodes without mojibake and preserves rows |
@@ -42,10 +42,10 @@ Maintenance Pass 4 found several issues that happy-path tests did not expose:
 - CSV “Auto” in the SheetJS route was actually forcing comma
 - UTF-16 text inputs were not decoded consistently
 - BOM-prefixed JSON could fail tabular parsing
-- browser-native common-image conversion could be selected even when requested options required resize, metadata preservation, animation preservation, target-size handling, lossless mode, or explicit JPEG alpha compositing
+- common-image routing did not distinguish source traits from requested semantics: this could either ignore advanced settings or force metadata-free static files through an unnecessary libvips cold start
 - archive path flattening happened too late: it was ZIP-specific and could create duplicate basenames or ignore the setting for TAR/7z-family output
 
-Each issue now has dedicated regression coverage.
+The matrix also exposed two format-detection false positives: a UTF-16LE BOM could resemble a permissive MPEG audio sync, and bracketed ASS subtitle text could resemble an incomplete JSON array. MP3 detection now requires a sane MPEG Layer III header and JSON prefix detection is stricter. Each issue now has dedicated regression coverage.
 
 ## Text encoding policy
 
@@ -59,18 +59,25 @@ UTF-16 CSV/TSV is decoded to UTF-8 locally before DuckDB ingestion. The conversi
 
 ## Image route policy
 
-The lightweight browser image engine is used only when its semantics match the request.
+The lightweight browser image engine is used when its semantics match the request. For JPEG/PNG/WebP it now supports:
 
-The feature-complete libvips route is required when any of the following applies:
+- normal decode/encode
+- longest-edge resize
+- quality-controlled encoding where the browser exposes it
+- JPEG background compositing for transparent PNG/WebP input
+- metadata stripping by virtue of decode/re-encode
 
-- metadata policy is Preserve or Privacy
-- resize is requested
-- target byte size is requested
-- lossless encoding is requested
-- animated WebP preservation may be required
-- PNG/WebP → JPEG needs the chosen background for alpha flattening
+A bounded source-trait probe checks whether common images actually contain metadata or animation before route selection. Therefore Preserve/Privacy does not force a metadata-free static image into libvips merely because the policy is selected.
 
-This prevents a fast route from silently ignoring UI settings.
+The feature-complete libvips route remains required when the browser path cannot certify the requested semantics, including:
+
+- preserving or privacy-filtering metadata that is present, or whose presence cannot be established safely
+- target-byte-size search
+- lossless WebP output
+- preserving actual or uncertain PNG/WebP animation
+- non-common image formats handled by the libvips pipeline
+
+This prevents both classes of failure: silently ignored settings and unnecessary cold-start dependence on the heavyweight engine.
 
 ## Future corpus growth
 
