@@ -1117,21 +1117,31 @@ export class App {
 
   private async resumeBatch(){
     if(!this.batchRunner.hasResumable()) return;
+    const revision=this.selectionRevision;
     const button=element<HTMLButtonElement>("convert-button");
     const cancel=element<HTMLButtonElement>("cancel-button");
     button.disabled=true;cancel.classList.remove("hidden");
     try{
       const result=await this.batchRunner.resume(snapshot=>this.renderBatchSnapshot(snapshot),true);
-      await this.renderBatchResults(result,this.batchPackageResults);
+      if(revision!==this.selectionRevision) return;
+      await this.renderBatchResults(result,this.batchPackageResults,revision);
     }catch(error){
       this.renderWarnings("loss-warnings",[error instanceof Error?error.message:String(error)]);
     }finally{
-      button.disabled=false;cancel.classList.add("hidden");
+      if(revision===this.selectionRevision){
+        button.disabled=false;cancel.classList.add("hidden");
+      }
     }
   }
 
-  private async renderBatchResults(result:BatchRunResult,packageResults:boolean){
+  private async renderBatchResults(
+    result:BatchRunResult,
+    packageResults:boolean,
+    revision=this.selectionRevision
+  ){
+    if(revision!==this.selectionRevision) return;
     await this.releaseResults();
+    if(revision!==this.selectionRevision) return;
     const expanded:Array<{name:string;blob:Blob;warnings:string[];release?:()=>Promise<void>}>=[];
 
     for(const output of result.outputs){
@@ -1149,8 +1159,11 @@ export class App {
     const failures=[...result.failures];
     if(packageResults&&expanded.length>1){
       let packageWorkspace:TempWorkspace|null=null;
+      const controller=new AbortController();
+      this.archiveAbort=controller;
       try{
         packageWorkspace=await TempWorkspace.create("package-"+crypto.randomUUID());
+        if(revision!==this.selectionRevision) return;
         const handle=packageWorkspace
           ?await packageWorkspace.getFileHandle("converted-files.zip")
           :undefined;
@@ -1159,8 +1172,15 @@ export class App {
           "zip",
           {compressionLevel:6,preservePaths:false},
           handle,
-          (_progress,stage)=>this.setProgress(1,"Packaging results · "+stage)
+          (_progress,stage)=>{
+            if(revision===this.selectionRevision) this.setProgress(1,"Packaging results · "+stage);
+          },
+          controller.signal
         );
+        if(revision!==this.selectionRevision){
+          try{await packageWorkspace?.cleanup();}catch{}
+          return;
+        }
         const retainedPackageWorkspace=packageWorkspace;
         expanded.push({
           name:"converted-files.zip",
@@ -1177,13 +1197,17 @@ export class App {
         packageWorkspace=null;
       }catch(error){
         try{await packageWorkspace?.cleanup();}catch{}
+        if(revision!==this.selectionRevision) return;
         failures.push({
           name:"converted-files.zip",
           error:"Batch packaging failed: "+(error instanceof Error?error.message:String(error))
         });
+      }finally{
+        if(this.archiveAbort===controller) this.archiveAbort=null;
       }
     }
 
+    if(revision!==this.selectionRevision) return;
     this.showBlobResults(expanded,failures,false);
     this.setProgress(1,"Batch complete");
   }
@@ -1837,6 +1861,7 @@ export class App {
     options:Record<string,unknown>,
     quality:number
   ){
+    const revision=this.selectionRevision;
     const button=element<HTMLButtonElement>("convert-button");
     const cancel=element<HTMLButtonElement>("cancel-button");
     const panel=element("job-panel");
@@ -1869,20 +1894,27 @@ export class App {
       const result=await this.batchRunner.start(
         this.files,
         pipeline,
-        snapshot=>this.renderBatchSnapshot(snapshot)
+        snapshot=>{
+          if(revision===this.selectionRevision) this.renderBatchSnapshot(snapshot);
+        }
       );
-      await this.renderBatchResults(result,pipeline.packageResults);
-      if(result.cancelled){
+      if(revision!==this.selectionRevision) return;
+      await this.renderBatchResults(result,pipeline.packageResults,revision);
+      if(result.cancelled&&revision===this.selectionRevision){
         this.renderWarnings("loss-warnings",[
           "Batch stopped. Completed outputs are retained in this session; choose Resume / retry remaining to continue."
         ]);
       }
     }catch(error){
-      this.renderWarnings("loss-warnings",[error instanceof Error?error.message:String(error)]);
+      if(revision===this.selectionRevision){
+        this.renderWarnings("loss-warnings",[error instanceof Error?error.message:String(error)]);
+      }
     }finally{
-      button.disabled=false;
-      cancel.classList.add("hidden");
-      this.updateBatchControls();
+      if(revision===this.selectionRevision){
+        button.disabled=false;
+        cancel.classList.add("hidden");
+        this.updateBatchControls();
+      }
     }
   }
 
