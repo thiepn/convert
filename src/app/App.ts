@@ -1512,10 +1512,21 @@ export class App {
             : undefined;
       const routes=uniqueSources.map(source=>{
         let planned=this.planner.plan(source,targetId,routePreference);
+        const sourceInspections=this.inspections.filter(item=>item.detection.format?.id===source);
+        const imageTraits=sourceInspections.length
+          ?{
+            metadata:sourceInspections.some(item=>Boolean(item.imageMetadata)),
+            animation:sourceInspections.some(item=>Boolean(item.imageAnimation)),
+            known:sourceInspections.every(item=>item.imageTraitsKnown===true)
+          }
+          :undefined;
         if(
           this.kind==="image"
           &&requiresFeatureCompleteImageEngine(
-            source,targetId,this.readImageOptions() as unknown as Record<string,unknown>
+            source,
+            targetId,
+            this.readImageOptions() as unknown as Record<string,unknown>,
+            imageTraits
           )
           &&planned.edges.some(edge=>edge.engineId==="browser-image-proof")
         ){
