@@ -1,15 +1,15 @@
 {
   "static": {
-    "indexHtmlBytes": 40960,
-    "startupRawBytes": 1572864,
-    "startupGzipBytes": 471040,
-    "entryJavaScriptBytes": 1363148,
-    "entryJavaScriptGzipBytes": 430080,
-    "cssBytes": 32768,
-    "workerJavaScriptTotalBytes": 5242880,
-    "largestWorkerJavaScriptBytes": 3145728,
+    "indexHtmlBytes": 32768,
+    "startupRawBytes": 1310720,
+    "startupGzipBytes": 409600,
+    "entryJavaScriptBytes": 1258291,
+    "entryJavaScriptGzipBytes": 389120,
+    "cssBytes": 24576,
+    "workerJavaScriptTotalBytes": 6291456,
+    "largestWorkerJavaScriptBytes": 2621440,
     "engineAssetsTotalBytes": 503316480,
-    "distTotalBytes": 536870912
+    "distTotalBytes": 524288000
   },
   "runtime": {
     "runtimeReadyMs": 8000,
