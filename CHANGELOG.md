@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased — Maintenance Pass 6
+
+### Performance regression budgets, cold-start & responsiveness
+- add a versioned performance budget source of truth in `config/performance-budgets.json`
+- enforce production startup, JavaScript, CSS, worker, lazy-engine, and full-dist byte ceilings during `release:certify`
+- emit and retain machine-readable static performance reports in CI
+- add runtime-ready and completed-selection Performance marks for deterministic browser timing
+- certify DuckDB and PDF.js cold/warm inspection latency
+- certify 24-file batch throughput together with main-thread heartbeat responsiveness
+- certify renderer V8 heap peak and retained growth with Chromium CDP garbage collection
+- retain runtime performance reports in CI
+- calibrate static/runtime ceilings against two successful GitHub Actions runs with deliberate regression headroom
+- document measured baseline, ceilings, interpretation, and budget-change policy
+
+
 ## Unreleased — Maintenance Pass 5
 
 ### Long-session, concurrency & resource hardening
