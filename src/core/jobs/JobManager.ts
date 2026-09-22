@@ -178,6 +178,11 @@ export class JobManager {
         for(const candidate of alternatives){
           const edge=candidate.edges[0];
           if(!edge||attemptedEngines.has(edge.engineId)||(edge.mode??"neutral")!==mode) continue;
+          if(
+            sourceFormat.category==="image"
+            &&edge.engineId==="browser-image-proof"
+            &&requiresFeatureCompleteImageEngine(sourceFormat.id,targetFormatId,options)
+          ) continue;
           const engine=this.engines.get(edge.engineId);
           if(!engine) continue;
 
