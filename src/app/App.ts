@@ -148,6 +148,7 @@ export class App {
   private archiveAbort:AbortController|null=null;
   private kind:SelectionKind=null;
   private leases:ResultLease[]=[];
+  private resultGeneration=0;
   private routeRevision=0;
   private selectionRevision=0;
   private batchPackageResults=true;
@@ -198,6 +199,7 @@ export class App {
 
   async start():Promise<void>{
     this.bindInputs();
+    this.bindLifecycle();
     await TempWorkspace.cleanupOrphanedJobs();
     await this.engines.prepareAll();
     await this.renderCapabilities(await detectCapabilities());
@@ -298,6 +300,28 @@ export class App {
         return;
       }
     });
+  }
+
+  private bindLifecycle(){
+    window.addEventListener("pagehide",()=>{
+      this.routeRevision++;
+      this.selectionRevision++;
+      this.batchRunner.cancel();
+      this.jobs.dispose();
+      this.pdfEngine.cancelActive();
+      this.archiveAbort?.abort();
+
+      const leases=this.invalidateResultLeases();
+      for(const lease of leases){
+        try{void lease.release?.().catch(()=>{});}catch{}
+      }
+      const results=document.getElementById("results");
+      results?.replaceChildren();
+      results?.classList.add("hidden");
+
+      void this.batchRunner.releaseSession();
+      this.engines.dispose();
+    },{capture:true});
   }
 
   private bindFileLaunch(){
@@ -2182,6 +2206,7 @@ export class App {
     failed:Array<{name:string;error:string}>,
     autoPackage=true
   ){
+    const generation=++this.resultGeneration;
     const container=element("results");container.replaceChildren();container.classList.remove("hidden");
     for(const output of outputs) this.addResult(container,output.name,output.blob,output.warnings,output.release);
 
@@ -2194,8 +2219,13 @@ export class App {
       void (async()=>{
         try{
           const entries=Object.create(null) as Record<string,Uint8Array>;
-          for(const output of outputs) entries[output.name]=new Uint8Array(await output.blob.arrayBuffer());
+          for(const output of outputs){
+            if(generation!==this.resultGeneration) return;
+            entries[output.name]=new Uint8Array(await output.blob.arrayBuffer());
+          }
+          if(generation!==this.resultGeneration) return;
           const zipped=zipSync(entries,{level:0});
+          if(generation!==this.resultGeneration) return;
           this.addResult(
             container,
             "converted-files.zip",
@@ -2203,6 +2233,7 @@ export class App {
             ["Local convenience package."]
           );
         }catch(error){
+          if(generation!==this.resultGeneration) return;
           const node=document.createElement("div");node.className="warning";
           node.textContent="ZIP package: "+friendlyIssueText(error);
           container.append(node);
@@ -2227,12 +2258,20 @@ export class App {
     item.append(meta,link);container.append(item);
   }
 
-  private async releaseResults(){
+  private invalidateResultLeases():ResultLease[]{
+    this.resultGeneration++;
     const leases=this.leases.splice(0);
     for(const lease of leases){
-      URL.revokeObjectURL(lease.url);
-      try{await lease.release?.();}catch{}
+      try{URL.revokeObjectURL(lease.url);}catch{}
     }
+    return leases;
+  }
+
+  private async releaseResults(){
+    const leases=this.invalidateResultLeases();
+    await Promise.allSettled(leases.map(async lease=>{
+      try{await lease.release?.();}catch{}
+    }));
   }
 
   private async renderCapabilities(profile:CapabilityProfile){
