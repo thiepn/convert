@@ -8,8 +8,10 @@
 - add BOM-aware UTF-8/UTF-16LE/UTF-16BE text decoding
 - support UTF-16 CSV/TSV in DuckDB routes through guarded local transcoding
 - support UTF-16 subtitle files and BOM-prefixed JSON/JSONL
-- route common images to libvips whenever requested options exceed the browser proof engine's semantics
-- keep the fast browser image path for simple stripped conversions it can faithfully perform
+- harden content detection so UTF-16 BOMs cannot false-positive as MP3 and bracketed ASS text cannot false-positive as incomplete JSON
+- add bounded metadata/animation trait probing for common images so routing reflects both source content and requested semantics
+- extend the certified browser image path with longest-edge resize and JPEG background compositing, avoiding unnecessary libvips cold starts for static metadata-free JPEG/PNG/WebP
+- keep libvips for common-image semantics the browser path cannot certify, including present/unknown metadata preservation, target-size search, lossless WebP, and present/unknown animation
 - certify quoted multiline semicolon CSV, multilingual data, hidden-sheet sidecars, cached formulas, Unicode archive paths, case collisions, non-canonical WAV chunks, trailing PDF bytes, and permissive HTML
 - apply archive preserve/flatten path policy consistently before collision resolution across ZIP, TAR, and libarchive-backed outputs
 - document the permanent adversarial compatibility policy and matrix
