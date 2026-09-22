@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased — Maintenance Pass 7
+
+### Cross-browser conversion parity & mobile hardening
+- add representative conversion parity tests across Chromium desktop, Chromium mobile, Firefox, and WebKit mobile
+- certify common images, subtitles, triangle meshes, SheetJS, DuckDB-Wasm, Pandoc WASM, qpdf, libarchive, and WAV → FLAC in every automated browser project
+- fix WebKit FLAC output by registering the bundled FLAC encoder unconditionally and forcing FLAC transcoding
+- add machine-readable browser parity reports to CI
+- apply top/right/bottom/left mobile safe-area insets
+- add short-landscape mobile density and sticky-action hardening
+- enforce a 44 px mobile interaction floor for quick targets, downloads, and archive actions
+- add touch file selection, mobile conversion, viewport overflow, visual viewport, and portrait/landscape regression coverage
+- certify a service-worker-controlled offline shell fetch and local subtitle conversion in Chromium mobile
+- certify cached shell assets in WebKit mobile while documenting Playwright WebKit's synthetic-offline limitations
+- add Apple touch icon and Home Screen web-app metadata
+- add an explicit physical Android/iOS acceptance checklist; CI emulation is not presented as physical-device certification
+
+
 ## Unreleased — Maintenance Pass 6
 
 ### Performance regression budgets, cold-start & responsiveness
