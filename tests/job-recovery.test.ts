@@ -110,6 +110,44 @@ describe("direct conversion recovery",()=>{
     expect(semanticCalls).toBe(0);
   });
 
+  it("does not recover advanced image options through a semantics-incomplete browser route",async()=>{
+    const formats=createDefaultFormatRegistry();
+    const engines=new EngineRegistry();
+    let browserCalls=0;
+    engines.register(engine("browser-image-proof",async()=>{
+      browserCalls++;
+      return {blob:new Blob(["fast"])};
+    }));
+    engines.register(engine("vips-image",async()=>{
+      throw new Error("WORKER_CRASH: feature-complete engine exited");
+    }));
+    const graph=new ConversionGraph([
+      {
+        from:"png",to:"jpeg",engineId:"browser-image-proof",
+        qualityLoss:0,metadataLoss:[],temporaryMultiplier:1,
+        streaming:false,baseCost:0,mode:"neutral",rootOnly:true
+      },
+      {
+        from:"png",to:"jpeg",engineId:"vips-image",
+        qualityLoss:0,metadataLoss:[],temporaryMultiplier:1,
+        streaming:false,baseCost:100,mode:"neutral",rootOnly:true
+      }
+    ]);
+    const planner=new ConversionPlanner(graph,formats,engines);
+    const jobs=new JobManager(formats,engines,planner,{
+      validate:async()=>({valid:true,errors:[],properties:{}})
+    });
+
+    await expect(jobs.convert(sourcePng(),"jpeg",.82,{
+      metadataPolicy:"strip",
+      maxDimension:128,
+      background:"#ffffff",
+      lossless:false,
+      preserveAnimation:true
+    })).rejects.toThrow(/WORKER_CRASH/);
+    expect(browserCalls).toBe(0);
+  });
+
   it("recovers when the primary output fails independent validation",async()=>{
     let fallbackCalls=0;
     const jobs=setup(
