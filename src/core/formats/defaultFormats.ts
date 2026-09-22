@@ -345,18 +345,27 @@ const isJsonLines=(bytes:Uint8Array)=>{
     });
   }catch{return false;}
 };
+const JSON_PROBE_LIMIT=256*1024;
+const looksLikeJsonPrefix=(text:string)=>{
+  const value=text.trimStart();
+  if(value.startsWith("{")) return /^\{\s*(?:"|\})/.test(value);
+  if(value.startsWith("[")) return /^\[\s*(?:\[|\{|"|\]|-|[0-9]|t|f|n)/.test(value);
+  return false;
+};
 const isJsonDocument=(bytes:Uint8Array)=>{
   try{
-    const text=decodeProbeText(bytes,8192).trimStart();
-    if(!(text.startsWith("{")||text.startsWith("["))) return false;
-    JSON.parse(text.length<bytes.length?"null":text);
-    return true;
-  }catch{
+    const probeLength=Math.min(bytes.length,JSON_PROBE_LIMIT);
+    const text=decodeProbeText(bytes,probeLength).trimStart();
+    if(!looksLikeJsonPrefix(text)) return false;
     try{
-      const text=decodeProbeText(bytes,8192).trimStart();
-      return text.startsWith("{")||text.startsWith("[");
-    }catch{return false;}
-  }
+      JSON.parse(text);
+      return true;
+    }catch{
+      // inspectFile supplies at most 256 KiB. Only accept a JSON-looking
+      // incomplete prefix when the probe itself hit that ceiling.
+      return bytes.length>=JSON_PROBE_LIMIT;
+    }
+  }catch{return false;}
 };
 const isArrowFile=(bytes:Uint8Array)=>bytes.length>=6&&ascii(bytes,0,6)==="ARROW1";
 const isSqlite=(bytes:Uint8Array)=>bytes.length>=16&&ascii(bytes,0,15)==="SQLite format 3"&&bytes[15]===0;
