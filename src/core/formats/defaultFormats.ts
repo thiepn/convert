@@ -169,7 +169,7 @@ const isRtf=(bytes:Uint8Array)=>{
 };
 const isHtmlDocument=(bytes:Uint8Array)=>{
   try{
-    const text=new TextDecoder().decode(bytes.slice(0,Math.min(bytes.length,8192))).replace(/^\uFEFF/,"").trimStart();
+    const text=decodeProbeText(bytes,8192).trimStart();
     return /^(?:<!doctype\s+html|<html(?:\s|>))/i.test(text);
   }catch{return false;}
 };
@@ -308,9 +308,20 @@ export const CPIO:FormatDefinition={
 };
 
 
+const decodeProbeText=(bytes:Uint8Array,limit=16384)=>{
+  const slice=bytes.slice(0,Math.min(bytes.length,limit));
+  try{
+    const encoding=
+      slice.length>=2&&slice[0]===0xff&&slice[1]===0xfe?"utf-16le":
+      slice.length>=2&&slice[0]===0xfe&&slice[1]===0xff?"utf-16be":
+      "utf-8";
+    return new TextDecoder(encoding).decode(slice).replace(/^\uFEFF/,"");
+  }catch{return "";}
+};
+
 const isJsonLines=(bytes:Uint8Array)=>{
   try{
-    const text=new TextDecoder().decode(bytes.slice(0,Math.min(bytes.length,16384))).replace(/^\uFEFF/,"");
+    const text=decodeProbeText(bytes,16384);
     const lines=text.split(/\r?\n/).map(line=>line.trim()).filter(Boolean);
     if(lines.length<2) return false;
     return lines.slice(0,20).every(line=>{
@@ -329,7 +340,7 @@ const isJsonDocument=(bytes:Uint8Array)=>{
     return true;
   }catch{
     try{
-      const text=new TextDecoder().decode(bytes.slice(0,Math.min(bytes.length,8192))).replace(/^\uFEFF/,"").trimStart();
+      const text=decodeProbeText(bytes,8192).trimStart();
       return text.startsWith("{")||text.startsWith("[");
     }catch{return false;}
   }
@@ -400,10 +411,7 @@ export const SQLITE:FormatDefinition={
 };
 
 
-const textProbe=(bytes:Uint8Array,limit=16384)=>{
-  try{return new TextDecoder().decode(bytes.slice(0,Math.min(bytes.length,limit))).replace(/^\uFEFF/,"");}
-  catch{return "";}
-};
+const textProbe=(bytes:Uint8Array,limit=16384)=>decodeProbeText(bytes,limit);
 const psdVersion=(bytes:Uint8Array,version:number)=>
   bytes.length>=6&&ascii(bytes,0,4)==="8BPS"&&bytes[4]===0&&bytes[5]===version;
 const isCameraRaw=(bytes:Uint8Array)=>
