@@ -111,6 +111,55 @@ describe("Phase 8 BatchRunner",()=>{
     expect(runner.hasResumable()).toBe(false);
   });
 
+  it("rejects an overlapping resume while a batch execution is still active",async()=>{
+    const formats=createDefaultFormatRegistry();
+    const planner={
+      plan:()=>({
+        edges:[{
+          from:"srt",to:"vtt",engineId:"subtitle-compat",qualityLoss:0,
+          metadataLoss:[],temporaryMultiplier:1,streaming:false
+        }],
+        score:1,
+        warnings:[]
+      })
+    } as unknown as ConversionPlanner;
+
+    let release!:()=>void;
+    const gate=new Promise<void>(resolve=>{release=resolve;});
+    const jobs={
+      cancelAll:()=>{},
+      convert:async(source:File)=>{
+        await gate;
+        return {
+          blob:new Blob(["WEBVTT\n\n"]),
+          fileName:source.name+".vtt",
+          formatId:"vtt",
+          jobId:source.name,
+          warnings:[]
+        };
+      }
+    } as unknown as JobManager;
+
+    const runner=new BatchRunner(formats,planner,jobs);
+    const started=runner.start(
+      [subtitleFile("slow.srt")],
+      buildBatchPipeline({
+        targetFormatId:"vtt",
+        quality:1,
+        options:{},
+        executionMode:"sequential",
+        packageResults:false
+      })
+    );
+
+    await Promise.resolve();
+    await Promise.resolve();
+    await expect(runner.resume()).rejects.toThrow(/BATCH_ALREADY_RUNNING/);
+
+    release();
+    await started;
+  });
+
   it("does not offer deterministic planning failures for retry",async()=>{
     const formats=createDefaultFormatRegistry();
     const planner={
