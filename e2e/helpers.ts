@@ -119,14 +119,6 @@ export function pngFixture():Fixture {
   };
 }
 
-export function png512Fixture():Fixture {
-  return {
-    name:"pixel-512.png",
-    mimeType:"image/png",
-    buffer:fs.readFileSync(path.resolve("public/icon-512.png"))
-  };
-}
-
 export function srtFixture(name="captions.srt"):Fixture {
   return {
     name,
