@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased — Maintenance Pass 5
+
+### Long-session, concurrency & resource hardening
+- centrally track retained OPFS workspaces and make release/cleanup idempotent
+- prevent disposed jobs from registering retained outputs after lifecycle cleanup
+- revoke app-owned Blob URLs synchronously when results are replaced, cleared, or the page is hidden
+- invalidate asynchronous convenience packaging by result generation so stale ZIP work cannot resurrect cleared results
+- dispose registered engines independently so one teardown failure cannot block later cleanup
+- add hard media-worker cancellation and include it in Cancel, Start over, and pagehide flows
+- make LibreOffice cold initialization cancellable and prevent superseded converters from resurrecting
+- recycle DuckDB after 20 exclusive operations and reject stale queued work after disposal
+- recycle Mediabunny and PDF.js workers after 24 terminal requests
+- recycle libvips after 10 terminal uses including inspections
+- guard worker postMessage failures so pending promises/workers cannot leak
+- reject overlapping batch resume executions
+- pass AbortSignal into batch-result archive packaging
+- gate batch/archive/PDF/combined-image result mutation by selection generation
+- add Chromium endurance coverage for 30 subtitle cycles, 16 image cycles, DuckDB recycling, URL revocation, OPFS cleanup, worker counts, and stale-package races
+
+
 ## Unreleased — Maintenance Pass 4
 
 ### Real-file compatibility
