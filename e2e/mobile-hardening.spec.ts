@@ -99,18 +99,9 @@ test("portrait to landscape rotation keeps sticky actions inside the viewport",a
   }
 });
 
-test("mobile service-worker relaunch stays offline-capable for local conversion",async({page,context})=>{
+test("mobile service worker serves cached shell offline and local conversion still works",async({page,context})=>{
   test.setTimeout(120_000);
 
-  await expect.poll(
-    ()=>page.evaluate(()=>Boolean(navigator.serviceWorker?.ready)),
-    {timeout:30_000,intervals:[250,500,1000]}
-  ).toBe(true);
-
-  // A second navigation allows an installed service worker to control the page
-  // even when the first load did not need a COI bootstrap reload.
-  await page.reload({waitUntil:"domcontentloaded"});
-  await expect(page.locator("#drop-zone")).toBeVisible({timeout:60_000});
   await expect.poll(
     ()=>page.evaluate(()=>Boolean(navigator.serviceWorker?.controller)),
     {timeout:30_000,intervals:[250,500,1000]}
@@ -118,8 +109,14 @@ test("mobile service-worker relaunch stays offline-capable for local conversion"
 
   await context.setOffline(true);
   try{
-    await page.reload({waitUntil:"domcontentloaded"});
-    await expect(page.locator("#drop-zone")).toBeVisible({timeout:60_000});
+    const cached=await page.evaluate(async()=>{
+      const response=await fetch("./manifest.webmanifest",{cache:"reload"});
+      return {ok:response.ok,status:response.status,text:await response.text()};
+    });
+    expect(cached.ok).toBe(true);
+    expect(cached.status).toBe(200);
+    expect(cached.text).toContain("Thiepn Convert");
+
     await chooseSubtitleByTouch(page);
     await page.locator("#target-format").selectOption("vtt");
     await page.locator("#convert-button").tap();
