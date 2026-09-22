@@ -215,10 +215,11 @@ button,.download-link,label[for],select{touch-action:manipulation}
   .job-row{font-size:.72rem}
   .results{margin-top:12px;gap:6px}
   .result-item{padding:9px 10px}
-  .download-link{min-height:42px}
+  .download-link{min-height:44px}
   .track-list{gap:5px;margin-top:10px}
   .archive-entry-list,.batch-task-list{max-height:min(360px,45dvh)}
   .archive-entry-row,.batch-task-row{padding:8px 9px}
+  .archive-entry-actions .secondary-button{min-height:44px}
   .data-preview-scroll{max-height:min(300px,40dvh)}
   .batch-pipeline-heading{align-items:flex-start;flex-direction:column;gap:3px}
   .batch-pipeline-heading span{text-align:left}
@@ -367,7 +368,7 @@ button:disabled{cursor:not-allowed}
 
 @media(max-width:760px){
   .target-shortcuts{gap:6px;margin-top:8px}
-  .target-shortcut{min-height:34px;padding:0 10px;font-size:.72rem}
+  .target-shortcut{min-height:44px;padding:0 11px;font-size:.72rem}
   .shortcut-hint{display:none}
   .diagnostics-summary{padding:14px}
   .diagnostics-body{padding:0 14px 14px}
