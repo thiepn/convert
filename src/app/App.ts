@@ -309,6 +309,7 @@ export class App {
       this.selectionRevision++;
       this.batchRunner.cancel();
       this.jobs.dispose();
+      this.mediaEngine.cancelActive();
       this.pdfEngine.cancelActive();
       this.archiveAbort?.abort();
 
@@ -344,6 +345,7 @@ export class App {
   private async resetSelection(){
     this.batchRunner.cancel();
     this.jobs.cancelAll();
+    this.mediaEngine.cancelActive();
     this.pdfEngine.cancelActive();
     this.archiveAbort?.abort();
 
