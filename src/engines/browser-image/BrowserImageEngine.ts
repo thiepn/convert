@@ -128,15 +128,20 @@ export class BrowserImageEngine implements ConversionEngine {
         reject(new Error(event.message || "Conversion worker crashed."));
       };
 
-      worker.postMessage({
-        type: "convert-image",
-        jobId: request.jobId,
-        source: request.source,
-        targetMime: request.targetMime,
-        quality: request.quality ?? 0.82,
-        maxDimension,
-        background
-      });
+      try{
+        worker.postMessage({
+          type: "convert-image",
+          jobId: request.jobId,
+          source: request.source,
+          targetMime: request.targetMime,
+          quality: request.quality ?? 0.82,
+          maxDimension,
+          background
+        });
+      }catch(error){
+        finish();
+        reject(error instanceof Error?error:new Error(String(error)));
+      }
     });
   }
 
