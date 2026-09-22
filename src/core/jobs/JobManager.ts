@@ -26,6 +26,7 @@ function outputName(input:string,extension:string):string {
 
 export class JobManager {
   private controllers=new Map<string,AbortController>();
+  private retainedWorkspaces=new Map<string,TempWorkspace>();
   private readonly networkGuard=new NetworkGuard();
 
   constructor(
@@ -37,6 +38,20 @@ export class JobManager {
 
   cancel(jobId:string):void { this.controllers.get(jobId)?.abort(); }
   cancelAll():void { for(const controller of this.controllers.values()) controller.abort(); }
+
+  activeJobCount():number { return this.controllers.size; }
+  retainedWorkspaceCount():number { return this.retainedWorkspaces.size; }
+
+  async releaseRetained():Promise<void>{
+    const retained=[...this.retainedWorkspaces.values()];
+    this.retainedWorkspaces.clear();
+    await Promise.allSettled(retained.map(workspace=>workspace.cleanup()));
+  }
+
+  dispose():void{
+    this.cancelAll();
+    void this.releaseRetained();
+  }
 
   private emit(
     callback:((snapshot:JobSnapshot)=>void)|undefined,
@@ -274,7 +289,9 @@ export class JobManager {
       this.emit(onUpdate,id,"COMPLETED",1,"Complete");
 
       keepWorkspace=Boolean(workspace&&finalInWorkspace);
-      const retainedWorkspace=workspace;
+      const retainedWorkspace=keepWorkspace?workspace:null;
+      if(retainedWorkspace) this.retainedWorkspaces.set(id,retainedWorkspace);
+      let released=false;
       return {
         blob:current,
         fileName,
@@ -283,7 +300,14 @@ export class JobManager {
         warnings:[...new Set(warnings)],
         extraFiles,
         release:retainedWorkspace
-          ? async()=>{ await retainedWorkspace.cleanup(); }
+          ? async()=>{
+            if(released) return;
+            released=true;
+            if(this.retainedWorkspaces.get(id)===retainedWorkspace){
+              this.retainedWorkspaces.delete(id);
+            }
+            await retainedWorkspace.cleanup();
+          }
           : undefined
       };
     }catch(error){
