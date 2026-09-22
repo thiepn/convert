@@ -22,7 +22,7 @@ The matrix is additive to unit tests and the existing real-conversion smoke suit
 
 | Family | Adversarial case | Required invariant |
 | --- | --- | --- |
-| Image | real 512 px PNG → 320 px PNG | native-browser resize honors the requested bound without invoking the unreliable libvips cold path |
+| Image | known-static 192 px PNG → 128 px PNG | native-browser resize honors the requested bound without invoking the heavyweight libvips path |
 | Image | stripped simple PNG → WebP | fast browser-native route remains usable |
 | CSV / Spreadsheet | UTF-8 BOM + semicolon delimiter + quoted comma + embedded newline | automatic delimiter detection and field boundaries survive XLSX conversion |
 | Structured data | UTF-16LE semicolon CSV | DuckDB route decodes without mojibake and preserves rows |
