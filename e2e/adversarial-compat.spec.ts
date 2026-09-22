@@ -9,6 +9,7 @@ import {
   openApp,
   pdfWithTrailingJunkFixture,
   pngFixture,
+  png512Fixture,
   resultBytes,
   resultText,
   runTarget,
@@ -42,15 +43,15 @@ test.beforeEach(async({page},testInfo)=>{
 });
 
 test("image options are actually honored instead of falling through the fast proof path",async({page})=>{
-  await selectFixture(page,pngFixture());
+  await selectFixture(page,png512Fixture());
   await page.locator("#metadata-policy").selectOption("strip");
-  await page.locator("#max-dimension").selectOption("128");
+  await page.locator("#max-dimension").selectOption("320");
   await runTarget(page,"png");
 
-  const resized=await resultBytes(page,"pixel-converted");
+  const resized=await resultBytes(page,"pixel-512-converted");
   expect(resized.subarray(0,8)).toEqual(Buffer.from([137,80,78,71,13,10,26,10]));
-  expect(resized.readUInt32BE(16)).toBe(128);
-  expect(resized.readUInt32BE(20)).toBe(128);
+  expect(resized.readUInt32BE(16)).toBe(320);
+  expect(resized.readUInt32BE(20)).toBe(320);
 
   await page.locator("#start-over-button").click();
   await selectFixture(page,pngFixture());
