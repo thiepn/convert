@@ -57,6 +57,9 @@ export class DuckDbDataEngine implements ConversionEngine{
   private baseUrl="";
   private initPromise:Promise<duckdb.AsyncDuckDB>|null=null;
   private queue:Promise<unknown>=Promise.resolve();
+  private operations=0;
+  private dbEpoch=0;
+  private disposeEpoch=0;
 
   async prepare():Promise<void>{
     this.baseUrl=new URL("engines/duckdb/",document.baseURI).href;
@@ -189,16 +192,24 @@ export class DuckDbDataEngine implements ConversionEngine{
   }
 
   dispose():void{
-    const db=this.db;
-    this.db=null;
-    this.initPromise=null;
-    if(db) void db.terminate();
-    this.worker?.terminate();
-    this.worker=null;
+    this.disposeEpoch++;
+    void this.resetDb();
   }
 
   private exclusive<T>(task:()=>Promise<T>):Promise<T>{
-    const run=this.queue.then(task,task);
+    const scheduledEpoch=this.disposeEpoch;
+    const execute=async()=>{
+      if(scheduledEpoch!==this.disposeEpoch){
+        throw new DOMException("DuckDB operation was cancelled by engine disposal.","AbortError");
+      }
+      try{
+        return await task();
+      }finally{
+        this.operations++;
+        if(this.operations>=20) await this.resetDb();
+      }
+    };
+    const run=this.queue.then(execute,execute);
     this.queue=run.then(()=>undefined,()=>undefined);
     return run;
   }
@@ -206,6 +217,7 @@ export class DuckDbDataEngine implements ConversionEngine{
   private async getDb():Promise<duckdb.AsyncDuckDB>{
     if(this.db) return this.db;
     if(this.initPromise) return this.initPromise;
+    const epoch=this.dbEpoch;
     this.initPromise=(async()=>{
       const bundles:duckdb.DuckDBBundles={
         mvp:{
@@ -222,11 +234,30 @@ export class DuckDbDataEngine implements ConversionEngine{
       const worker=new Worker(bundle.mainWorker);
       const db=new duckdb.AsyncDuckDB(new duckdb.VoidLogger(),worker);
       await db.instantiate(bundle.mainModule,bundle.pthreadWorker);
+      if(epoch!==this.dbEpoch){
+        try{await db.terminate();}catch{}
+        worker.terminate();
+        throw new DOMException("DuckDB initialization was superseded.","AbortError");
+      }
       this.worker=worker;
       this.db=db;
       return db;
     })();
     return this.initPromise;
+  }
+
+  private async resetDb():Promise<void>{
+    this.dbEpoch++;
+    const db=this.db;
+    const worker=this.worker;
+    this.db=null;
+    this.worker=null;
+    this.initPromise=null;
+    this.operations=0;
+    if(db){
+      try{await db.terminate();}catch{}
+    }
+    try{worker?.terminate();}catch{}
   }
 
   private async withSource<T>(
