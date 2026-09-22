@@ -30,6 +30,8 @@ The matrix is additive to unit tests and the existing real-conversion smoke suit
 | Subtitles | UTF-16LE Windows SRT + CRLF + multilingual text | cue times and Unicode text survive WebVTT conversion |
 | Spreadsheet | formulas + cached values + merged cells + hidden sheet + Unicode | main flat export plus hidden-sheet sidecar remain usable |
 | Archive | Unicode nested paths + case-colliding names | safety warning appears and repacked TAR retains each distinct path |
+| Archive | path flattening with duplicate basenames | flattening applies before collision resolution; exact duplicates receive deterministic suffixes while case-distinct names survive |
+| Media | PCM WAV with a leading JUNK chunk and stereo audio | non-canonical but valid RIFF chunk ordering still converts to valid FLAC |
 | PDF | valid PDF with ordinary bytes after %%EOF | qpdf optimization still produces a valid PDF |
 | Document | permissive/messy HTML + table/list + Unicode | semantic Markdown conversion preserves readable structure/content |
 
@@ -41,6 +43,7 @@ Maintenance Pass 4 found several issues that happy-path tests did not expose:
 - UTF-16 text inputs were not decoded consistently
 - BOM-prefixed JSON could fail tabular parsing
 - browser-native common-image conversion could be selected even when requested options required resize, metadata preservation, animation preservation, target-size handling, lossless mode, or explicit JPEG alpha compositing
+- archive path flattening happened too late: it was ZIP-specific and could create duplicate basenames or ignore the setting for TAR/7z-family output
 
 Each issue now has dedicated regression coverage.
 
