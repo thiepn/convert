@@ -1,0 +1,27 @@
+{
+  "static": {
+    "indexHtmlBytes": 40960,
+    "startupRawBytes": 1572864,
+    "startupGzipBytes": 471040,
+    "entryJavaScriptBytes": 1363148,
+    "entryJavaScriptGzipBytes": 430080,
+    "cssBytes": 32768,
+    "workerJavaScriptTotalBytes": 5242880,
+    "largestWorkerJavaScriptBytes": 3145728,
+    "engineAssetsTotalBytes": 503316480,
+    "distTotalBytes": 536870912
+  },
+  "runtime": {
+    "runtimeReadyMs": 8000,
+    "duckDbColdInspectionMs": 12000,
+    "duckDbWarmInspectionMs": 5000,
+    "duckDbWarmVsColdFactor": 1.75,
+    "pdfColdInspectionMs": 8000,
+    "pdfWarmInspectionMs": 4000,
+    "pdfWarmVsColdFactor": 1.75,
+    "subtitleBatch24Ms": 12000,
+    "heartbeatMaxGapMs": 750,
+    "rendererHeapPeakGrowthBytes": 100663296,
+    "rendererHeapRetainedGrowthBytes": 33554432
+  }
+}
