@@ -100,6 +100,10 @@ describe("FormatRegistry",()=>{
     expect(registry.detect(new Uint8Array([0x38,0x42,0x50,0x53,0,1]),"x.bin").format?.id).toBe("psd");
     expect(registry.detect(new Uint8Array([0x38,0x42,0x50,0x53,0,2]),"x.bin").format?.id).toBe("psb");
     expect(registry.detect(new TextEncoder().encode("WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nHi"),"x.bin").format?.id).toBe("vtt");
+    expect(registry.detect(
+      new TextEncoder().encode("[Script Info]\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Hello"),
+      "x.bin"
+    ).format?.id).toBe("ass");
     expect(registry.detect(new TextEncoder().encode("ply\nformat ascii 1.0\n"),"x.bin").format?.id).toBe("ply");
     expect(registry.detect(new TextEncoder().encode("SIMPLE  =                    T"),"x.bin").format?.id).toBe("fits");
   });
