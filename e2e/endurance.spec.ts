@@ -5,7 +5,8 @@ import {
   pngFixture,
   runTarget,
   selectFixture,
-  srtFixture
+  srtFixture,
+  unicodeZipFixture
 } from "./helpers";
 
 async function installResourceProbe(page:Page){
@@ -158,5 +159,39 @@ test("structured-data sessions recycle DuckDB without growing active worker coun
   const stats=await resourceStats(page);
   expect(stats.workersCreated-baseline.workersCreated).toBeGreaterThanOrEqual(2);
   expect(stats.activeWorkers).toBeLessThanOrEqual(baseline.activeWorkers+1);
+  expect(stats.activeUrls).toBe(0);
+});
+
+
+test("clearing results during asynchronous convenience packaging cannot resurrect stale URLs",async({page})=>{
+  test.setTimeout(120_000);
+
+  await page.evaluate(()=>{
+    const original=Blob.prototype.arrayBuffer;
+    (globalThis as any).__delayPackageReads=false;
+    Blob.prototype.arrayBuffer=async function(){
+      if((globalThis as any).__delayPackageReads&&this.type==="application/octet-stream"){
+        await new Promise(resolve=>setTimeout(resolve,250));
+      }
+      return original.call(this);
+    };
+  });
+
+  await selectFixture(page,unicodeZipFixture());
+  await page.locator("#archive-operation").selectOption("extract-all");
+  await page.evaluate(()=>{(globalThis as any).__delayPackageReads=true;});
+  await page.locator("#convert-button").click();
+
+  await expect(page.locator("#results .result-item")).toHaveCount(4,{timeout:60_000});
+  await startOver(page);
+
+  await page.waitForTimeout(1200);
+  await expect(page.locator("#results")).toBeHidden();
+  await expect(page.locator("#results .result-item")).toHaveCount(0);
+
+  await expect.poll(()=>opfsJobCount(page),{timeout:15_000,intervals:[100,250,500]})
+    .toBe(0);
+
+  const stats=await resourceStats(page);
   expect(stats.activeUrls).toBe(0);
 });
