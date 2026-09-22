@@ -27,6 +27,7 @@ function outputName(input:string,extension:string):string {
 export class JobManager {
   private controllers=new Map<string,AbortController>();
   private retainedWorkspaces=new Map<string,TempWorkspace>();
+  private lifecycleEpoch=0;
   private readonly networkGuard=new NetworkGuard();
 
   constructor(
@@ -49,6 +50,7 @@ export class JobManager {
   }
 
   dispose():void{
+    this.lifecycleEpoch++;
     this.cancelAll();
     void this.releaseRetained();
   }
@@ -66,6 +68,7 @@ export class JobManager {
     onUpdate?:(snapshot:JobSnapshot)=>void
   ):Promise<ConversionOutput>{
     const id=crypto.randomUUID();
+    const lifecycleEpoch=this.lifecycleEpoch;
     const controller=new AbortController();
     this.controllers.set(id,controller);
     let workspace:TempWorkspace|null=null;
@@ -285,6 +288,9 @@ export class JobManager {
       }
 
       this.emit(onUpdate,id,"FINALIZING",0.97,"Finalizing local output");
+      if(lifecycleEpoch!==this.lifecycleEpoch){
+        throw new DOMException("Conversion result was invalidated by lifecycle disposal.","AbortError");
+      }
       const fileName=outputName(source.name,extensionFor(this.formats,targetFormatId));
       this.emit(onUpdate,id,"COMPLETED",1,"Complete");
 
