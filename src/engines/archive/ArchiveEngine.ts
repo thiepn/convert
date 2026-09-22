@@ -160,10 +160,14 @@ export class ArchiveEngine implements ConversionEngine{
     }
     if(!files.length) throw new Error("ARCHIVE_EMPTY: No files selected.");
 
-    const normalized=uniqueArchivePaths(files.map(item=>({
-      ...item,
-      path:normalizeArchivePath(item.path)
-    })));
+    const merged={...defaultOptions(),...options};
+    const normalized=uniqueArchivePaths(files.map(item=>{
+      const safePath=normalizeArchivePath(item.path);
+      return {
+        ...item,
+        path:merged.preservePaths?safePath:basename(safePath)
+      };
+    }));
     const total=normalized.reduce((sum,item)=>sum+item.blob.size,0);
     const profile=getDeviceProfile();
     const streamingZip=targetFormatId==="zip"&&Boolean(outputHandle);
@@ -176,8 +180,6 @@ export class ArchiveEngine implements ConversionEngine{
         +(streamingZip?"streaming archive":"memory-backed archive")+" budget."
       );
     }
-
-    const merged={...defaultOptions(),...options};
     if(targetFormatId==="zip"){
       return this.createZip(normalized,merged,outputHandle,onProgress,signal);
     }
@@ -445,7 +447,7 @@ export class ArchiveEngine implements ConversionEngine{
       for(let index=0;index<files.length;index++){
         signal?.throwIfAborted?.();
         const item=files[index];
-        const path=options.preservePaths?item.path:basename(item.path);
+        const path=item.path;
         onProgress?.(index/Math.max(1,files.length),"Compressing "+path);
         await writer.add(path,new BlobReader(item.blob),{
           level:Math.max(0,Math.min(9,Math.round(options.compressionLevel))),
