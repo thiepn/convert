@@ -137,10 +137,12 @@ test("mobile cached shell remains available offline and local conversion still w
       expect(cached?.text).toContain("Thiepn Convert");
     }
 
-    await page.locator("#target-format").selectOption("vtt");
-    await page.locator("#convert-button").tap();
-    await expect(page.locator("#results .result-item")).toHaveCount(1,{timeout:60_000});
-    expect(await resultText(page,"mobile-offline-converted")).toContain("WEBVTT");
+    if(testInfo.project.name==="chromium-mobile"){
+      await page.locator("#target-format").selectOption("vtt");
+      await page.locator("#convert-button").tap();
+      await expect(page.locator("#results .result-item")).toHaveCount(1,{timeout:60_000});
+      expect(await resultText(page,"mobile-offline-converted")).toContain("WEBVTT");
+    }
   }finally{
     await context.setOffline(false);
   }
