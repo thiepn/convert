@@ -4,3 +4,7 @@ dist
 coverage
 .DS_Store
 *.local
+
+.performance
+test-results
+playwright-report
